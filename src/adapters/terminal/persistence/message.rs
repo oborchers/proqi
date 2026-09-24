@@ -4,8 +4,9 @@ use crate::{
     domain::{BrowserOperation, OperationSequence, RequestId, SessionId, SubmissionId, Timestamp},
     ports::{
         store::{
-            CaptureCommit, CaptureCommitOutcome, CommitReceipt, OperationBatch, SessionHit,
-            StoreError, StoredOperationRequest, SubmissionAttempt, SubmissionOutcome,
+            BrowserCommitReceipt, CaptureCommit, CaptureCommitOutcome, CommitReceipt,
+            OperationBatch, SessionHit, StoreError, StoredOperationRequest, SubmissionAttempt,
+            SubmissionOutcome,
         },
         transfer::SessionTransferBatchRequest,
     },
@@ -25,7 +26,7 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
     SessionRenamed {
         request_id: Option<RequestId>,
         previous_name: Option<String>,
-        result: Result<(), StoreError>,
+        result: Result<BrowserCommitReceipt, StoreError>,
     },
     TransferSessions {
         generation: u64,
@@ -47,7 +48,7 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
     },
     BrowserNoOpRename {
         request_id: RequestId,
-        result: Result<(), StoreError>,
+        result: Result<BrowserCommitReceipt, StoreError>,
     },
     SubmissionPrepared {
         submission_id: SubmissionId,

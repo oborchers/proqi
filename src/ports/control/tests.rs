@@ -12,8 +12,8 @@ use crate::{
 
 use super::{
     CAPTURE_CONTROL_PROTOCOL_VERSION, CONTROL_PROTOCOL_VERSION, ControlCaptureReceipt,
-    ControlMutation, ControlRequest, ControlResponse, ControlResult, ControlUpdateReceipt,
-    UPDATE_MUTATION_MINIMUM_PROTOCOL, control_protocol_supports,
+    ControlMetadataReceipt, ControlMutation, ControlRequest, ControlResponse, ControlResult,
+    ControlUpdateReceipt, UPDATE_MUTATION_MINIMUM_PROTOCOL, control_protocol_supports,
 };
 
 #[test]
@@ -242,5 +242,28 @@ fn verified_capture_takeover_round_trips_only_on_protocol_five() {
     assert_eq!(
         serde_json::from_slice::<ControlResponse>(&encoded).expect("deserialize response"),
         response
+    );
+}
+
+#[test]
+fn rename_receipt_replay_flag_is_additive_for_older_owners() {
+    let older: ControlMetadataReceipt =
+        serde_json::from_str(r#"{"metadata":"session_renamed","name":"lane"}"#)
+            .expect("receipt from an owner without the replay flag");
+    assert_eq!(
+        older,
+        ControlMetadataReceipt::SessionRenamed {
+            name: Some("lane".to_owned()),
+            idempotent_replay: false,
+        }
+    );
+    let replay = ControlMetadataReceipt::SessionRenamed {
+        name: None,
+        idempotent_replay: true,
+    };
+    let encoded = serde_json::to_string(&replay).expect("encode");
+    assert_eq!(
+        serde_json::from_str::<ControlMetadataReceipt>(&encoded).expect("decode"),
+        replay
     );
 }

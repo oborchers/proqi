@@ -51,6 +51,8 @@ fn skill_references_the_documented_error_contract() {
     assert!(SKILL.contains("https://oborchers.github.io/proqi/reference/cli.html#errors"));
     assert!(SKILL.contains("data.error_codes"));
     assert!(CLI_REFERENCE.contains("\n## Errors\n"));
+    assert!(CLI_REFERENCE.contains("\n## Stability\n"));
+    assert!(SKILL.contains("Human output is not a contract"));
     assert!(!SKILL.contains("legacy thought projection"));
 }
 

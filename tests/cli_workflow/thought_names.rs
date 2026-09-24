@@ -95,7 +95,14 @@ fn assert_validation_and_clear(root: &Path, session: &str, thought: &str) {
     );
     assert!(!invalid.status.success());
     let invalid: Value = serde_json::from_slice(&invalid.stdout).expect("invalid-name JSON");
-    assert_eq!(invalid["error"]["code"], "invalid_arguments");
+    assert_eq!(invalid["error"]["code"], "invalid_input");
+    let long = "n".repeat(81);
+    for name in ["tab\tname", long.as_str()] {
+        let rejected = run(root, &["thoughts", "rename", session, thought, name], None);
+        assert_eq!(rejected.status.code(), Some(2), "{name:?}");
+        let rejected: Value = serde_json::from_slice(&rejected.stdout).expect("invalid-name JSON");
+        assert_eq!(rejected["error"]["code"], "invalid_input", "{name:?}");
+    }
 
     success(
         root,

@@ -18,9 +18,36 @@ Run `proqi --help` or append `--help` to any command for the installed contract.
 Human output is for people. Add global `--json` when a script or coding agent
 needs the versioned machine envelope.
 
-CLI and JSON compatibility can change between minor releases before 1.0. Read
-capabilities first and use standard input for thought bodies rather than shell
-arguments.
+Read capabilities first and use standard input for thought bodies rather than
+shell arguments.
+
+## Stability
+
+The command-line contract has two layers. From 1.0, the machine layer is
+stable:
+
+- command and option spellings, positional arguments, and standard input
+  semantics;
+- exit statuses;
+- the versioned `--json` envelope (`ok`, `data`, `error`, `schema_version`),
+  its documented fields, and receipt semantics such as `idempotent_replay`;
+- every error code with its exit status, retry class, and `details` shape, as
+  listed in [Errors](#errors).
+
+Within `schema_version` 1, Proqi only adds: new commands, options, fields, and
+error codes may appear, and consumers must ignore fields they do not know.
+Removing or renaming any of these, or changing what an existing field or code
+means, requires a new schema version or an announced deprecation period.
+`capabilities` reports which operations, options, and codes the installed binary
+supports.
+
+Human output is for people and is not a contract. Its wording, layout, and
+ordering can change in any release, so scripts and agents must use `--json`.
+The owner-control protocol between Proqi processes and the SQLite schema are
+internal as well.
+
+Before 1.0, CLI and JSON compatibility can still change between minor releases.
+Each such change is announced in the release notes.
 
 ## Common options
 
@@ -190,11 +217,11 @@ Trashing an already trashed session succeeds with `changed: false`. A rename to
 the current name also reports `changed: false`.
 
 A rename of a session that is open in an interactive Proqi is applied by that
-process. The operation identity still applies it at most once, and a later retry
-reports `idempotent_replay: true`. The owner does not report replays, however.
-If two calls with the same identity overlap, both can report
-`idempotent_replay: false`. `changed` is then derived from the name observed
-before forwarding. Undo and redo return
+process. The operation identity still applies it at most once. Every call after
+the first reports `idempotent_replay: true` and `changed: false`, including
+calls that overlap the first. An owner from an older release does not report
+replays, so an overlapping duplicate sent to it can report
+`idempotent_replay: false`. Undo and redo return
 `{history, operation, cursor, receipt: {operation_id, idempotent_replay}}`.
 When the moved entry's session was pruned afterward, a replay reports
 `operation: null`, and the moved entry's identity stays reserved.
@@ -315,7 +342,9 @@ between pages. Human output lists the same page, shows separators as
 `(separator)` rows, and ends with `Showing N of TOTAL. Continue with --after ID`
 when more entries remain.
 
-Rename requires a name or `--clear`. An empty thought name also clears it.
+Rename requires a name or `--clear`. An empty thought name also clears it. A
+name that breaks the thought-name rules fails with `invalid_input`, as it does
+for `add --name`.
 
 Replace normally requires the SHA-256 digest of current content so a stale
 writer cannot overwrite newer text. `--force` is an explicit opt-out. External

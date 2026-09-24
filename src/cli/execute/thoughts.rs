@@ -1,6 +1,6 @@
 //! Thought inspection and mutation commands for one explicit session.
 
-use crate::domain::{ThoughtName, UndoScope};
+use crate::domain::UndoScope;
 
 use super::{
     super::args::{HistoryArgs, ThoughtCommand},
@@ -192,12 +192,7 @@ fn add_thought(
     position: Option<usize>,
     operation: Option<&str>,
 ) -> Result<Outcome, CliError> {
-    let name = name
-        .map(|value| {
-            ThoughtName::new(value.trim().to_owned())
-                .map_err(|error| CliError::input(error.to_string()))
-        })
-        .transpose()?;
+    let name = name.map(thought_names::parse_thought_name).transpose()?;
     let operation = parse_operation_id(operation)?;
     let body = read_standard_input()?;
     let mut service = session_service(context)?;

@@ -17,10 +17,7 @@ pub(super) fn rename_thought(
     let operation = parse_operation_id(operation)?;
     let name = match name.map(str::trim) {
         None | Some("") => None,
-        Some(value) => Some(
-            crate::domain::ThoughtName::new(value.to_owned())
-                .map_err(|error| CliError::arguments(error.to_string()))?,
-        ),
+        Some(value) => Some(parse_thought_name(value)?),
     };
     let mut service = session_service(context)?;
     let session_id = service.resolve_session(session, false)?;
@@ -33,4 +30,10 @@ pub(super) fn rename_thought(
     let mut service = session_service(context)?;
     let result = service.rename_thought(session_id, thought_id, name, operation)?;
     Ok(mutation_outcome(result.thought_id, result.receipt))
+}
+
+/// Validate one supplied thought name for every thought command.
+pub(super) fn parse_thought_name(value: &str) -> Result<crate::domain::ThoughtName, CliError> {
+    crate::domain::ThoughtName::new(value.trim().to_owned())
+        .map_err(|error| CliError::input(error.to_string()))
 }

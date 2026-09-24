@@ -46,8 +46,20 @@ pub(super) fn rename(
     };
     drop(service);
     let operation_id = admitted.operation_id;
-    if forwarding::rename_session(context, id, name.map(str::to_owned), operation_id)? {
-        return Ok(administration_outcome(&admitted, "renamed"));
+    if let Some(replayed) =
+        forwarding::rename_session(context, id, name.map(str::to_owned), operation_id)?
+    {
+        // An overlapping duplicate is reported by the owner as a replay of the durable rename.
+        let receipt = if replayed {
+            SessionAdministrationReceipt {
+                idempotent_replay: true,
+                changed: false,
+                ..admitted
+            }
+        } else {
+            admitted
+        };
+        return Ok(administration_outcome(&receipt, "renamed"));
     }
     let receipt = session_service(context)?.rename_session(id, name, Some(operation_id))?;
     Ok(administration_outcome(&receipt, "renamed"))

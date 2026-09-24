@@ -2146,7 +2146,10 @@ cross-session creation. Older
 owners reject those requests instead of dropping metadata. Version 9 carries the durable operation
 identity required for active-owner session rename, including idempotent replay
 and Browser history. A same-name rename commits a durable no-op receipt so its
-identity cannot later name different content. Attachment-bearing creation requires version 8 to retain
+identity cannot later name different content. The rename metadata receipt
+carries the store's `idempotent_replay` flag, so an overlapping duplicate that
+reaches the owner after the first rename is reported as a replay. The field is
+additive: an older owner omits it and the client reads a new application. Attachment-bearing creation requires version 8 to retain
 destination occurrence numbering. Version 2 introduced legacy durable
 presentation annotations. Version 4 added session rename, owner synchronization,
 exact editor replacement, and durable collapse state. An add mutation carrying

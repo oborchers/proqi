@@ -37,9 +37,9 @@ pub(super) fn rename_session(
     session_id: SessionId,
     name: Option<String>,
     operation_id: OperationId,
-) -> Result<bool, CliError> {
+) -> Result<Option<bool>, CliError> {
     let Some(owner) = owner(context, session_id)? else {
-        return Ok(false);
+        return Ok(None);
     };
     let mutation = ControlMutation::RenameSession { operation_id, name };
     let protocol = required_protocol(&owner, &mutation)?;
@@ -49,9 +49,17 @@ pub(super) fn rename_session(
         session_id,
         mutation,
     };
-    LocalControlClient::send_metadata(&owner, &request)
-        .map(|_| true)
-        .map_err(|error| map_error(error, &owner, false))
+    match LocalControlClient::send_metadata(&owner, &request) {
+        Ok(crate::ports::control::ControlMetadataReceipt::SessionRenamed {
+            idempotent_replay,
+            ..
+        }) => Ok(Some(idempotent_replay)),
+        Ok(crate::ports::control::ControlMetadataReceipt::Synchronized) => Err(CliError::new(
+            ErrorCode::ProtocolMismatch,
+            "owner returned a synchronization receipt for a rename".to_owned(),
+        )),
+        Err(error) => Err(map_error(error, &owner, false)),
+    }
 }
 
 pub(super) fn sync(context: &mut RuntimeContext, session_id: SessionId) -> Result<(), CliError> {

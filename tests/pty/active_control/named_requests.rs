@@ -44,7 +44,7 @@ fn active_owner_applies_named_add_and_retry_safe_session_rename() {
     assert_eq!(items["data"]["items"][0]["id"], thought);
     assert_eq!(items["data"]["items"][0]["name"], "Forwarded name");
     let sessions = json_command(binary, state.path(), &["sessions", "list"]);
-    assert_eq!(sessions["data"]["sessions"][0]["name"], "Renamed live");
+    assert_eq!(sessions["data"]["sessions"][0]["name"], "Overlapped live");
 }
 
 fn forwarded_named_add(binary: &str, state: &std::path::Path, session: &str) -> String {
@@ -160,7 +160,38 @@ fn forwarded_session_rename(binary: &str, state: &std::path::Path, session: &str
         reserved["error"]["code"], "idempotency_conflict",
         "a forwarded unchanged rename reserves its identity"
     );
+    overlapping_duplicate_renames(binary, state, session);
     let trash = raw_input_command(binary, state, &["sessions", "trash", session], "");
     let trash: Value = serde_json::from_slice(&trash.stdout).expect("trash JSON");
     assert_eq!(trash["error"]["code"], "session_busy");
+}
+
+fn overlapping_duplicate_renames(binary: &str, state: &std::path::Path, session: &str) {
+    let operation = operation_id();
+    let arguments = [
+        "sessions",
+        "rename",
+        session,
+        "Overlapped live",
+        "--operation-id",
+        &operation,
+    ];
+    let replays = std::thread::scope(|scope| {
+        let calls = (0..4)
+            .map(|_| scope.spawn(|| json_command(binary, state, &arguments)))
+            .collect::<Vec<_>>();
+        calls
+            .into_iter()
+            .map(|call| {
+                let renamed = call.join().expect("overlapping rename");
+                assert_eq!(renamed["data"]["receipt"]["operation_id"], operation);
+                renamed["data"]["receipt"]["idempotent_replay"] == true
+            })
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(
+        replays.iter().filter(|replay| !**replay).count(),
+        1,
+        "exactly one overlapping duplicate applies the rename: {replays:?}"
+    );
 }

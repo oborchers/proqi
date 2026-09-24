@@ -156,7 +156,7 @@ fn process_unsequenced(
             previous_name,
             operation,
         } => {
-            let result = store.commit_browser_operation(&operation).map(|_| ());
+            let result = store.commit_browser_operation(&operation);
             results
                 .send(PersistenceResult::SessionRenamed {
                     request_id,
@@ -269,9 +269,7 @@ fn process_browser_noop_rename(
     else {
         return false;
     };
-    let result = store
-        .commit_browser_noop_rename(operation_id, session_id, name.as_deref(), at)
-        .map(|_| ());
+    let result = store.commit_browser_noop_rename(operation_id, session_id, name.as_deref(), at);
     results
         .send(PersistenceResult::BrowserNoOpRename { request_id, result })
         .is_ok()

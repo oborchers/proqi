@@ -18,7 +18,8 @@ Act only after explicit invocation. Use the scriptable CLI, never TUI output.
 3. Address the session the user specified. If none is unambiguous, run
    `proqi --json sessions list` or add `--query <text>`, show the matches, and
    let the user choose. Never guess from recency alone.
-4. Run all further commands with `--json`. On `ok: false`, surface
+4. Run all further commands with `--json`. Human output is not a contract, so
+   never parse it. On `ok: false`, surface
    `error.code`, `error.message`, and `error.details` without rewriting them.
    Do not automatically retry busy, ambiguous, conflicting, or unsupported
    mutations. Every code, its exit status, `details` shape, and retry guidance

@@ -110,6 +110,29 @@ fn stale_no_op_rename_does_not_reserve_its_identity() {
 }
 
 #[test]
+fn a_duplicate_of_a_durable_rename_replays_through_the_no_op_path() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_000_760_000);
+    let session_id = create_session(&mut store, &mut ids, "local");
+    let durable = rename(&mut ids, session_id, "local", "durable");
+    store
+        .commit_browser_operation(&durable)
+        .expect("first durable rename");
+
+    // An owner that already shows the new name routes the overlapping duplicate here.
+    let receipt = store
+        .commit_browser_noop_rename(
+            durable.id(),
+            session_id,
+            Some("durable"),
+            Timestamp::from_millis(3),
+        )
+        .expect("duplicate replays");
+    assert!(receipt.idempotent_replay);
+}
+
+#[test]
 fn browser_operation_and_history_request_ids_share_one_namespace() {
     let fixture = DatabaseFixture::new();
     let mut store = fixture.open();

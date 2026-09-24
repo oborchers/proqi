@@ -252,7 +252,7 @@ fn complete_result(
         } => {
             pending.persistence = pending.persistence.saturating_sub(1);
             owner_control::complete_metadata(pending, request_id, &result);
-            app.complete_session_rename(previous_name, result);
+            app.complete_session_rename(previous_name, result.map(|_| ()));
         }
         PersistenceResult::TransferSessions { generation, result } => {
             pending.persistence = pending.persistence.saturating_sub(1);

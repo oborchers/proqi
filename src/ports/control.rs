@@ -166,6 +166,11 @@ pub enum ControlMetadataReceipt {
     SessionRenamed {
         /// Durable replacement name.
         name: Option<String>,
+        /// Whether this operation identity was already durable before the request.
+        ///
+        /// Owners that predate the field omit it, which decodes as a new application.
+        #[serde(default)]
+        idempotent_replay: bool,
     },
     /// All owner work admitted before the request is durable.
     Synchronized,
