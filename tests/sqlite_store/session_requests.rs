@@ -404,6 +404,51 @@ fn prune_retains_creation_receipts_so_a_creation_retry_cannot_resurrect() {
     ));
 }
 
+#[test]
+fn a_derived_identity_that_already_names_a_session_is_reused_not_overwritten() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_400_800_000);
+    let operation_id = ids.operation_id();
+    let session_id = operation_id_session(operation_id);
+    let existing = Session::with_name(
+        session_id,
+        PathBuf::from("/other"),
+        Timestamp::from_millis(5),
+        Some("existing".to_owned()),
+    )
+    .expect("session");
+    store
+        .commit(&OperationBatch::CreateSession(existing))
+        .expect("create existing session");
+    let creation = NamedSessionCreation {
+        session: Session::with_name(
+            session_id,
+            PathBuf::from("/work"),
+            Timestamp::from_millis(6),
+            Some("fresh".to_owned()),
+        )
+        .expect("session"),
+        policy: NamedSessionPolicy::Always,
+        operation_id: Some(operation_id),
+    };
+
+    assert_eq!(
+        store.create_named_session(&creation),
+        Ok(NamedSessionOutcome::IdentityReused)
+    );
+    assert_eq!(
+        store
+            .load_session(session_id)
+            .expect("unchanged")
+            .board
+            .session
+            .name
+            .as_deref(),
+        Some("existing")
+    );
+}
+
 fn operation_id_session(operation_id: OperationId) -> proqi::domain::SessionId {
     proqi::domain::SessionId::from_database_bytes(operation_id.database_bytes())
         .expect("derived session identity")

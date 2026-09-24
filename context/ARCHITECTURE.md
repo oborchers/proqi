@@ -981,6 +981,18 @@ resulting durable payload happens to be identical. Migration does not infer or
 backfill fingerprints for legacy receipts. Older binaries refuse the newer
 storage protocol before writing.
 
+Session-administration request receipts deliberately remain at schema 19 and
+storage protocol 18. The new trash no-op, named-creation, and prune receipt kinds
+are versioned JSON payloads in the existing `browser_operation_receipts` table,
+which already held tagged same-name rename receipts. Schema 19 binaries decode a
+receipt only when a request addresses its exact operation identity. A published
+older binary that meets an unknown kind therefore fails closed with a
+content-free corruption error instead of reinterpreting it, and only when a
+caller reuses that identity for another request. This avoids refusing every
+older process for data that it can only reach by identity misuse. Creation and
+prune receipts can name a session that no longer exists. The receipt table has
+no foreign key, and nothing joins receipts back to `sessions`.
+
 ### Stable session attachment ordinals
 
 Schema 14 and storage protocol 13 add separate session image and file allocation

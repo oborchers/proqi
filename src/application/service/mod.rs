@@ -8,7 +8,8 @@ mod transformations;
 
 pub(crate) use board_items::derived_duplicate_item_ids;
 pub use sessions::{
-    BrowserHistoryMovement, NamedSession, NamedSessionDisposition, SessionAdministrationReceipt,
+    BrowserHistoryMovement, NamedSession, NamedSessionDisposition, RenameAdmission,
+    SessionAdministrationReceipt,
 };
 
 use std::path::PathBuf;

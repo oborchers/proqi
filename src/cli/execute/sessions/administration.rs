@@ -3,9 +3,8 @@
 use serde_json::{Value, json};
 
 use crate::{
-    application::{BrowserHistoryMovement, SessionAdministrationReceipt},
-    domain::{BrowserOperationKind, SessionId, validate_session_name},
-    ports::{environment::IdGenerator, store::SessionRequest},
+    application::{BrowserHistoryMovement, RenameAdmission, SessionAdministrationReceipt},
+    domain::{BrowserOperationKind, SessionId},
 };
 
 use super::{
@@ -37,45 +36,20 @@ pub(super) fn rename(
     operation: Option<&str>,
 ) -> Result<Outcome, CliError> {
     let supplied = parse_operation_id(operation)?;
-    let name = name.map(str::to_owned);
-    if let Some(name) = name.as_deref() {
-        validate_session_name(name).map_err(|error| CliError::input(error.to_string()))?;
-    }
     let mut service = session_service(context)?;
     let id = service.resolve_session(session, true)?;
-    let operation_id = supplied.unwrap_or_else(|| context.ids.operation_id());
-    let request = SessionRequest::Rename {
-        session_id: id,
-        name: name.clone(),
+    let admitted = match service.admit_rename(id, name, supplied)? {
+        RenameAdmission::Replayed(receipt) => {
+            return Ok(administration_outcome(&receipt, "renamed"));
+        }
+        RenameAdmission::New(receipt) => receipt,
     };
-    let mut service = session_service(context)?;
-    if service
-        .session_request_replay(operation_id, &request)?
-        .is_some()
-    {
-        return Ok(administration_outcome(
-            &SessionAdministrationReceipt {
-                session_id: id,
-                operation_id,
-                idempotent_replay: true,
-                changed: false,
-            },
-            "renamed",
-        ));
-    }
-    let current = service.inspect_session(id)?.board.session.name;
     drop(service);
-    if forwarding::rename_session(context, id, name.clone(), operation_id)? {
-        let receipt = SessionAdministrationReceipt {
-            session_id: id,
-            operation_id,
-            idempotent_replay: false,
-            changed: current != name,
-        };
-        return Ok(administration_outcome(&receipt, "renamed"));
+    let operation_id = admitted.operation_id;
+    if forwarding::rename_session(context, id, name.map(str::to_owned), operation_id)? {
+        return Ok(administration_outcome(&admitted, "renamed"));
     }
-    let receipt =
-        session_service(context)?.rename_session(id, name.as_deref(), Some(operation_id))?;
+    let receipt = session_service(context)?.rename_session(id, name, Some(operation_id))?;
     Ok(administration_outcome(&receipt, "renamed"))
 }
 

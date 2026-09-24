@@ -201,6 +201,9 @@ pub(super) fn create_named(
             ReceiptReplay::Absent => {}
         }
     }
+    if receipt.is_some() && session_exists(transaction, session.id)? {
+        return Ok(NamedSessionOutcome::IdentityReused);
+    }
     if creation.policy == NamedSessionPolicy::UnlessNameExists {
         let existing = live_sessions_named(transaction, &name)?;
         if !existing.is_empty() {
@@ -212,6 +215,16 @@ pub(super) fn create_named(
         super::browser_history::insert_request_receipt(transaction, receipt, session.created_at)?;
     }
     Ok(NamedSessionOutcome::Created)
+}
+
+fn session_exists(transaction: &Transaction<'_>, id: SessionId) -> Result<bool, StoreError> {
+    transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
+            [id.database_bytes().as_slice()],
+            |row| row.get(0),
+        )
+        .map_err(map_sql_error)
 }
 
 fn live_sessions_named(

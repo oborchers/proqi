@@ -21,7 +21,7 @@ mod named;
 #[cfg(test)]
 mod tests;
 
-pub use administration::{BrowserHistoryMovement, SessionAdministrationReceipt};
+pub use administration::{BrowserHistoryMovement, RenameAdmission, SessionAdministrationReceipt};
 pub use named::{NamedSession, NamedSessionDisposition};
 
 impl<S, R, C, I> SessionService<'_, S, R, C, I>

@@ -9,7 +9,7 @@ use crate::{
         runtime::RuntimeCoordinator,
         store::{
             BrowserCommitReceipt, BrowserHistoryEntry, SessionRequest, SessionRequestReceipt,
-            Store, StoredSessionRequest,
+            Store, StoreError, StoredSessionRequest,
         },
     },
 };
@@ -98,18 +98,14 @@ where
         let current = self.store.load_session(id)?.board.session.name;
         let now = self.clock.now();
         if current == replacement {
-            let receipt = self
+            let result = self
                 .store
-                .commit_browser_noop_rename(operation_id, id, name, now)?;
-            return Ok(administration_receipt(id, receipt, false));
+                .commit_browser_noop_rename(operation_id, id, name, now);
+            return self.settle(id, operation_id, &request, result, false);
         }
         let operation = BrowserOperation::rename(operation_id, id, current, replacement, now)?;
-        let receipt = self.store.commit_browser_operation(&operation)?;
-        Ok(administration_receipt(
-            id,
-            receipt,
-            !receipt.idempotent_replay,
-        ))
+        let result = self.store.commit_browser_operation(&operation);
+        self.settle(id, operation_id, &request, result, true)
     }
 
     /// Move one session to recoverable trash, or confirm that it is already there.
@@ -131,16 +127,12 @@ where
         let session = self.store.load_session(id)?.board.session;
         let now = self.clock.now();
         if session.deleted_at.is_some() {
-            let receipt = self.store.commit_noop_trash(operation_id, id, now)?;
-            return Ok(administration_receipt(id, receipt, false));
+            let result = self.store.commit_noop_trash(operation_id, id, now);
+            return self.settle(id, operation_id, &request, result, false);
         }
         let operation = BrowserOperation::trash(operation_id, id, session.last_active_at, now);
-        let receipt = self.store.commit_browser_operation(&operation)?;
-        Ok(administration_receipt(
-            id,
-            receipt,
-            !receipt.idempotent_replay,
-        ))
+        let result = self.store.commit_browser_operation(&operation);
+        self.settle(id, operation_id, &request, result, true)
     }
 
     /// Restore one recoverably trashed session while holding its lease.
@@ -170,12 +162,8 @@ where
             session.last_active_at,
             self.clock.now(),
         );
-        let receipt = self.store.commit_browser_operation(&operation)?;
-        Ok(administration_receipt(
-            id,
-            receipt,
-            !receipt.idempotent_replay,
-        ))
+        let result = self.store.commit_browser_operation(&operation);
+        self.settle(id, operation_id, &request, result, true)
     }
 
     /// Permanently prune one trashed session while holding its lease.
@@ -204,14 +192,10 @@ where
         {
             return Err(SessionServiceError::SessionNotTrashed(id));
         }
-        let receipt = self
+        let result = self
             .store
-            .prune_session_request(id, operation_id, self.clock.now())?;
-        Ok(administration_receipt(
-            id,
-            receipt,
-            !receipt.idempotent_replay,
-        ))
+            .prune_session_request(id, operation_id, self.clock.now());
+        self.settle(id, operation_id, &request, result, true)
     }
 
     /// Undo or redo the current installation-wide Browser history entry.
@@ -266,14 +250,95 @@ where
             return Ok(replayed_movement(&stored));
         }
         let receipt =
-            self.store
-                .move_browser_history(operation_id, target, undo, self.clock.now())?;
+            match self
+                .store
+                .move_browser_history(operation_id, target, undo, self.clock.now())
+            {
+                Ok(receipt) => receipt,
+                Err(StoreError::Conflict(message)) => {
+                    return match self.session_request_replay(operation_id, &request)? {
+                        Some(stored) => Ok(replayed_movement(&stored)),
+                        None => Err(StoreError::Conflict(message).into()),
+                    };
+                }
+                Err(error) => return Err(error.into()),
+            };
         Ok(BrowserHistoryMovement {
             operation_id,
             cursor: receipt.cursor,
             idempotent_replay: receipt.idempotent_replay,
             target: Some(target.kind),
         })
+    }
+
+    /// Decide how a rename that an active owner may apply is reported.
+    ///
+    /// An exact earlier request replays without forwarding. Otherwise the
+    /// returned identity is forwarded or applied, and `changed` compares the
+    /// requested name with the durable name observed before forwarding.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation, idempotency, absence, or storage failure.
+    pub fn admit_rename(
+        &mut self,
+        id: SessionId,
+        name: Option<&str>,
+        supplied: Option<OperationId>,
+    ) -> Result<RenameAdmission, SessionServiceError> {
+        if let Some(name) = name {
+            validate_session_name(name)?;
+        }
+        let operation_id = supplied.unwrap_or_else(|| self.ids.operation_id());
+        let request = SessionRequest::Rename {
+            session_id: id,
+            name: name.map(str::to_owned),
+        };
+        if self
+            .session_request_replay(operation_id, &request)?
+            .is_some()
+        {
+            return Ok(RenameAdmission::Replayed(replayed_receipt(
+                id,
+                operation_id,
+            )));
+        }
+        let current = self.store.load_session(id)?.board.session.name;
+        Ok(RenameAdmission::New(SessionAdministrationReceipt {
+            session_id: id,
+            operation_id,
+            idempotent_replay: false,
+            changed: current.as_deref() != name,
+        }))
+    }
+
+    /// Classify a store result, resolving an identity race against its owner.
+    ///
+    /// Two processes can pass the pre-commit replay check with one identity
+    /// before either writes. The loser then sees a storage conflict, which is
+    /// either the exact same request or a reused identity.
+    fn settle(
+        &mut self,
+        id: SessionId,
+        operation_id: OperationId,
+        request: &SessionRequest,
+        result: Result<BrowserCommitReceipt, StoreError>,
+        changes_state: bool,
+    ) -> Result<SessionAdministrationReceipt, SessionServiceError> {
+        match result {
+            Ok(receipt) => Ok(administration_receipt(
+                id,
+                receipt,
+                changes_state && !receipt.idempotent_replay,
+            )),
+            Err(StoreError::Conflict(message)) => {
+                match self.session_request_replay(operation_id, request)? {
+                    Some(_) => Ok(replayed_receipt(id, operation_id)),
+                    None => Err(StoreError::Conflict(message).into()),
+                }
+            }
+            Err(error) => Err(error.into()),
+        }
     }
 
     /// Replay before and after acquiring the addressed session lease.
@@ -301,6 +366,15 @@ where
         }
         Ok(Leased::Held(lease))
     }
+}
+
+/// Admission of one session rename that an active owner may apply.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RenameAdmission {
+    /// The identity already committed this exact rename.
+    Replayed(SessionAdministrationReceipt),
+    /// A new request and the receipt reported once an owner applies it.
+    New(SessionAdministrationReceipt),
 }
 
 /// Either an exact earlier result or the lease that protects a new mutation.
