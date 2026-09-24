@@ -5,7 +5,7 @@
     "name": "Oliver Borchers",
     "url": "https://github.com/oborchers"
   },
-  "description": "Agent skills for Proqi, the terminal-native scratchpad for coding agents.",
+  "description": "Agent skills for Proqi, an agent-optimized terminal scratchpad for follow-up prompts next to coding-agent sessions.",
   "plugins": [
     {
       "name": "proqi",
