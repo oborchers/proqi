@@ -37,7 +37,7 @@ pub(super) fn create(
 }
 
 /// Resolve a caller-supplied origin exactly like an interactive launch directory.
-fn existing_directory(path: &Path) -> Result<PathBuf, CliError> {
+pub(in crate::cli::execute) fn existing_directory(path: &Path) -> Result<PathBuf, CliError> {
     crate::adapters::filesystem::canonical_existing_directory(path).map_err(|error| {
         CliError::input(format!(
             "session directory must be an existing directory: {}: {error}",

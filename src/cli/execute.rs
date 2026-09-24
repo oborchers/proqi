@@ -8,6 +8,7 @@ mod doctor;
 mod external_thoughts;
 mod forwarding;
 mod helpers;
+mod herdr;
 mod pagination;
 mod queries;
 mod runtime_open;
@@ -74,6 +75,11 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
         let paths = super::runtime::resolve_paths(cli.state_dir.as_deref())?;
         return update::execute(arguments, &paths.cache_dir);
     }
+    if let Some(Command::Herdr(arguments)) = &cli.command {
+        return match arguments.command {
+            super::args::HerdrCommand::Toggle => herdr::toggle(&cli),
+        };
+    }
     if let Some(outcome) = diagnostics::early_outcome(&cli)? {
         return Ok(outcome);
     }
@@ -99,6 +105,9 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
             "completion generation was not dispatched".to_owned(),
         )),
         Some(Command::Update(_)) => Err(CliError::arguments("invalid update command".to_owned())),
+        Some(Command::Herdr(_)) => Err(CliError::arguments(
+            "Herdr plugin command was not dispatched".to_owned(),
+        )),
         Some(Command::AttachmentCheckWorker) => Err(CliError::arguments(
             "internal attachment worker was not dispatched".to_owned(),
         )),

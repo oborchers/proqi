@@ -79,9 +79,13 @@ version may expose only a subset.
   "items": ["insert-separator", "move", "delete", "duplicate"],
   "thoughts": ["list", "inspect", "add", "delete", "rename", "replace", "collapse", "move", "split", "extract", "merge", "reflow", "send", "undo", "redo"],
   "update": ["check"],
+  "herdr": ["toggle"],
   "history_scopes": ["board", "editor", "browser"]
 }
 ```
+
+`herdr toggle` is the Herdr plugin's own action. It works only inside that
+action's environment; never run it on the user's behalf.
 
 ## Examples
 

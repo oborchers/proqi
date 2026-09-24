@@ -89,6 +89,7 @@ surface.
 | Submit complete board | Conditional on Herdr | Deliver all live thought bodies in canonical order, keeping or removing together. | [Agent delivery](../guides/agent-delivery.md) |
 | Cross-session transfer | Shipped | Copy selected thoughts as one durable destination cohort, optionally removing all sources after acceptance. | [Commands](commands.md#delivery-and-transfer) |
 | Pane presentation identity | Conditional on Herdr | Advertise bounded display-only Proqi identity without impersonating an agent. | [Agent delivery](../guides/agent-delivery.md) |
+| Herdr plugin toggle | Next release, conditional on Herdr 0.8.0 or newer | Install with `herdr plugin install oborchers/proqi`; one action opens, focuses, or closes one Proqi pane per tab and replaces a pane left over from a Herdr restart. | [Herdr plugin](../guides/herdr-plugin.md) |
 | Conversation reading or response waiting | Not shipped | Proqi deliberately does neither and never falls back to raw key injection. | [Agent delivery](../guides/agent-delivery.md#choose-copy-or-direct-delivery) |
 
 ## Sessions, persistence, and recovery

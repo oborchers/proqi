@@ -33,6 +33,7 @@
 [Controls](#board-controls) ·
 [Screenshots](#screenshot-inbox-on-macos) ·
 [Herdr](#native-submission-with-herdr) ·
+[Herdr plugin](#as-a-herdr-plugin) ·
 [CLI](#json-cli-and-agent-skill) ·
 [Privacy](#privacy-durability-and-recovery) ·
 [Configuration](#configuration)
@@ -147,6 +148,41 @@ Linux selection uses runtime CPU and libc evidence, not distribution names.
 glibc 2.35 or newer receives the GNU build. musl systems and older glibc
 receive the statically linked musl fallback. Ambiguous environments stop with
 an explanation. Uninstalling preserves data.
+
+### As a Herdr plugin
+
+Keep a scratchpad for your next prompts beside the agent you are already
+running, with verified delivery, one key away:
+
+```shell
+herdr plugin install oborchers/proqi
+```
+
+The plugin needs Proqi 0.13.0 or newer and Herdr 0.8.0 or newer on macOS or
+Linux. Herdr previews the plugin before it runs anything. When `proqi` is
+already installed, the plugin uses it and installs nothing, so Homebrew, Cargo,
+Debian, and standalone installations keep their own update channel. Otherwise
+the install step runs the standalone installer from the latest release after
+checking it against the SHA-256 record published beside it. Both files come
+from the same release, so that check proves integrity, not authenticity; the
+trust model equals `curl ... | sh` above.
+
+Bind the toggle in Herdr's `config.toml`:
+
+```toml
+[[keys.command]]
+key = "prefix+i"
+type = "plugin_action"
+command = "proqi.toggle"
+description = "toggle Proqi"
+```
+
+The toggle opens one Proqi pane to the right of the focused agent, focuses it
+when it is already open, and closes it after saving when it is focused. Each
+tab keeps one named session, named after the tab. Herdr does not restore
+plugin panes after a cold server restart; the next toggle reopens the same
+session and removes the leftover empty shell. See the
+[Herdr plugin guide](docs/guides/herdr-plugin.md).
 
 ## Start and resume
 

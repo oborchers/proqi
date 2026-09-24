@@ -24,7 +24,7 @@ pub(super) fn outcome() -> Outcome {
             "identifier_encoding": "prefix_base32hex_uuidv7",
             "commands": [
                 "capabilities", "completions", "update", "diagnostics", "doctor",
-                "sessions", "items", "thoughts"
+                "sessions", "items", "thoughts", "herdr"
             ],
             "operations": {
                 "diagnostics": ["collect", "keypress"],
@@ -38,6 +38,7 @@ pub(super) fn outcome() -> Outcome {
                     "move", "split", "extract", "merge", "reflow", "send", "undo", "redo"
                 ],
                 "update": ["check"],
+                "herdr": ["toggle"],
                 "history_scopes": ["board", "editor", "browser"]
             },
             "options": option_inventory(),
@@ -64,6 +65,7 @@ pub(super) fn outcome() -> Outcome {
             "max_thought_stdin_bytes": MAX_THOUGHT_STDIN_BYTES,
             "herdr_submission": true,
             "herdr_managed_pane_required": true,
+            "herdr_companion_toggle": true,
         }),
         human: format!(
             "CLI schema 1\nSessions, board items, and thoughts are available\nActive control: {active_control_summary}\nHerdr submission: supported in a managed Herdr pane"

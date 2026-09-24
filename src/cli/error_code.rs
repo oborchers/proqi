@@ -104,6 +104,12 @@ error_codes! {
         Yes,
         "`{}`, or `{\"session_id\", \"holder\"}` when the active owner is known"
     ),
+    CompanionSessionActive => (
+        "companion_session_active",
+        5,
+        AfterChange,
+        "`{\"session_id\", \"name\"}`; `name` is null when a recorded session was reopened"
+    ),
     SchemaBusy => ("schema_busy", 5, Yes, "`{}`"),
     StorageBusy => ("storage_busy", 5, Yes, "`{}`"),
     Unsupported => ("unsupported", 6, No, "`{}`"),
@@ -147,6 +153,8 @@ error_codes! {
     TerminalWorkerFailed => ("terminal_worker_failed", 1, AfterChange, "`{}`"),
     TerminalCleanupFailed => ("terminal_cleanup_failed", 1, AfterChange, "`{}`"),
     ControlFailed => ("control_failed", 1, AfterChange, "`{}`"),
+    HerdrFailed => ("herdr_failed", 1, AfterChange, "`{}`"),
+    PluginStateFailed => ("plugin_state_failed", 1, Yes, "`{}`"),
     OutputFailed => ("output_failed", 1, AfterChange, "`{}`"),
     ClipboardFailed => ("clipboard_failed", 1, AfterChange, "`{}`"),
     EnvironmentFailed => ("environment_failed", 1, AfterChange, "`{}`"),

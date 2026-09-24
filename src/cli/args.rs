@@ -56,6 +56,20 @@ pub(super) enum Command {
     Items(ItemArgs),
     /// Inspect and mutate thoughts in one explicit session.
     Thoughts(ThoughtArgs),
+    /// Run Proqi's Herdr plugin actions.
+    Herdr(HerdrArgs),
+}
+
+#[derive(Debug, Args)]
+pub(super) struct HerdrArgs {
+    #[command(subcommand)]
+    pub(super) command: HerdrCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub(super) enum HerdrCommand {
+    /// Open, focus, or close this tab's Proqi pane. Runs as the Herdr plugin action.
+    Toggle,
 }
 
 #[derive(Debug, Args)]
