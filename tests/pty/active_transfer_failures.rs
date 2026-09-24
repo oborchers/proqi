@@ -41,7 +41,7 @@ fn annotated_move_waits_for_destination_durability_and_survives_missing_attachme
             fixture.binary,
             fixture.state(),
             &["thoughts", "list", &fixture.source]
-        )["data"]["thoughts"]
+        )["data"]["items"]
             .as_array()
             .expect("source thoughts")
             .is_empty()
@@ -80,7 +80,7 @@ fn failed_active_transfer_retains_source_and_exact_retry_recovers_without_sequen
             fixture.binary,
             fixture.state(),
             &["thoughts", "list", &fixture.source]
-        )["data"]["thoughts"]
+        )["data"]["items"]
             .as_array()
             .expect("source thoughts")
             .len(),
@@ -108,7 +108,7 @@ fn failed_active_transfer_retains_source_and_exact_retry_recovers_without_sequen
             fixture.binary,
             fixture.state(),
             &["thoughts", "list", &fixture.source]
-        )["data"]["thoughts"]
+        )["data"]["items"]
             .as_array()
             .expect("source thoughts after retry")
             .is_empty()
@@ -176,11 +176,8 @@ fn annotated_transfer_flushes_a_live_destination_draft_before_its_own_commit() {
         fixture.state(),
         &["thoughts", "list", &fixture.destination],
     );
-    assert_eq!(live["data"]["thoughts"][0]["id"], anchor_id);
-    assert_eq!(
-        live["data"]["thoughts"][0]["content"],
-        "anchor pending draft"
-    );
+    assert_eq!(live["data"]["items"][0]["id"], anchor_id);
+    assert_eq!(live["data"]["items"][0]["content"], "anchor pending draft");
     assert_destination_database(
         fixture.state(),
         &fixture.destination,

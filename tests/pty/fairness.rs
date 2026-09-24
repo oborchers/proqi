@@ -100,7 +100,7 @@ fn run_fairness(exit: ExitScenario) {
     assert_owner_success(owner, &transcript, state.path(), &client_debug);
 
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let thoughts = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+    let thoughts = thoughts["data"]["items"].as_array().expect("thoughts");
     assert!(thoughts.len() > accepted.len());
     assert!(thoughts.len() <= 21);
     assert!(

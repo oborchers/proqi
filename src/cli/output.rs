@@ -5,9 +5,10 @@ use std::{io::Write, process::ExitCode};
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use super::error_code::ErrorCode;
 use crate::{
     adapters::terminal::TerminalError,
-    application::{ApplicationError, SessionServiceError},
+    application::{ApplicationError, FailureCode, SessionServiceError},
     ports::{
         runtime::RuntimeError,
         store::{StoreError, StoreFailureCode},
@@ -18,30 +19,28 @@ pub(super) const JSON_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug)]
 pub(super) struct CliError {
-    code: &'static str,
+    code: ErrorCode,
     message: String,
-    exit: u8,
     details: Value,
 }
 
 impl CliError {
     pub(super) fn arguments(message: String) -> Self {
-        Self::new("invalid_arguments", message, 2)
+        Self::new(ErrorCode::InvalidArguments, message)
     }
 
     pub(super) fn input(message: String) -> Self {
-        Self::new("invalid_input", message, 2)
+        Self::new(ErrorCode::InvalidInput, message)
     }
 
     pub(super) fn identifier(message: String) -> Self {
-        Self::new("invalid_identifier", message, 2)
+        Self::new(ErrorCode::InvalidIdentifier, message)
     }
 
-    pub(super) fn new(code: &'static str, message: String, exit: u8) -> Self {
+    pub(super) fn new(code: ErrorCode, message: String) -> Self {
         Self {
             code,
             message,
-            exit,
             details: json!({}),
         }
     }
@@ -56,30 +55,41 @@ impl From<SessionServiceError> for CliError {
     fn from(error: SessionServiceError) -> Self {
         let message = error.to_string();
         match error {
-            SessionServiceError::SessionNotFound(_) => Self::new("session_not_found", message, 3),
+            SessionServiceError::SessionNotFound(_) => {
+                Self::new(ErrorCode::SessionNotFound, message)
+            }
             SessionServiceError::AmbiguousSession { matches, .. } => {
                 let ids: Vec<_> = matches.iter().map(ToString::to_string).collect();
-                Self::new("ambiguous_session", message, 4).with_details(json!({ "matches": ids }))
+                Self::new(ErrorCode::AmbiguousSession, message)
+                    .with_details(json!({ "matches": ids }))
             }
-            SessionServiceError::SessionTrashed(_) => Self::new("session_trashed", message, 7),
+            SessionServiceError::SessionNameConflict { name, sessions } => {
+                let sessions: Vec<_> = sessions
+                    .iter()
+                    .map(|session| json!({ "id": session.id, "origin_cwd": session.origin_cwd }))
+                    .collect();
+                Self::new(ErrorCode::SessionNameConflict, message)
+                    .with_details(json!({ "name": name, "sessions": sessions }))
+            }
+            SessionServiceError::SessionTrashed(_) => Self::new(ErrorCode::SessionTrashed, message),
             SessionServiceError::SessionNotTrashed(_) => {
-                Self::new("session_not_trashed", message, 7)
+                Self::new(ErrorCode::SessionNotTrashed, message)
             }
             SessionServiceError::NoBrowserHistory { .. } => {
-                Self::new("history_unavailable", message, 7)
+                Self::new(ErrorCode::HistoryUnavailable, message)
             }
             SessionServiceError::IdempotencyConflict => {
-                Self::new("idempotency_conflict", message, 7)
+                Self::new(ErrorCode::IdempotencyConflict, message)
             }
-            SessionServiceError::NoDurableMutation => Self::new("no_change", message, 7),
+            SessionServiceError::NoDurableMutation => Self::new(ErrorCode::NoChange, message),
             SessionServiceError::InvalidIdentifier { .. } => {
-                Self::new("invalid_identifier", message, 2)
+                Self::new(ErrorCode::InvalidIdentifier, message)
             }
             SessionServiceError::Runtime(runtime) => runtime.into(),
             SessionServiceError::Store(store) => store.into(),
             SessionServiceError::Application(application) => application.into(),
             SessionServiceError::Domain(_) | SessionServiceError::InvalidDirectory(_) => {
-                Self::new("invalid_input", message, 2)
+                Self::new(ErrorCode::InvalidInput, message)
             }
         }
     }
@@ -90,15 +100,16 @@ impl From<RuntimeError> for CliError {
         let message = error.to_string();
         match error {
             RuntimeError::SessionBusy { session_id, holder } => Self::new(
-                "session_busy",
+                ErrorCode::SessionBusy,
                 format!("session is active: {session_id}"),
-                5,
             )
             .with_details(json!({ "session_id": session_id, "holder": holder })),
-            RuntimeError::SchemaBusy => Self::new("schema_busy", message, 5),
-            RuntimeError::MalformedMetadata(_) => Self::new("runtime_metadata_invalid", message, 1),
+            RuntimeError::SchemaBusy => Self::new(ErrorCode::SchemaBusy, message),
+            RuntimeError::MalformedMetadata(_) => {
+                Self::new(ErrorCode::RuntimeMetadataInvalid, message)
+            }
             RuntimeError::Io(_) | RuntimeError::Invalid(_) => {
-                Self::new("runtime_failed", message, 1)
+                Self::new(ErrorCode::RuntimeFailed, message)
             }
         }
     }
@@ -112,28 +123,33 @@ impl From<StoreError> for CliError {
 
 impl CliError {
     pub(super) fn storage(code: StoreFailureCode, message: String) -> Self {
-        let exit = match code {
-            StoreFailureCode::Busy => 5,
-            StoreFailureCode::NotFound => 3,
-            StoreFailureCode::Conflict => 7,
-            StoreFailureCode::Unsupported => 6,
-            StoreFailureCode::DiskFull
-            | StoreFailureCode::RecoveryCapacity
-            | StoreFailureCode::Failed => 1,
+        let code = match code {
+            StoreFailureCode::Busy => ErrorCode::StorageBusy,
+            StoreFailureCode::NotFound => ErrorCode::NotFound,
+            StoreFailureCode::Conflict => ErrorCode::Conflict,
+            StoreFailureCode::Unsupported => ErrorCode::Unsupported,
+            StoreFailureCode::DiskFull => ErrorCode::DiskFull,
+            StoreFailureCode::RecoveryCapacity => ErrorCode::RecoveryCapacity,
+            StoreFailureCode::Failed => ErrorCode::StorageFailed,
         };
-        Self::new(code.cli_str(), message, exit)
+        Self::new(code, message)
     }
 }
 
 impl From<ApplicationError> for CliError {
     fn from(error: ApplicationError) -> Self {
-        let code = error.code().as_str();
-        let exit = if matches!(error, ApplicationError::ThoughtNotFound(_)) {
-            3
-        } else {
-            7
+        let code = match error.code() {
+            FailureCode::ThoughtNotFound => ErrorCode::ThoughtNotFound,
+            FailureCode::ContentConflict => ErrorCode::ContentConflict,
+            FailureCode::ThoughtLocked => ErrorCode::ThoughtLocked,
+            FailureCode::InvalidState => ErrorCode::InvalidState,
+            FailureCode::ClipboardFailed => ErrorCode::ClipboardFailed,
+            FailureCode::ClipboardMetadataUnsupported => ErrorCode::ClipboardMetadataUnsupported,
+            FailureCode::StorageFailed => ErrorCode::StorageFailed,
+            FailureCode::RecoveryCapacity => ErrorCode::RecoveryCapacity,
+            FailureCode::InvariantViolation => ErrorCode::InvariantViolation,
         };
-        Self::new(code, error.to_string(), exit)
+        Self::new(code, error.to_string())
     }
 }
 
@@ -141,13 +157,13 @@ impl From<TerminalError> for CliError {
     fn from(error: TerminalError) -> Self {
         match error {
             TerminalError::Store(store) => store.into(),
-            TerminalError::Io(message) => Self::new("terminal_failed", message, 1),
+            TerminalError::Io(message) => Self::new(ErrorCode::TerminalFailed, message),
             TerminalError::Worker(message) => {
-                Self::new("terminal_worker_failed", message.to_owned(), 1)
+                Self::new(ErrorCode::TerminalWorkerFailed, message.to_owned())
             }
-            TerminalError::Cleanup(message) => Self::new("terminal_cleanup_failed", message, 1),
-            TerminalError::Config(message) => Self::new("config_invalid", message, 2),
-            TerminalError::Control(error) => Self::new("control_failed", error.to_string(), 1),
+            TerminalError::Cleanup(message) => Self::new(ErrorCode::TerminalCleanupFailed, message),
+            TerminalError::Config(message) => Self::new(ErrorCode::ConfigInvalid, message),
+            TerminalError::Control(error) => Self::new(ErrorCode::ControlFailed, error.to_string()),
             TerminalError::Runtime(error) => error.into(),
         }
     }
@@ -165,22 +181,22 @@ pub(super) fn render_success<T: Serialize>(value: &T, human: &str, json_output: 
         writeln!(std::io::stdout().lock(), "{human}").map_err(|error| error.to_string())
     };
     if let Err(error) = result {
-        return render_error(&CliError::new("output_failed", error, 1), json_output);
+        return render_error(&CliError::new(ErrorCode::OutputFailed, error), json_output);
     }
     ExitCode::SUCCESS
 }
 
 pub(super) fn render_error(error: &CliError, json_output: bool) -> ExitCode {
     crate::adapters::diagnostics::record(crate::adapters::diagnostics::SafeEvent::CommandFailed {
-        code: error.code,
-        exit: error.exit,
+        code: error.code.as_str(),
+        exit: error.code.exit(),
     });
     if json_output {
         let payload = json!({
             "schema_version": JSON_SCHEMA_VERSION,
             "ok": false,
             "error": {
-                "code": error.code,
+                "code": error.code.as_str(),
                 "message": error.message,
                 "details": error.details,
             }
@@ -189,7 +205,7 @@ pub(super) fn render_error(error: &CliError, json_output: bool) -> ExitCode {
     } else {
         let _result = writeln!(std::io::stderr().lock(), "proqi: {}", error.message);
     }
-    ExitCode::from(error.exit)
+    ExitCode::from(error.code.exit())
 }
 
 fn write_json(value: &Value) -> Result<(), String> {

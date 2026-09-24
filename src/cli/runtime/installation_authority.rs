@@ -1,5 +1,6 @@
 //! Active-installation and executable-byte authority for startup convergence.
 
+use crate::cli::error_code::ErrorCode;
 use std::path::Path;
 
 use crate::{
@@ -82,7 +83,7 @@ impl<'a> VerifiedStartupInstallation<'a> {
 
     pub(super) fn revalidate(self) -> Result<(), CliError> {
         self.revalidate_for_update()
-            .map_err(|error| CliError::new("installation_failed", error.to_string(), 1))
+            .map_err(|error| CliError::new(ErrorCode::InstallationFailed, error.to_string()))
     }
 
     fn revalidate_for_update(self) -> Result<(), UpdateError> {

@@ -134,3 +134,59 @@ fn overlapping_sources_and_changed_retry_cannot_create_a_second_cohort() {
         1
     );
 }
+
+#[test]
+fn pruning_a_transfer_source_removes_its_journal_and_keeps_the_prune_receipt() {
+    let temporary = tempdir().expect("temporary state root");
+    let config = StoreConfig::new(
+        temporary.path().join("data/proqi.sqlite3"),
+        temporary.path().join("backups"),
+        MigrationMode::Allow,
+        Timestamp::from_millis(1),
+    );
+    let mut ids = FakeIdGenerator::new(1_725_000_200_000);
+    let request = request(&mut ids);
+    let mut store = SqliteStore::open(&config).expect("open");
+    create_sessions(&mut store, &request);
+    assert_eq!(
+        store.prepare_transfer(&request, Timestamp::from_millis(2)),
+        Ok(None)
+    );
+    store
+        .trash_session(request.source_session_id, Timestamp::from_millis(3))
+        .expect("trash source");
+    let prune = ids.operation_id();
+    store
+        .prune_session_request(request.source_session_id, prune, Timestamp::from_millis(4))
+        .expect("prune source");
+
+    let journal: (i64, i64) = store
+        .connection
+        .query_row(
+            "SELECT (SELECT count(*) FROM transfer_attempts),
+                    (SELECT count(*) FROM transfer_source_claims)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("journal counts");
+    assert_eq!(
+        journal,
+        (0, 0),
+        "the pruned source leaves no orphaned intent"
+    );
+    assert!(matches!(
+        store.session_request(prune),
+        Ok(Some(crate::ports::store::StoredSessionRequest::Administration(receipt)))
+            if receipt.request
+                == crate::ports::store::SessionRequest::Prune {
+                    session_id: request.source_session_id,
+                }
+    ));
+    assert!(
+        store
+            .pending_transfers(request.source_session_id)
+            .expect("pending")
+            .is_empty()
+    );
+    store.quick_check().expect("integrity");
+}

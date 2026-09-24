@@ -55,7 +55,9 @@ pub use release_highlights::{ReleaseHighlightPresentation, ReleaseHighlightSelec
 pub(crate) use reorder::selected_move_steps;
 pub(crate) use service::derived_duplicate_item_ids;
 pub use service::{
-    BoardItemMutation, LeasedSession, SessionService, SessionServiceError, ThoughtMutation,
+    BoardItemMutation, BrowserHistoryMovement, LeasedSession, NamedSession,
+    NamedSessionDisposition, RenameAdmission, SessionAdministrationReceipt, SessionService,
+    SessionServiceError, ThoughtMutation,
 };
 pub use update::{
     UpdateAvailability, UpdateCheckMode, UpdateCheckResult, UpdateRefresh, UpdateService,

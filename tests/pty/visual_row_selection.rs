@@ -117,7 +117,7 @@ fn macos_primary_shift_right_replaces_more_than_one_grapheme_in_a_wrapped_row() 
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let persisted = thoughts["data"]["thoughts"][0]["content"]
+    let persisted = thoughts["data"]["items"][0]["content"]
         .as_str()
         .expect("persisted content");
     assert_eq!(persisted, format!("aaaaaX{}", "a".repeat(78)));
@@ -171,7 +171,7 @@ fn macos_primary_left_moves_without_selection_to_the_current_wrapped_row_start()
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let persisted = thoughts["data"]["thoughts"][0]["content"]
+    let persisted = thoughts["data"]["items"][0]["content"]
         .as_str()
         .expect("persisted content");
     assert_eq!(persisted, format!("X{original}"));

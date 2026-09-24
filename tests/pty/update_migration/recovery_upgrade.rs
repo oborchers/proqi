@@ -235,10 +235,10 @@ fn assert_cache_current(state: &Path, installation: &HistoricalInstallation) {
 
 fn seed_current_metadata(binary: &str, state: &Path, session: &str) {
     let thoughts = json_command(binary, state, &["thoughts", "list", session]);
-    let thought = thoughts["data"]["thoughts"][0]["id"]
+    let thought = thoughts["data"]["items"][0]["id"]
         .as_str()
         .expect("thought ID");
-    assert_eq!(thoughts["data"]["thoughts"][0]["content"], CONTENT);
+    assert_eq!(thoughts["data"]["items"][0]["content"], CONTENT);
     json_command(
         binary,
         state,
@@ -257,7 +257,7 @@ fn wait_for_content(binary: &str, state: &Path, session: &str) {
     wait_until(
         || {
             let thoughts = json_command(binary, state, &["thoughts", "list", session]);
-            thoughts["data"]["thoughts"]
+            thoughts["data"]["items"]
                 .as_array()
                 .expect("thoughts")
                 .iter()

@@ -55,7 +55,7 @@ fn assert_recovered_state(
     let sessions = json_command(binary, state, &["sessions", "list"]);
     assert_eq!(sessions["data"]["sessions"][0]["state"], "recovered");
     let thoughts = json_command(binary, state, &["thoughts", "list", session]);
-    let live = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+    let live = thoughts["data"]["items"].as_array().expect("thoughts");
     assert_eq!(live.len(), 2);
     assert_eq!(live[0]["id"], first);
     assert_eq!(live[0]["content"], "external replacement");

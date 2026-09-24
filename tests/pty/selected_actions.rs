@@ -48,10 +48,11 @@ fn selected_order(reorder_bytes: &str) -> Vec<String> {
     let session = sessions["data"]["sessions"][0]["id"]
         .as_str()
         .expect("session");
-    json_command(binary, state.path(), &["thoughts", "list", session])["data"]["thoughts"]
+    json_command(binary, state.path(), &["thoughts", "list", session])["data"]["items"]
         .as_array()
-        .expect("thoughts")
+        .expect("items")
         .iter()
+        .filter(|item| item["kind"] == "thought")
         .map(|thought| thought["content"].as_str().expect("content").to_owned())
         .collect()
 }

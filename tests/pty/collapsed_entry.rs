@@ -208,7 +208,7 @@ fn collapsed_long_thought_mouse_entry_survives_cycles_scroll_and_resize() {
     assert!(status.success());
 
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", &session]);
-    let thoughts = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+    let thoughts = thoughts["data"]["items"].as_array().expect("thoughts");
     assert_eq!(thoughts.len(), 3, "{thoughts:#?}");
     assert_eq!(thoughts[0]["content"], "ordinary before");
     assert_eq!(thoughts[1]["content"], format!("{long}!"));
@@ -264,7 +264,7 @@ fn mixed_long_thought_presentations_survive_mouse_scroll_boundaries_and_reflow()
     assert!(status.success(), "mixed scroll PTY exited with {status}");
 
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", &session]);
-    let actual = thoughts["data"]["thoughts"]
+    let actual = thoughts["data"]["items"]
         .as_array()
         .expect("thoughts")
         .iter()
@@ -296,7 +296,7 @@ fn plain_up_stays_in_a_scrolled_expanded_thought_in_a_real_pty() {
     add_thought(binary, state.path(), &session, "previous synthetic thought");
     add_thought(binary, state.path(), &session, &long);
     let seeded = json_command(binary, state.path(), &["thoughts", "list", &session]);
-    let long_id = seeded["data"]["thoughts"][1]["id"]
+    let long_id = seeded["data"]["items"][1]["id"]
         .as_str()
         .expect("long thought ID");
     let _collapsed = json_command(
@@ -325,7 +325,7 @@ fn plain_up_stays_in_a_scrolled_expanded_thought_in_a_real_pty() {
     );
 
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", &session]);
-    let thoughts = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+    let thoughts = thoughts["data"]["items"].as_array().expect("thoughts");
     assert_eq!(thoughts[1]["presentation"], "expanded");
     assert_eq!(thoughts[0]["content"], "previous synthetic thought");
     assert_eq!(thoughts[1]["content"], format!("{long}!"));

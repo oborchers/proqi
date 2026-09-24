@@ -131,6 +131,12 @@ surface.
 | --- | --- | --- | --- |
 | Versioned JSON capability discovery | Shipped | Discover schema, bounds, identifiers, transfer, updates, control, and optional integrations. | [CLI](cli.md#discover-capabilities) |
 | Human and JSON session commands | Shipped | List, search, rename, trash, restore, history, and prune. | [CLI](cli.md#manage-sessions) |
+| Atomic named sessions | Next release | `sessions ensure` returns or atomically creates the one live session with a name and directory; `sessions create` adds another named session. Neither opens a TUI. | [CLI](cli.md#create-named-sessions) |
+| Named thought creation | Next release | `thoughts add --name` creates content, name, and position as one undoable operation. | [CLI](cli.md#inspect-and-change-thoughts) |
+| Retry-safe session changes | Next release | Session rename, trash, restore, undo, redo, prune, and create accept `--operation-id`; repeated trash is a successful no-op. | [CLI](cli.md#retry-session-changes) |
+| Bounded lists | Next release | `thoughts list` and `sessions list` accept `--limit` and `--after` and report `total` and `next_after`. | [CLI](cli.md#bounded-lists) |
+| JSON help and version | Next release | `--json --help` and `--json --version` succeed with structured data and exit 0. | [CLI](cli.md#common-options) |
+| Documented error codes | Next release | Every JSON error code, exit status, retry class, and `details` shape, also published in `capabilities`. | [CLI](cli.md#errors) |
 | Human and JSON Board-item commands | Next release | Insert separators and move, duplicate, or delete typed thoughts and separators. | [CLI](cli.md#change-board-items) |
 | Human and JSON thought commands | Shipped plus next release | The published binary provides list, inspect, add, rename, replace, collapse, move, send, delete, undo, and redo. Split, extract, merge, and reflow are next-release additions. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Typed canonical identifiers | Shipped | Prefixes identify resource kinds and retain complete UUIDv7 values. | [CLI](cli.md) |

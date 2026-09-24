@@ -217,7 +217,7 @@ fn viable_pty_replaces_exact_session_and_accepts_input_after_recovery() {
     let status = workflow.join().expect("PTY watcher");
     assert!(status.success(), "input recovery PTY exited with {status}");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", &session]);
-    assert_eq!(thoughts["data"]["thoughts"][0]["content"], "!");
+    assert_eq!(thoughts["data"]["items"][0]["content"], "!");
     let acceptance = fs::read_to_string(state.path().join("runtime/input-accepted"))
         .expect("input acceptance probe");
     assert!(
@@ -272,7 +272,7 @@ fn default_state_root_is_preserved_across_exact_replacement() {
         &["thoughts", "list", &before.session_id.to_string()],
     );
     assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
+        thoughts["data"]["items"][0]["content"],
         "default root continuity!"
     );
 }
@@ -330,7 +330,7 @@ fn run_bounded_failure(script: &str, probation: bool, window: Option<&str>) {
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
+        thoughts["data"]["items"][0]["content"],
         match window {
             Some(_) => "expired durable",
             None if probation => "probation durable",

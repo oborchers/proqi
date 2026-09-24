@@ -8,7 +8,7 @@ use std::{
 use crate::{
     application::{
         Effect,
-        test_support::{TestClock, TestIds},
+        test_support::{TestClock, TestIds, TestRuntime},
     },
     domain::{
         BrowserOperationKind, OperationId, OperationSequence, RevisionId, Session, SessionBoard,
@@ -18,7 +18,7 @@ use crate::{
         attachment_accessibility::{AttachmentCheckBatch, AttachmentCheckPurpose},
         control::ControlMutation,
         environment::IdGenerator,
-        runtime::{Lease, RuntimeCoordinator, RuntimeError, RuntimeScan},
+        runtime::RuntimeError,
         store::{
             BrowserCommitReceipt, BrowserHistoryEntry, BrowserHistoryStatus, CommitReceipt,
             DurableIdentity, FirstRunBoard, FirstRunOutcome, OperationBatch, SessionHit,
@@ -161,68 +161,6 @@ fn unused_store_call() -> StoreError {
     StoreError::Invariant("unexpected store call in session load policy test".to_owned())
 }
 
-#[derive(Clone, Copy)]
-struct TestLease;
-
-impl Lease for TestLease {}
-
-struct TestRuntime;
-
-impl RuntimeCoordinator for TestRuntime {
-    type SessionLease = TestLease;
-    type SharedSchemaLease = TestLease;
-    type ExclusiveSchemaLease = TestLease;
-
-    fn acquire_session(&self, _session_id: SessionId) -> Result<TestLease, RuntimeError> {
-        Ok(TestLease)
-    }
-
-    fn acquire_schema_shared(&self) -> Result<TestLease, RuntimeError> {
-        Ok(TestLease)
-    }
-
-    fn acquire_schema_exclusive(&self) -> Result<TestLease, RuntimeError> {
-        Ok(TestLease)
-    }
-
-    fn scan_runtime(&self) -> Result<RuntimeScan, RuntimeError> {
-        Ok(RuntimeScan::default())
-    }
-}
-
-struct RefusingRuntime {
-    busy: SessionId,
-}
-
-impl RuntimeCoordinator for RefusingRuntime {
-    type SessionLease = TestLease;
-    type SharedSchemaLease = TestLease;
-    type ExclusiveSchemaLease = TestLease;
-
-    fn acquire_session(&self, session_id: SessionId) -> Result<TestLease, RuntimeError> {
-        if session_id == self.busy {
-            Err(RuntimeError::SessionBusy {
-                session_id,
-                holder: None,
-            })
-        } else {
-            Ok(TestLease)
-        }
-    }
-
-    fn acquire_schema_shared(&self) -> Result<TestLease, RuntimeError> {
-        Ok(TestLease)
-    }
-
-    fn acquire_schema_exclusive(&self) -> Result<TestLease, RuntimeError> {
-        Ok(TestLease)
-    }
-
-    fn scan_runtime(&self) -> Result<RuntimeScan, RuntimeError> {
-        Ok(RuntimeScan::default())
-    }
-}
-
 fn test_directory() -> PathBuf {
     std::env::temp_dir().join("proqi-session-load-policy")
 }
@@ -230,7 +168,7 @@ fn test_directory() -> PathBuf {
 #[test]
 fn fresh_session_load_skips_unnecessary_compaction() {
     let mut store = BusyCompactionStore::default();
-    let runtime = TestRuntime;
+    let runtime = TestRuntime { busy: None };
     let clock = TestClock(Timestamp::from_millis(1));
     let mut ids = TestIds::new(1_725_000_000_000);
     let session = SessionService::new(&mut store, &runtime, &clock, &mut ids, test_directory())
@@ -245,7 +183,7 @@ fn fresh_session_load_skips_unnecessary_compaction() {
 #[test]
 fn resumed_session_retains_history_compaction() {
     let mut store = BusyCompactionStore::default();
-    let runtime = TestRuntime;
+    let runtime = TestRuntime { busy: None };
     let clock = TestClock(Timestamp::from_millis(1));
     let mut ids = TestIds::new(1_725_000_000_000);
     let session_id = {
@@ -286,8 +224,8 @@ fn browser_history_acquires_the_target_session_lease_before_mutation() {
         },
         ..BusyCompactionStore::default()
     };
-    let runtime = RefusingRuntime {
-        busy: target.session_id,
+    let runtime = TestRuntime {
+        busy: Some(target.session_id),
     };
     let clock = TestClock(Timestamp::from_millis(1));
     let result = SessionService::new(&mut store, &runtime, &clock, &mut ids, test_directory())
@@ -299,7 +237,7 @@ fn browser_history_acquires_the_target_session_lease_before_mutation() {
         Err(SessionServiceError::Runtime(RuntimeError::SessionBusy {
             session_id,
             ..
-        })) if session_id == runtime.busy
+        })) if Some(session_id) == runtime.busy
     ));
     assert_eq!(store.browser_history_moves, 0);
 }
@@ -307,7 +245,7 @@ fn browser_history_acquires_the_target_session_lease_before_mutation() {
 #[test]
 fn sequenced_service_commit_accepts_attachment_reconciliation_as_auxiliary_work() {
     let mut store = BusyCompactionStore::default();
-    let runtime = TestRuntime;
+    let runtime = TestRuntime { busy: None };
     let clock = TestClock(Timestamp::from_millis(7));
     let mut ids = TestIds::new(1_725_000_000_000);
     let session_id = ids.session_id();

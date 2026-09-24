@@ -1,6 +1,22 @@
 //! Shared filesystem shape and private-directory preparation.
 
-use std::{fs, io, path::Path};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
+
+/// Resolve an existing directory to the physical path a launch would record.
+pub(crate) fn canonical_existing_directory(path: &Path) -> io::Result<PathBuf> {
+    let canonical = fs::canonicalize(path)?;
+    if fs::metadata(&canonical)?.is_dir() {
+        Ok(canonical)
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::NotADirectory,
+            "path is not a directory",
+        ))
+    }
+}
 
 pub(crate) fn validate_directory_path(path: &Path) -> io::Result<()> {
     if !path.is_absolute() {
@@ -79,5 +95,31 @@ mod tests {
         let error = prepare_private_dir(&link).expect_err("unsafe directory");
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
         assert!(target.is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn launch_directories_resolve_symlinks_and_reject_files_or_absence() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let target = temporary.path().join("target");
+        fs::create_dir(&target).expect("target");
+        let link = temporary.path().join("link");
+        symlink(&target, &link).expect("symlink");
+        let file = temporary.path().join("file");
+        fs::write(&file, b"x").expect("file");
+
+        let canonical = fs::canonicalize(&target).expect("canonical target");
+        assert_eq!(
+            canonical_existing_directory(&link).expect("link"),
+            canonical
+        );
+        assert_eq!(
+            canonical_existing_directory(&target).expect("target"),
+            canonical
+        );
+        assert!(canonical_existing_directory(&file).is_err());
+        assert!(canonical_existing_directory(&temporary.path().join("missing")).is_err());
     }
 }

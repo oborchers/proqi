@@ -83,5 +83,5 @@ fn macos_plain_h_hides_optional_footer_without_persisting_or_breaking_restoratio
         parser.screen().contents()
     );
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", &session]);
-    assert_eq!(thoughts["data"]["thoughts"][0]["content"], content);
+    assert_eq!(thoughts["data"]["items"][0]["content"], content);
 }

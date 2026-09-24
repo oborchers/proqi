@@ -68,6 +68,11 @@ pub enum StoredOperationRequest {
         /// Original durable receipt.
         receipt: CommitReceipt,
     },
+    /// A session-administration request already owns the identity.
+    ///
+    /// It never matches a Board, editor, or history mutation, so any such reuse
+    /// is an idempotency conflict rather than a storage conflict.
+    SessionAdministration,
 }
 
 impl StoredOperationRequest {
@@ -91,6 +96,7 @@ impl StoredOperationRequest {
                 semantic_fingerprint,
                 ..
             } => *semantic_fingerprint,
+            Self::SessionAdministration => None,
         }
     }
 }

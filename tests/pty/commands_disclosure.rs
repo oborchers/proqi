@@ -89,7 +89,7 @@ fn commands_search_bypasses_disclosure_and_expansion_restores_the_terminal() {
     assert!(status.success(), "Commands PTY exited with {status}");
 
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let thoughts = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+    let thoughts = thoughts["data"]["items"].as_array().expect("thoughts");
     assert_eq!(thoughts.len(), 1);
     assert_eq!(thoughts[0]["content"], "alpha Grüße 界");
 }

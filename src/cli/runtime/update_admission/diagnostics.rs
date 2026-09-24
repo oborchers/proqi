@@ -1,5 +1,6 @@
 //! Private, content-free CLI diagnostics for external convergence.
 
+use crate::cli::error_code::ErrorCode;
 use serde_json::json;
 
 use crate::{
@@ -12,11 +13,10 @@ use super::CliError;
 
 pub(super) fn obsolete_error(current: &StableVersion, observed: &StableVersion) -> CliError {
     CliError::new(
-        "obsolete_executable",
+        ErrorCode::ObsoleteExecutable,
         format!(
             "this Proqi executable is version {current}, but the verified installation has already recorded version {observed}; start the active Proqi executable"
         ),
-        1,
     )
     .with_details(json!({
         "current_version": current,
@@ -34,9 +34,8 @@ pub(super) fn convergence_active(exact_resume: Option<SessionId>) -> CliError {
         },
     );
     CliError::new(
-        "update_convergence_active",
+        ErrorCode::UpdateConvergenceActive,
         format!("Proqi cannot open the schema while update convergence is active; {recovery}"),
-        1,
     )
 }
 
@@ -62,11 +61,10 @@ pub(super) fn pending_target_error(
         .collect::<Vec<_>>()
         .join(", ");
     CliError::new(
-        "external_upgrade_pending",
+        ErrorCode::ExternalUpgradePending,
         format!(
             "Proqi {current} cannot replace the unfinished external restart for installed version {observed}; restore the verified {observed} installation, resume these exact SessionIds, then retry the package upgrade: {identities}"
         ),
-        1,
     )
     .with_details(json!({
         "current_version": current,
@@ -78,7 +76,7 @@ pub(super) fn pending_target_error(
 pub(super) fn external_error(error: ExternalUpgradeFailure) -> CliError {
     match error {
         ExternalUpgradeFailure::Blocked(blockers) => blockers_error(
-            "external_upgrade_blocked",
+            ErrorCode::ExternalUpgradeBlocked,
             "verified live Proqi sessions block the external upgrade",
             blockers,
         ),
@@ -89,12 +87,12 @@ pub(super) fn external_error(error: ExternalUpgradeFailure) -> CliError {
         } => capacity_error(blockers, participant_count, maximum),
         ExternalUpgradeFailure::Incomplete(blockers) => incomplete_error(blockers),
         ExternalUpgradeFailure::Persistence { blockers, .. } => blockers_error(
-            "external_upgrade_persistence_failed",
+            ErrorCode::ExternalUpgradePersistenceFailed,
             "the update cache could not record safe external convergence, so affected exact Proqi sessions were not admitted",
             blockers,
         ),
         ExternalUpgradeFailure::Authority { blockers, .. } => blockers_error(
-            "external_upgrade_incomplete",
+            ErrorCode::ExternalUpgradeIncomplete,
             "external convergence lost verified schema or installation authority, so affected exact Proqi sessions require recovery",
             blockers,
         ),
@@ -111,11 +109,10 @@ fn incomplete_error(mut blockers: Vec<ExternalUpgradeBlocker>) -> CliError {
         .collect::<Vec<_>>()
         .join(", ");
     CliError::new(
-        "external_upgrade_incomplete",
+        ErrorCode::ExternalUpgradeIncomplete,
         format!(
             "external convergence could not restore every exact Proqi session; after any listed live owner exits, resume each missing session with the active executable and the same state root using `proqi -r <SessionId>`: {identities}"
         ),
-        1,
     )
     .with_details(json!({ "blockers": blocker_details(&blockers) }))
 }
@@ -129,11 +126,10 @@ fn capacity_error(
     let details = blocker_details(&blockers);
     let close_count = participant_count.saturating_sub(maximum);
     CliError::new(
-        "external_upgrade_capacity",
+        ErrorCode::ExternalUpgradeCapacity,
         format!(
             "{participant_count} compatible live Proqi sessions exceed the external replacement limit of {maximum}; close at least {close_count} live session(s), then retry with the active Proqi executable"
         ),
-        1,
     )
     .with_details(json!({
         "blockers": details,
@@ -153,13 +149,15 @@ fn authority_error(error: ExternalUpgradeAuthorityError) -> CliError {
 fn external_update_error(error: UpdateError) -> CliError {
     match error {
         UpdateError::State(_) => update_state_error(error),
-        UpdateError::Installation(_) => CliError::new("installation_failed", error.to_string(), 1),
-        _ => CliError::new("update_coordination_failed", error.to_string(), 1),
+        UpdateError::Installation(_) => {
+            CliError::new(ErrorCode::InstallationFailed, error.to_string())
+        }
+        _ => CliError::new(ErrorCode::UpdateCoordinationFailed, error.to_string()),
     }
 }
 
 fn blockers_error(
-    code: &'static str,
+    code: ErrorCode,
     summary: &str,
     mut blockers: Vec<ExternalUpgradeBlocker>,
 ) -> CliError {
@@ -180,7 +178,6 @@ fn blockers_error(
         format!(
             "{summary}: {identities}; close the listed sessions, or update compatible sessions, then retry with the active Proqi executable"
         ),
-        1,
     )
     .with_details(json!({ "blockers": blocker_details(&blockers) }))
 }
@@ -204,7 +201,7 @@ fn blocker_details(blockers: &[ExternalUpgradeBlocker]) -> Vec<serde_json::Value
     reason = "Result::map_err transfers the owned update error into this adapter"
 )]
 pub(super) fn update_state_error(error: UpdateError) -> CliError {
-    CliError::new("update_state_failed", error.to_string(), 1)
+    CliError::new(ErrorCode::UpdateStateFailed, error.to_string())
 }
 
 #[cfg(test)]

@@ -835,9 +835,14 @@ event-sourced system.
   structural replay comparison.
 - `browser_operations`: installation-wide ordered rename, trash, and restore
   operations with exact forward and inverse metadata transitions.
-- `browser_operation_receipts`: idempotent Browser mutation receipts, including
-  same-name rename requests that intentionally create no history, retained
-  independently of the active Browser cursor.
+- `browser_operation_receipts`: idempotent session-administration receipts,
+  retained independently of the active Browser cursor. A row holds either one
+  reversible Browser operation or one versioned request receipt that
+  intentionally creates no history: a same-name rename, a trash request for an
+  already trashed session, a named session creation, or a permanent prune. Pruning
+  removes the session's rename, trash, and restore receipts but retains its
+  creation receipt and writes its own prune receipt, so exact creation and
+  prune retries replay without recreating the deleted session.
 - `browser_history_receipts`: idempotent, compare-and-set Browser undo and redo
   receipts tied to the exact operation that was presented to the caller.
 - `browser_history_state`: the single applied-prefix cursor for Browser
@@ -994,6 +999,20 @@ control ownership throughout. When the destination is active, the worker sends
 the same stable cohort operation through owner control. A retry after an
 uncertain acknowledgement must use the journaled operation identity in either
 case.
+
+Schema version 21 and storage protocol version 20 register
+session-administration request receipts. The trash no-op, named-creation, and
+prune receipt kinds are versioned JSON payloads in the existing
+`browser_operation_receipts` table, which already held tagged same-name rename
+receipts, so migration 21 is a metadata-only protocol stamp. The stamp is still
+required. An older writer prunes by deleting every receipt of the session and
+would discard the creation receipt that stops an exact creation retry from
+recreating a permanently pruned session. It would also misreport an unknown
+receipt kind as corruption. Creation receipts retain only a SHA-256 digest of
+the requested name and origin directory, so no user content survives a prune.
+Creation and prune receipts can name a session that no longer exists. The
+receipt table has no foreign key, and nothing joins receipts back to
+`sessions`.
 
 ### Stable session attachment ordinals
 
@@ -2034,12 +2053,52 @@ standard error. Thought bodies enter through standard input. A caller-supplied
 `op_` identity is resolved against its typed durable request before mutation,
 so matching retries return the original receipt and mismatched reuse fails.
 
-The `thoughts list` response preserves its content-bearing `thoughts` array and
-adds an ordered typed `items` array. Thought entries identify a thought and its
-position. Separator entries use `kind: "separator"`, a `sep_` identity, and a
-position, with no content or annotation payload. Existing thought mutation
-commands continue to address thoughts, while their ordering operates within the
-shared Board item sequence.
+The `thoughts list` response returns one ordered typed `items` array. Thought
+entries carry their identity, position, exact content, optional name,
+presentation, update time, and content digest. Separator entries use
+`kind: "separator"`, a `sep_` identity, and a position, with no content or
+annotation payload. The former duplicate `thoughts` projection was removed
+before 1.0. Existing thought mutation commands continue to address thoughts,
+while their ordering operates within the shared Board item sequence.
+
+`thoughts list` and `sessions list` accept a positive limit and continue after a
+stable typed anchor identity. Both report the complete `total` and the next
+anchor. A missing anchor fails with `cursor_not_found` instead of restarting.
+
+`sessions ensure` and `sessions create` create named sessions without a lease,
+terminal, or Herdr access. `Session::with_name` sets the name in the first
+durable state. The store's named creation evaluates the collision policy and
+inserts the session in one immediate transaction. For get-or-create, it returns
+the live sessions that already use the exact name. The application then reuses
+the one with the requested canonical origin directory, reports ambiguity for
+several, and reports `session_name_conflict` when the name belongs only to
+other directories. Concurrent callers therefore create at most one session.
+Unconditional creation derives the session identity from its operation
+identity and retains a creation receipt in the same transaction.
+
+Session rename, trash, restore, prune, undo, and redo accept caller-supplied
+operation identities. The application compares one typed `SessionRequest`
+against the retained receipt before and after acquiring the session lease, so an
+exact retry returns the original result and divergent reuse, including reuse of
+a Board or editor history identity, fails with `idempotency_conflict`. The
+reverse direction uses the same matcher: the SQLite operation lookup reports a
+session-administration identity as a typed foreign request, so a Board, editor,
+or history mutation that reuses it is an idempotency conflict for inactive and
+active owners alike. A name reference with a recorded identity resolves to the
+recorded session only when the name no longer resolves or is ambiguous among
+sessions that include it. A name that resolves to another session is an
+idempotency conflict. The target identity of a retained undo or redo receipt
+stays reserved after its session is pruned. A trash
+request for an already trashed session reserves its identity and reports that
+nothing changed. `thoughts add --name` reuses the purpose-specific preserved
+creation request, which already carries an optional name through the owner
+control protocol, so content, name, and position remain one Board operation.
+
+Every JSON failure code is a variant of one closed CLI inventory that owns its
+exit status, retry guidance, and `details` shape. The public reference table is
+rendered from that inventory and checked verbatim, and `capabilities` publishes
+the codes. With `--json`, clap help and version displays are successful
+responses.
 
 The additive `items` family is the semantic mutation boundary for that mixed
 sequence. It inserts payload-free separators, moves one typed item, and deletes
@@ -2071,8 +2130,9 @@ insecure fallback. Endpoint metadata lives beside runtime lock metadata. Peer-us
 bounded messages, protocol negotiation, idempotency keys, and timeouts are
 mandatory. Before reporting success, the client verifies the receipt's exact
 session, durable identity, affected thought, and typed item identities against
-the request. If forwarding is unsupported or the owner cannot be verified, the
-CLI returns `session_busy`.
+the request. If the owner cannot be verified or reached, the CLI returns `session_busy`. If
+the verified owner's control protocol cannot represent the request, the CLI
+returns `protocol_mismatch`, because a retry cannot succeed.
 
 Control protocol version 12 is current. Version 12 adds one selected-thought
 preserve-add batch. The destination owner commits every copy under one operation
@@ -2086,7 +2146,10 @@ cross-session creation. Older
 owners reject those requests instead of dropping metadata. Version 9 carries the durable operation
 identity required for active-owner session rename, including idempotent replay
 and Browser history. A same-name rename commits a durable no-op receipt so its
-identity cannot later name different content. Attachment-bearing creation requires version 8 to retain
+identity cannot later name different content. The rename metadata receipt
+carries the store's `idempotent_replay` flag, so an overlapping duplicate that
+reaches the owner after the first rename is reported as a replay. The field is
+additive: an older owner omits it and the client reads a new application. Attachment-bearing creation requires version 8 to retain
 destination occurrence numbering. Version 2 introduced legacy durable
 presentation annotations. Version 4 added session rename, owner synchronization,
 exact editor replacement, and durable collapse state. An add mutation carrying

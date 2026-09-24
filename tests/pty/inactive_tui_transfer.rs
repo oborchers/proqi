@@ -130,18 +130,20 @@ fn assert_thoughts(
 ) {
     let source_thoughts = json_command(binary, state, &["thoughts", "list", source]);
     assert!(
-        source_thoughts["data"]["thoughts"]
+        source_thoughts["data"]["items"]
             .as_array()
-            .expect("source thoughts")
-            .is_empty()
+            .expect("source items")
+            .iter()
+            .all(|item| item["kind"] != "thought")
     );
     let destination_thoughts = json_command(binary, state, &["thoughts", "list", destination]);
-    let destination_thoughts = destination_thoughts["data"]["thoughts"]
+    let destination_items = destination_thoughts["data"]["items"]
         .as_array()
-        .expect("destination thoughts");
+        .expect("destination items");
     assert_eq!(
-        destination_thoughts
+        destination_items
             .iter()
+            .filter(|item| item["kind"] == "thought")
             .map(|thought| thought["content"].as_str().expect("content"))
             .collect::<Vec<_>>(),
         contents

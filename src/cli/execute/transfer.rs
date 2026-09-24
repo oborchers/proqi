@@ -1,5 +1,6 @@
 //! Durable cross-session thought delivery for the scriptable CLI.
 
+use crate::cli::error_code::ErrorCode;
 use serde_json::json;
 
 use crate::domain::{OperationId, SessionId, ThoughtId};
@@ -105,18 +106,16 @@ fn verify_removal_replay(
     match match_control_replay(&existing, session_id, &mutation) {
         ControlReplay::Accepted(_) => Ok(()),
         ControlReplay::Conflict => Err(CliError::new(
-            "idempotency_conflict",
+            ErrorCode::IdempotencyConflict,
             "remove operation ID belongs to another mutation".to_owned(),
-            7,
         )),
     }
 }
 
 fn thought_not_found(thought_id: ThoughtId) -> CliError {
     CliError::new(
-        "thought_not_found",
+        ErrorCode::ThoughtNotFound,
         format!("thought not found: {thought_id}"),
-        3,
     )
 }
 

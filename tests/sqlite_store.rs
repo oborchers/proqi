@@ -182,6 +182,10 @@ mod recovery;
 mod screenshot;
 #[path = "sqlite_store/separators.rs"]
 mod separators;
+#[path = "sqlite_store/session_request_hardening.rs"]
+mod session_request_hardening;
+#[path = "sqlite_store/session_requests.rs"]
+mod session_requests;
 #[path = "sqlite_store/submission.rs"]
 mod submission;
 #[path = "sqlite_store/top_boundary.rs"]
@@ -202,6 +206,8 @@ mod migration_17;
 mod migration_19;
 #[path = "sqlite_store/migration_20.rs"]
 mod migration_20;
+#[path = "sqlite_store/migration_21.rs"]
+mod migration_21;
 
 #[path = "sqlite_store/attachment_numbering.rs"]
 mod attachment_numbering;

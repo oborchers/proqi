@@ -200,7 +200,7 @@ fn run_failure(mutation: Mutation, expected: &str) {
         &["thoughts", "list", session],
     );
     assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
+        thoughts["data"]["items"][0]["content"],
         "replacement failure durable"
     );
 }
@@ -262,7 +262,7 @@ fn assert_single_content(state: &Path, expected: Option<&str>) {
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state, &["thoughts", "list", session]);
-    let contents = thoughts["data"]["thoughts"]
+    let contents = thoughts["data"]["items"]
         .as_array()
         .expect("thoughts")
         .iter()

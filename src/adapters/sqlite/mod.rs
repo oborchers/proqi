@@ -31,9 +31,7 @@ pub use doctor::{SqliteHealth, inspect_read_only_snapshot};
 
 use std::{path::PathBuf, thread};
 
-use rusqlite::{
-    Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior, params,
-};
+use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior};
 
 use crate::{
     domain::{SessionId, Timestamp},
@@ -377,33 +375,11 @@ impl Store for SqliteStore {
     }
 
     fn trash_session(&mut self, id: SessionId, at: Timestamp) -> Result<(), StoreError> {
-        self.with_write_retry(|transaction| {
-            let changed = transaction
-                .execute(
-                    "UPDATE sessions SET deleted_at = ?2, last_active_at = max(last_active_at, ?2) WHERE id = ?1",
-                    params![id.database_bytes().as_slice(), at.as_millis()],
-                )
-                .map_err(map_sql_error)?;
-            if changed == 0 {
-                return Err(StoreError::NotFound(id.to_string()));
-            }
-            rebuild_session_search(transaction, id)
-        })
+        self.with_write_retry(|transaction| session_admin::trash(transaction, id, at))
     }
 
     fn restore_session(&mut self, id: SessionId) -> Result<(), StoreError> {
-        self.with_write_retry(|transaction| {
-            let changed = transaction
-                .execute(
-                    "UPDATE sessions SET deleted_at = NULL WHERE id = ?1",
-                    [id.database_bytes().as_slice()],
-                )
-                .map_err(map_sql_error)?;
-            if changed == 0 {
-                return Err(StoreError::NotFound(id.to_string()));
-            }
-            rebuild_session_search(transaction, id)
-        })
+        self.with_write_retry(|transaction| session_admin::restore(transaction, id))
     }
 
     fn commit_browser_operation(
@@ -455,38 +431,45 @@ impl Store for SqliteStore {
     }
 
     fn prune_session(&mut self, id: SessionId) -> Result<(), StoreError> {
+        self.with_write_retry(|transaction| session_admin::prune(transaction, id))
+    }
+
+    fn prune_session_request(
+        &mut self,
+        id: SessionId,
+        operation_id: crate::domain::OperationId,
+        at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
         self.with_write_retry(|transaction| {
-            let deleted: Option<Option<i64>> = transaction
-                .query_row(
-                    "SELECT deleted_at FROM sessions WHERE id = ?1",
-                    [id.database_bytes().as_slice()],
-                    |row| row.get(0),
-                )
-                .optional()
-                .map_err(map_sql_error)?;
-            match deleted {
-                None => return Err(StoreError::NotFound(id.to_string())),
-                Some(None) => {
-                    return Err(StoreError::Conflict(
-                        "live sessions must be trashed before pruning".to_owned(),
-                    ));
-                }
-                Some(Some(_)) => {}
-            }
-            transaction
-                .execute(
-                    "DELETE FROM session_search WHERE session_id = ?1",
-                    [id.to_string()],
-                )
-                .map_err(map_sql_error)?;
-            browser_history::remove_session(transaction, id)?;
-            transaction
-                .execute(
-                    "DELETE FROM sessions WHERE id = ?1",
-                    [id.database_bytes().as_slice()],
-                )
-                .map_err(map_sql_error)?;
-            Ok(())
+            session_admin::prune_request(transaction, id, operation_id, at)
+        })
+    }
+
+    fn create_named_session(
+        &mut self,
+        creation: &crate::ports::store::NamedSessionCreation,
+    ) -> Result<crate::ports::store::NamedSessionOutcome, StoreError> {
+        self.with_write_retry(|transaction| session_admin::create_named(transaction, creation))
+    }
+
+    fn session_request(
+        &mut self,
+        operation_id: crate::domain::OperationId,
+    ) -> Result<Option<crate::ports::store::StoredSessionRequest>, StoreError> {
+        let transaction = self.connection.transaction().map_err(map_sql_error)?;
+        let request = browser_history::stored_request(&transaction, operation_id)?;
+        transaction.commit().map_err(map_sql_error)?;
+        Ok(request)
+    }
+
+    fn commit_noop_trash(
+        &mut self,
+        operation_id: crate::domain::OperationId,
+        session_id: SessionId,
+        at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        self.with_write_retry(|transaction| {
+            browser_history::commit_noop_trash(transaction, operation_id, session_id, at)
         })
     }
 }

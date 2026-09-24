@@ -46,6 +46,17 @@ fn bundled_operation_inventory_matches_the_real_capabilities_contract() {
 }
 
 #[test]
+fn skill_references_the_documented_error_contract() {
+    const CLI_REFERENCE: &str = include_str!("../docs/reference/cli.md");
+    assert!(SKILL.contains("https://oborchers.github.io/proqi/reference/cli.html#errors"));
+    assert!(SKILL.contains("data.error_codes"));
+    assert!(CLI_REFERENCE.contains("\n## Errors\n"));
+    assert!(CLI_REFERENCE.contains("\n## Stability\n"));
+    assert!(SKILL.contains("Human output is not a contract"));
+    assert!(!SKILL.contains("legacy thought projection"));
+}
+
+#[test]
 fn canonical_skills_cli_installation_is_documented_as_a_separate_step() {
     assert!(README.contains("npx skills add oborchers/proqi --skill proqi -g"));
     assert!(README.contains("--agent codex --agent claude-code"));

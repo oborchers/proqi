@@ -1,25 +1,31 @@
-//! Durable Browser request receipts that intentionally do not create history.
+//! Durable session-administration request receipts and their replay lookup.
 
-use rusqlite::{OptionalExtension, Transaction, params};
-use serde::{Deserialize, Serialize};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::{
-    domain::{BrowserMutation, BrowserOperationKind, OperationId, SessionId, Timestamp},
-    ports::store::{BrowserCommitReceipt, StoreError},
+    domain::{OperationId, SessionId, Timestamp},
+    ports::store::{
+        BrowserCommitReceipt, SessionRequest, SessionRequestReceipt, StoreError,
+        StoredSessionRequest,
+    },
 };
 
-use super::{codec::decode, cursor_and_count, ensure_commit_id_unused};
-use crate::adapters::sqlite::support::{i64_to_usize, map_sql_error, usize_to_i64};
+use super::{
+    cursor_and_count,
+    request_codec::{RequestReceipt, RetainedPayload, decode_retained},
+};
+use crate::adapters::sqlite::support::{
+    i64_to_usize, map_sql_error, operation_id_from_blob, usize_to_i64,
+};
 
-const RECEIPT_KIND: &str = "rename_noop_v1";
-
-#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct NoOpRenameReceipt {
-    receipt: String,
-    operation_id: OperationId,
-    session_id: SessionId,
-    name: Option<String>,
+/// Replay outcome for one request identity inside the current transaction.
+pub(in crate::adapters::sqlite) enum ReceiptReplay {
+    /// The identity is unused.
+    Absent,
+    /// The identity already committed exactly this request.
+    Matched(BrowserCommitReceipt),
+    /// The identity belongs to another request.
+    Reused,
 }
 
 pub(in crate::adapters::sqlite) fn commit_noop_rename(
@@ -29,20 +35,86 @@ pub(in crate::adapters::sqlite) fn commit_noop_rename(
     name: Option<&str>,
     at: Timestamp,
 ) -> Result<BrowserCommitReceipt, StoreError> {
-    validate_name(name)?;
-    let receipt = NoOpRenameReceipt {
-        receipt: RECEIPT_KIND.to_owned(),
-        operation_id,
+    if name.is_some_and(|value| value.trim().is_empty()) {
+        return Err(StoreError::Invariant(
+            "session name cannot be blank".to_owned(),
+        ));
+    }
+    let request = SessionRequest::Rename {
         session_id,
         name: name.map(str::to_owned),
     };
-    let payload = serde_json::to_string(&receipt)
-        .map_err(|_| StoreError::Serialization("Browser receipt encoding failed".to_owned()))?;
-    if let Some(existing) = existing_receipt(transaction, &receipt)? {
-        return Ok(existing);
+    if let Some(receipt) = replayed(transaction, operation_id, &request)? {
+        return Ok(receipt);
     }
-    ensure_commit_id_unused(transaction, operation_id)?;
-    require_current_name(transaction, session_id, name)?;
+    let current = current_session(transaction, session_id)?;
+    if current.name.as_deref() != name {
+        return Err(StoreError::Conflict(
+            "session name changed before Browser receipt commit".to_owned(),
+        ));
+    }
+    insert(
+        transaction,
+        &RequestReceipt::RenameNoOp {
+            operation_id,
+            session_id,
+            name: name.map(str::to_owned),
+        },
+        at,
+    )
+}
+
+pub(in crate::adapters::sqlite) fn commit_noop_trash(
+    transaction: &Transaction<'_>,
+    operation_id: OperationId,
+    session_id: SessionId,
+    at: Timestamp,
+) -> Result<BrowserCommitReceipt, StoreError> {
+    let request = SessionRequest::Trash { session_id };
+    if let Some(receipt) = replayed(transaction, operation_id, &request)? {
+        return Ok(receipt);
+    }
+    if !current_session(transaction, session_id)?.trashed {
+        return Err(StoreError::Conflict(
+            "session left trash before the trash receipt commit".to_owned(),
+        ));
+    }
+    insert(
+        transaction,
+        &RequestReceipt::TrashNoOp {
+            operation_id,
+            session_id,
+        },
+        at,
+    )
+}
+
+/// Compare one identity with the request that owns it.
+pub(in crate::adapters::sqlite) fn replay(
+    transaction: &Transaction<'_>,
+    operation_id: OperationId,
+    request: &SessionRequest,
+) -> Result<ReceiptReplay, StoreError> {
+    Ok(match stored_request(transaction, operation_id)? {
+        None => ReceiptReplay::Absent,
+        Some(StoredSessionRequest::Administration(stored)) if stored.request == *request => {
+            ReceiptReplay::Matched(BrowserCommitReceipt {
+                operation_id,
+                cursor: stored.cursor,
+                idempotent_replay: true,
+            })
+        }
+        Some(_) => ReceiptReplay::Reused,
+    })
+}
+
+/// Insert one receipt that does not move Browser history.
+pub(in crate::adapters::sqlite) fn insert(
+    transaction: &Transaction<'_>,
+    receipt: &RequestReceipt,
+    at: Timestamp,
+) -> Result<BrowserCommitReceipt, StoreError> {
+    let payload = receipt.encode()?;
     let cursor = cursor_and_count(transaction)?.0;
     transaction
         .execute(
@@ -50,8 +122,8 @@ pub(in crate::adapters::sqlite) fn commit_noop_rename(
                 id, target_session_id, payload_json, cursor, created_at
              ) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
-                operation_id.database_bytes().as_slice(),
-                session_id.database_bytes().as_slice(),
+                receipt.operation_id().database_bytes().as_slice(),
+                receipt.session_id().database_bytes().as_slice(),
                 payload,
                 usize_to_i64(cursor)?,
                 at.as_millis(),
@@ -59,137 +131,171 @@ pub(in crate::adapters::sqlite) fn commit_noop_rename(
         )
         .map_err(map_sql_error)?;
     Ok(BrowserCommitReceipt {
-        operation_id,
+        operation_id: receipt.operation_id(),
         cursor,
         idempotent_replay: false,
     })
 }
 
-fn existing_receipt(
+/// Look up every durable owner of one operation identity.
+pub(in crate::adapters::sqlite) fn stored_request(
     transaction: &Transaction<'_>,
-    requested: &NoOpRenameReceipt,
-) -> Result<Option<BrowserCommitReceipt>, StoreError> {
-    let existing: Option<(Vec<u8>, String, i64)> = transaction
+    operation_id: OperationId,
+) -> Result<Option<StoredSessionRequest>, StoreError> {
+    let id = operation_id.database_bytes();
+    let retained: Option<(Vec<u8>, String, i64)> = transaction
         .query_row(
             "SELECT target_session_id, payload_json, cursor
              FROM browser_operation_receipts WHERE id = ?1",
-            [requested.operation_id.database_bytes().as_slice()],
+            [id.as_slice()],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()
         .map_err(map_sql_error)?;
-    let Some((target, payload, cursor)) = existing else {
-        return Ok(None);
-    };
-    if !receipt_matches(&payload, &target, requested)? {
-        return Err(StoreError::Conflict(
-            "Browser operation identity was reused for different content".to_owned(),
-        ));
+    if let Some((target, payload, cursor)) = retained {
+        let request = decode_retained(&payload, operation_id, &target)?.request()?;
+        return Ok(Some(StoredSessionRequest::Administration(
+            SessionRequestReceipt {
+                operation_id,
+                request,
+                cursor: i64_to_usize(cursor)?,
+                history_target: None,
+            },
+        )));
     }
-    Ok(Some(BrowserCommitReceipt {
-        operation_id: requested.operation_id,
-        cursor: i64_to_usize(cursor)?,
-        idempotent_replay: true,
-    }))
+    if let Some(receipt) = history_request(transaction, operation_id)? {
+        return Ok(Some(StoredSessionRequest::Administration(receipt)));
+    }
+    let retired_target: bool = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM browser_history_receipts WHERE target_operation_id = ?1)",
+            [id.as_slice()],
+            |row| row.get(0),
+        )
+        .map_err(map_sql_error)?;
+    if retired_target {
+        return Ok(Some(StoredSessionRequest::RetiredHistoryTarget));
+    }
+    let used_by_session_history: bool = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM commit_receipts WHERE external_id = ?1)",
+            [id.as_slice()],
+            |row| row.get(0),
+        )
+        .map_err(map_sql_error)?;
+    Ok(used_by_session_history.then_some(StoredSessionRequest::SessionHistory))
 }
 
-fn receipt_matches(
-    payload: &str,
-    target: &[u8],
-    requested: &NoOpRenameReceipt,
+/// Whether a session-administration request owns or reserves one identity.
+///
+/// Board, editor, and history mutations consult this before committing, so a
+/// reused session identity is an idempotency conflict rather than a write.
+pub(in crate::adapters::sqlite) fn owns_identity(
+    connection: &Connection,
+    id: [u8; 16],
 ) -> Result<bool, StoreError> {
-    if let Some(stored) = decode_noop(payload)? {
-        validate_metadata(
-            stored.operation_id,
-            stored.session_id,
-            requested.operation_id,
-            target,
-        )?;
-        return Ok(stored == *requested);
-    }
-    let operation = decode(payload)?;
-    validate_metadata(
-        operation.id(),
-        operation.session_id(),
-        requested.operation_id,
-        target,
-    )?;
-    Ok(operation.session_id() == requested.session_id
-        && operation.kind() == BrowserOperationKind::Rename
-        && matches!(
-            operation.forward(),
-            BrowserMutation::SetName { value, .. } if value == &requested.name
-        ))
+    connection
+        .query_row(
+            "SELECT EXISTS(
+                 SELECT 1 FROM browser_operation_receipts WHERE id = ?1
+                 UNION ALL
+                 SELECT 1 FROM browser_history_receipts
+                 WHERE id = ?1 OR target_operation_id = ?1
+             )",
+            [id.as_slice()],
+            |row| row.get(0),
+        )
+        .map_err(map_sql_error)
 }
 
-fn validate_metadata(
-    stored_id: OperationId,
-    stored_session: SessionId,
-    expected_id: OperationId,
-    target: &[u8],
-) -> Result<(), StoreError> {
-    if stored_id != expected_id || stored_session.database_bytes().as_slice() != target {
-        Err(StoreError::Corrupt(
-            "Browser operation receipt metadata does not match its payload".to_owned(),
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn decode_noop(payload: &str) -> Result<Option<NoOpRenameReceipt>, StoreError> {
-    let value: serde_json::Value = serde_json::from_str(payload)
-        .map_err(|_| StoreError::Corrupt("invalid Browser operation receipt".to_owned()))?;
-    if value.get("receipt").and_then(serde_json::Value::as_str) != Some(RECEIPT_KIND) {
-        return Ok(None);
-    }
-    serde_json::from_value(value)
-        .map(Some)
-        .map_err(|_| StoreError::Corrupt("invalid Browser no-op receipt".to_owned()))
-}
-
-pub(super) fn is_noop_receipt(
+/// Whether a retained Browser payload is a request receipt rather than history.
+pub(in crate::adapters::sqlite) fn is_request_receipt(
     payload: &str,
     operation_id: OperationId,
     target: &[u8],
 ) -> Result<bool, StoreError> {
-    let Some(stored) = decode_noop(payload)? else {
-        return Ok(false);
-    };
-    validate_metadata(stored.operation_id, stored.session_id, operation_id, target)?;
-    Ok(true)
+    Ok(matches!(
+        decode_retained(payload, operation_id, target)?,
+        RetainedPayload::Receipt(_)
+    ))
 }
 
-fn require_current_name(
+fn replayed(
     transaction: &Transaction<'_>,
-    session_id: SessionId,
-    expected: Option<&str>,
-) -> Result<(), StoreError> {
-    let current: Option<Option<String>> = transaction
+    operation_id: OperationId,
+    request: &SessionRequest,
+) -> Result<Option<BrowserCommitReceipt>, StoreError> {
+    match replay(transaction, operation_id, request)? {
+        ReceiptReplay::Absent => Ok(None),
+        ReceiptReplay::Matched(receipt) => Ok(Some(receipt)),
+        ReceiptReplay::Reused => Err(StoreError::Conflict(
+            "Browser operation identity was reused for different content".to_owned(),
+        )),
+    }
+}
+
+fn history_request(
+    transaction: &Transaction<'_>,
+    operation_id: OperationId,
+) -> Result<Option<SessionRequestReceipt>, StoreError> {
+    let stored: Option<(Vec<u8>, bool, i64)> = transaction
         .query_row(
-            "SELECT name FROM sessions WHERE id = ?1",
-            [session_id.database_bytes().as_slice()],
-            |row| row.get(0),
+            "SELECT target_operation_id, undo, cursor
+             FROM browser_history_receipts WHERE id = ?1",
+            [operation_id.database_bytes().as_slice()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()
         .map_err(map_sql_error)?;
-    let Some(current) = current else {
-        return Err(StoreError::NotFound(session_id.to_string()));
+    let Some((target, undo, cursor)) = stored else {
+        return Ok(None);
     };
-    if current.as_deref() != expected {
-        return Err(StoreError::Conflict(
-            "session name changed before Browser receipt commit".to_owned(),
-        ));
-    }
-    Ok(())
+    let target = operation_id_from_blob(target)?;
+    let target_payload: Option<(Vec<u8>, String)> = transaction
+        .query_row(
+            "SELECT target_session_id, payload_json
+             FROM browser_operation_receipts WHERE id = ?1",
+            [target.database_bytes().as_slice()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(map_sql_error)?;
+    let history_target = target_payload
+        .map(|(session, payload)| decode_retained(&payload, target, &session))
+        .transpose()?
+        .and_then(|retained| match retained {
+            RetainedPayload::Operation(operation) => Some(operation.kind()),
+            RetainedPayload::Receipt(_) => None,
+        });
+    Ok(Some(SessionRequestReceipt {
+        operation_id,
+        request: SessionRequest::History { undo },
+        cursor: i64_to_usize(cursor)?,
+        history_target,
+    }))
 }
 
-fn validate_name(name: Option<&str>) -> Result<(), StoreError> {
-    if name.is_some_and(|value| value.trim().is_empty()) {
-        Err(StoreError::Invariant(
-            "session name cannot be blank".to_owned(),
-        ))
-    } else {
-        Ok(())
-    }
+struct CurrentSession {
+    name: Option<String>,
+    trashed: bool,
+}
+
+fn current_session(
+    transaction: &Transaction<'_>,
+    session_id: SessionId,
+) -> Result<CurrentSession, StoreError> {
+    transaction
+        .query_row(
+            "SELECT name, deleted_at IS NOT NULL FROM sessions WHERE id = ?1",
+            [session_id.database_bytes().as_slice()],
+            |row| {
+                Ok(CurrentSession {
+                    name: row.get(0)?,
+                    trashed: row.get(1)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(map_sql_error)?
+        .ok_or_else(|| StoreError::NotFound(session_id.to_string()))
 }

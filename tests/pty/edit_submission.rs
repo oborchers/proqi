@@ -130,7 +130,7 @@ fn assert_one_thought_without_attempt(binary: &str, state: &std::path::Path, dra
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state, &["thoughts", "list", session]);
-    let thoughts = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+    let thoughts = thoughts["data"]["items"].as_array().expect("thoughts");
     assert_eq!(thoughts.len(), 1);
     assert_eq!(thoughts[0]["content"], draft);
 

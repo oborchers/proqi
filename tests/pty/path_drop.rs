@@ -47,7 +47,7 @@ fn escaped_unicode_file_drop_becomes_one_durable_absolute_path() {
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
+        thoughts["data"]["items"][0]["content"],
         file.to_string_lossy().as_ref()
     );
 }

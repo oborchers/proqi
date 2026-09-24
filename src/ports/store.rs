@@ -9,6 +9,7 @@ mod onboarding;
 mod operation;
 mod receipt;
 mod session;
+mod session_request;
 mod submission_route;
 
 use serde::{Deserialize, Serialize};
@@ -30,12 +31,16 @@ pub use onboarding::{FirstRunBoard, FirstRunOutcome, OnboardingVersion};
 pub use operation::{OperationBatch, SemanticRequestFingerprint, StoredOperationRequest};
 pub use receipt::{CommitReceipt, DurableIdentity};
 pub use session::{SessionHit, SessionQuery, SessionSnapshot};
+pub use session_request::{
+    NamedSessionCreation, NamedSessionMatch, NamedSessionOutcome, NamedSessionPolicy,
+    SessionRequest, SessionRequestReceipt, StoredSessionRequest, session_create_digest,
+};
 pub use submission_route::{SUBMISSION_ROUTE_VERSION, SubmissionJournalRoute};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 20;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 21;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 19;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 20;
 
 /// One ordered, content-redacted source included in a submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -234,6 +239,64 @@ pub trait Store {
         _operation_id: OperationId,
     ) -> Result<Option<BrowserOperation>, StoreError> {
         Ok(None)
+    }
+
+    /// Atomically create one named session under its name-collision policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation, contention, or persistence failure.
+    fn create_named_session(
+        &mut self,
+        _creation: &NamedSessionCreation,
+    ) -> Result<NamedSessionOutcome, StoreError> {
+        Err(StoreError::Integrity(
+            "named session creation is unavailable".to_owned(),
+        ))
+    }
+
+    /// Look up the request that already owns one session-administration identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption or persistence failure.
+    fn session_request(
+        &mut self,
+        _operation_id: OperationId,
+    ) -> Result<Option<StoredSessionRequest>, StoreError> {
+        Ok(None)
+    }
+
+    /// Durably reserve one trash request for a session that is already trashed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict when the session is live or the identity is reused.
+    fn commit_noop_trash(
+        &mut self,
+        _operation_id: OperationId,
+        _session_id: SessionId,
+        _at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        Err(StoreError::Integrity(
+            "session administration receipts are unavailable".to_owned(),
+        ))
+    }
+
+    /// Permanently prune one trashed session and retain its request receipt.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict when the session is live, otherwise a typed storage failure.
+    fn prune_session_request(
+        &mut self,
+        _session_id: SessionId,
+        _operation_id: OperationId,
+        _at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        Err(StoreError::Integrity(
+            "session administration receipts are unavailable".to_owned(),
+        ))
     }
 
     /// Look up a prior operation request for cross-process idempotency.

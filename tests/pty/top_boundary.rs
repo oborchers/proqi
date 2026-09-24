@@ -43,7 +43,7 @@ fn arrow_previous_and_mixed_top_creation_persist_exactly_once() {
             .as_str()
             .expect("session ID");
         let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-        let thoughts = thoughts["data"]["thoughts"].as_array().expect("thoughts");
+        let thoughts = thoughts["data"]["items"].as_array().expect("thoughts");
         assert_eq!(thoughts.len(), 2);
         assert_eq!(thoughts[0]["content"], "");
         assert_eq!(thoughts[1]["content"], "former first");

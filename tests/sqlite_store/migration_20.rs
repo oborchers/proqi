@@ -16,7 +16,7 @@ fn physical_v19_database_adds_transfer_journal_under_forward_migration() {
         .execute_batch(
             "DROP TABLE transfer_source_claims;
          DROP TABLE transfer_attempts;
-         DELETE FROM migration_history WHERE version = 20;
+         DELETE FROM migration_history WHERE version >= 20;
          UPDATE schema_meta SET schema_version = 19, storage_protocol = 18;",
         )
         .expect("restore physical v19 shape");

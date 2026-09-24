@@ -125,10 +125,10 @@ fn repeated_sigstop_grants_fresh_input_leases_and_preserves_exact_content() {
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let thought = thoughts["data"]["thoughts"][0]["id"]
+    let thought = thoughts["data"]["items"][0]["id"]
         .as_str()
         .expect("thought ID");
-    assert_eq!(thoughts["data"]["thoughts"][0]["content"], CONTENT);
+    assert_eq!(thoughts["data"]["items"][0]["content"], CONTENT);
 
     let resume_pids = state.path().join("resume-watchdog-pids");
     let mut resume_command = expect_command();
