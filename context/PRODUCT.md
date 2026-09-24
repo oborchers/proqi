@@ -379,7 +379,10 @@ Bracketed paste is treated as one semantic input event.
   undo and redo step. Whitespace-only cleanup does not create a thought or
   replace a selection. A failed transformation pastes the original payload
   exactly and reports the fallback.
-- `Clean up spacing` applies the same classifier to one existing thought. Plain
+- `Clean up spacing` applies the same classifier to eligible selected thoughts
+  in Board, or to one focused thought without a selection. Separators remain
+  untouched. Effective selected cleanup is one durable Board history unit;
+  an unchanged selection creates no history. Plain
   `f` targets the focused durable thought in Board; `Control+Shift+F` targets
   the complete active thought in Edit, including content outside the selection
   and collapsed large-paste envelopes. Plain `f` remains editor text. Both
@@ -688,8 +691,10 @@ on eligible thoughts. Separators are omitted from copied and submitted text and
 remain in place when accepted submission removes thoughts. A separator-only
 copy, cut, or submission is a visible no-op that neither overwrites the
 clipboard nor sends an empty delivery. Each structural action is one persistent
-Board operation and therefore one undo step. Reordering remains a single-item
-action.
+Board operation and therefore one undo step. Reordering moves the selected
+Board items in their existing relative order. Clean up spacing and
+cross-session delivery address only selected thoughts; separators remain
+structural and do not become text or destination copies.
 
 The configurable `a` board command selects every live item in board order.
 Forwarded `Primary+A` has the same board meaning. Repeating either spelling is
@@ -904,9 +909,13 @@ Thoughts can be moved up and down with `Primary+Shift+Up` and
 The macOS factory map additionally provides `Option+Shift+Up` and
 `Option+Shift+Down`, which stock Ghostty can deliver when it consumes the
 Command-based aliases.
-Reordering is immediate, autosaved, and undoable.
+Reordering is immediate, autosaved, and undoable. When multiple Board items
+are selected, each contiguous selected run exchanges with its adjacent
+unselected neighbor in the requested direction. An edge run stays put,
+and an effective move is one durable undo step. Selection and focus retain
+the same item identities.
 
-Keyboard reordering wraps across the board boundaries. Moving the last thought
+Single-item keyboard reordering wraps across the board boundaries. Moving the last thought
 down places it first, and moving the first thought up places it last. Mouse drag
 remains positional and does not wrap.
 
@@ -975,7 +984,8 @@ printable input, including Option/Alt and Control+Alt layout text. Browser
 management uses F2 and F8 while its query is empty; R and D enter search text.
 
 The default Board map has one spelling-independent modifier ladder: plain
-moves focus, Shift extends a range, and Primary+Shift reorders one thought.
+moves focus, Shift extends a range, and Primary+Shift reorders the selected
+items or the focused item.
 Exact Control moves to the first or last live thought. On macOS, Control+Shift
 extends the existing anchored range to that boundary. Portable Control+Shift
 retains its established Primary+Shift reorder meaning, so the shifted boundary
@@ -1294,16 +1304,21 @@ inconsistently. All mouse actions have keyboard equivalents.
 
 ### Cross-session thought delivery
 
-The command palette can copy the selected thought into another resumable Proqi
+The command palette can copy the selected thoughts into another resumable Proqi
 session. A searchable destination picker matches exact names, paths, and
 derived excerpts. Duplicate names remain valid, but a typed session identifier
 is required when a name is ambiguous.
 
-Send preserves the source. Send and remove commits the exact content and its
-presentation annotations in the destination first, then performs an ordinary
-undoable source deletion only after the destination returns a durable receipt.
-Failure, ambiguity, or an unsupported active owner leaves the source unchanged.
-Undo restores only the source deletion and never retracts the destination copy.
+Send preserves the sources. A selected transfer copies every eligible thought
+in Board order as one destination operation, preserving names, canonical text,
+and presentation annotations while allocating new attachment occurrences.
+Separators are never copied. Success requires a durable receipt for the complete
+cohort. Send and remove commits one ordinary undoable source deletion only
+after that receipt. A durable source intent and stable operation identities
+let retry and restart resolve an ambiguous delivery without duplicating copies
+or losing a partial subset. Failure or an unsupported active owner leaves all
+sources unchanged. Undo restores only the source deletion and never retracts
+the destination copies.
 The scriptable CLI exposes the same behavior with `thoughts send` and separate
 idempotency identifiers for destination creation and optional source removal.
 

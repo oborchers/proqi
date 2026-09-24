@@ -30,7 +30,10 @@ impl BoardApp {
         );
         pending.add(
             PendingMutationIntent::TransferRemove,
-            self.pending_transfer_removals.len(),
+            self.pending_transfer_batches
+                .values()
+                .filter(|request| request.remove_source)
+                .count(),
         );
         pending
     }

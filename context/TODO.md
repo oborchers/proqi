@@ -40,7 +40,7 @@ undo remain non-negotiable.
   duplicate/move.
 - [ ] **Attachment integrity:** preserve file, image, and folded annotation
   metadata across Proqi-to-Proqi copy/cut/paste.
-- [ ] **Board flow:** search-driven selection and selected-block reordering.
+- [ ] **Board flow:** search-driven selection.
 - [ ] **Herdr global delivery:** add an explicit route from the shipped live-agent
   picker to another workspace or tab without changing adjacent submission.
 - [ ] **Shared Proqi sessions:** let several interactive Proqi panes attach to
@@ -183,7 +183,7 @@ engineering context.
 - [ ] Start with a range-selection guide covering Shift+Up/Down, the terminal-
   safe `v` latch, arrows/J/K, click and Shift-click behavior, switching back to
   arbitrary Space selection, Escape/edit transitions, supported bulk actions,
-  and the selected-block-reorder non-goal.
+  and selected-item reordering.
 - [ ] Derive each guide from the reviewed product contract and final shipped
   behavior. A workstream handoff is evidence, not publishable copy.
 - [ ] Exclude internal Herdr workspace/pane IDs, worktree paths, branch names,

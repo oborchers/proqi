@@ -976,6 +976,25 @@ resulting durable payload happens to be identical. Migration does not infer or
 backfill fingerprints for legacy receipts. Older binaries refuse the newer
 storage protocol before writing.
 
+Schema version 20 and storage protocol version 19 add the selected-transfer
+intent and source-claim tables. The intent retains the exact ordered cohort,
+stable destination and removal operation identities, and destination receipt.
+The source claims prevent overlapping unfinished cohorts. Destination acceptance
+is journaled before any source deletion; source deletion and journal completion
+commit in one transaction. A restart replays the same destination identity,
+and an older writer refuses the new storage protocol.
+
+Both focused and selected TUI transfers use this intent and receipt path, even
+for a one-thought cohort. When the destination has no live owner, the transfer
+worker creates a short-lived destination coordinator with its own instance
+identity. It acquires the destination session lease without publishing an
+interactive control endpoint and releases that lease after the durable
+destination mutation. The source coordinator retains its own metadata and
+control ownership throughout. When the destination is active, the worker sends
+the same stable cohort operation through owner control. A retry after an
+uncertain acknowledgement must use the journaled operation identity in either
+case.
+
 ### Stable session attachment ordinals
 
 Schema 14 and storage protocol 13 add separate session image and file allocation
@@ -1480,7 +1499,9 @@ remains the modifier-independent fallback.
 
 Vertical board input uses one semantic modifier ladder for both arrow and
 configured character spellings: plain input moves focus, Shift extends an
-anchored range, and Primary+Shift reorders one thought. The macOS default graph
+anchored range, and Primary+Shift reorders selected Board items or the focused
+item. Selected runs each exchange one unselected neighbor without wrapping;
+the focused single item retains wrapping. The macOS default graph
 also assigns exact Option+Shift to the same reorder actions so a
 terminal-consumed Command binding does not remove keyboard reordering. Other
 modifiers resolve to the base focus intention unless the resolved graph owns an
@@ -1777,13 +1798,17 @@ typing or paste may materialize directly from either presentation.
 
 Board multi-selection is transient UI state with two explicit, non-overlapping
 forms: an arbitrary identity set and an anchored contiguous range. A range
-stores stable thought identities for its anchor and focused endpoint and derives
+stores stable Board item identities for its anchor and focused endpoint and derives
 its selected identities from current live board order. Shifted vertical movement
 and the remappable range latch update the endpoint without wrapping or addressing
 the insertion row. Pointer extension resolves through the current layout
-snapshot before entering edit mode. Bulk application actions continue to receive
-only ordered thought identities and do not depend on terminal modifiers or this
-UI selection representation.
+snapshot before entering edit mode. Bulk application actions receive ordered
+typed Board item or eligible thought identities and do not depend on terminal modifiers or this
+UI selection representation. Mixed-item reorder receives ordered typed item
+identities and records one Batch operation with its reverse inverse. Selected
+spacing cleanup receives only eligible ordered thought snapshots and records
+one Reflow Batch; separators never enter text operations. Selected transfer
+captures the same eligible order for its durable destination cohort.
 
 The remappable `select_all` board command replaces the arbitrary set with every
 live thought identity in current board order. Forwarded `Primary+A` resolves to
@@ -2049,7 +2074,10 @@ session, durable identity, affected thought, and typed item identities against
 the request. If forwarding is unsupported or the owner cannot be verified, the
 CLI returns `session_busy`.
 
-Control protocol version 11 is current. Version 11 carries typed separator and
+Control protocol version 12 is current. Version 12 adds one selected-thought
+preserve-add batch. The destination owner commits every copy under one operation
+identity and returns one durable cohort receipt; older owners reject the batch.
+Version 11 carries typed separator and
 mixed-item mutations plus split, extract, merge, and reflow requests. These
 requests use the canonical reducer, durability lane, and replay matcher; older
 owners reject them instead of accepting a partial semantic operation. Version
@@ -2073,6 +2101,14 @@ preservation request or an acquired
 inactive-session lease, and only then requests an ordinary source deletion. The
 destination receives the optional name as separate metadata. No direct database
 write bypasses an active destination owner.
+Selected delivery first persists an exact source intent. Retry and startup
+recovery reuse its destination and source-removal identities. An active owner
+receives one version-12 batch request; an inactive destination commits the same
+reducer-owned Board batch under its lease. The source records the complete
+destination receipt before it can delete any selected source. Source removal
+and journal completion share one SQLite transaction, so a crash converges on
+either the complete retained source set or the complete removed set. A failed
+destination batch cannot produce a reported successful subset.
 
 The Proqi skill contains instructions and examples, not privileged executable
 logic. It begins with capability discovery, passes arbitrary thought content by

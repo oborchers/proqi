@@ -10,6 +10,7 @@ use crate::domain::{
 use super::super::store::DurableIdentity;
 use super::super::update::{UpdatePrepareRequest, UpdateQuiesceRequest, UpdateRestartRequest};
 use super::UPDATE_MUTATION_MINIMUM_PROTOCOL;
+use crate::ports::transfer::TransferItem;
 
 /// One mutation routed to the process owning a session reducer.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -73,6 +74,13 @@ pub enum ControlMutation {
         name: Option<ThoughtName>,
         /// Optional zero-based destination position.
         position: Option<usize>,
+    },
+    /// Preserve an exact selected cohort in one destination transaction.
+    PreserveAddMany {
+        /// One idempotent destination operation identity.
+        operation_id: OperationId,
+        /// Ordered exact source snapshots and stable destination identities.
+        items: Vec<TransferItem>,
     },
     /// Set or clear one thought's optional organizational name.
     RenameThought {
@@ -229,6 +237,7 @@ impl ControlMutation {
             Self::RenameSession { operation_id, .. }
             | Self::Add { operation_id, .. }
             | Self::PreserveAdd { operation_id, .. }
+            | Self::PreserveAddMany { operation_id, .. }
             | Self::RenameThought { operation_id, .. }
             | Self::InsertSeparator { operation_id, .. }
             | Self::DeleteItems { operation_id, .. }
@@ -279,6 +288,7 @@ impl ControlMutation {
             | Self::ExtractThought { thought_id, .. }
             | Self::ReflowThought { thought_id, .. } => Some(*thought_id),
             Self::InsertSeparator { .. }
+            | Self::PreserveAddMany { .. }
             | Self::DeleteItems { .. }
             | Self::MoveItem { .. }
             | Self::DuplicateItems { .. }
@@ -302,6 +312,10 @@ impl ControlMutation {
             Self::DeleteItems { item_ids, .. } => item_ids.clone(),
             Self::MoveItem { item_id, .. } => vec![*item_id],
             Self::DuplicateItems { duplicate_ids, .. } => duplicate_ids.clone(),
+            Self::PreserveAddMany { items, .. } => items
+                .iter()
+                .map(|item| BoardItemId::Thought(item.destination_thought_id))
+                .collect(),
             Self::SplitThought {
                 thought_id,
                 new_thought_id,
@@ -345,7 +359,9 @@ impl ControlMutation {
     /// Oldest control protocol capable of representing this request.
     #[must_use]
     pub fn minimum_protocol(&self) -> u32 {
-        if matches!(
+        if matches!(self, Self::PreserveAddMany { .. }) {
+            12
+        } else if matches!(
             self,
             Self::InsertSeparator { .. }
                 | Self::DeleteItems { .. }

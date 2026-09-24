@@ -155,6 +155,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
         );
     }
     store.recover_submissions(session_id, clock.now())?;
+    let pending_transfers = store.pending_transfers(session_id)?;
     let release_highlight_selection =
         release_highlights::load(&cache_directory, installation.as_ref(), session_id);
     let (mut control, mut control_warning) = composition::start_optional_control(&session_lease);
@@ -269,6 +270,7 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
             &executable,
             state_root.as_deref(),
             session_id,
+            pending_transfers,
         )
     });
     let requested_restart = app

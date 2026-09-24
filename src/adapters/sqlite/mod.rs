@@ -20,6 +20,8 @@ mod schema;
 mod search;
 mod session_admin;
 mod submission;
+mod transfer;
+pub(crate) use transfer::PendingTransfer;
 mod support;
 
 #[cfg(test)]

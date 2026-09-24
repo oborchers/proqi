@@ -38,6 +38,11 @@ pub(super) enum RetainedCommit {
         outcome: Box<SubmissionOutcome>,
         removal: Box<BoardOperation>,
     },
+    TransferRemoval {
+        request: Box<crate::ports::transfer::SessionTransferBatchRequest>,
+        removal: Box<BoardOperation>,
+        reason: &'static str,
+    },
 }
 
 fn persistence_loop(
@@ -160,22 +165,10 @@ fn process_unsequenced(
                 })
                 .is_ok()
         }
-        PersistenceRequest::DiscoverTransferSessions {
-            current_session_id,
-            generation,
-        } => {
-            let result = transfer::discover(store, current_session_id);
-            results
-                .send(PersistenceResult::TransferSessions { generation, result })
-                .is_ok()
-        }
-        PersistenceRequest::TransferThought(request) => {
-            let result = runtime
-                .ok_or_else(|| "session transfer runtime is unavailable".to_owned())
-                .and_then(|runtime| transfer::deliver(store, runtime, &request));
-            results
-                .send(PersistenceResult::ThoughtTransferred { request, result })
-                .is_ok()
+        request @ (PersistenceRequest::DiscoverTransferSessions { .. }
+        | PersistenceRequest::TransferThoughts(_)
+        | PersistenceRequest::FinishTransfer { .. }) => {
+            process_transfer_unsequenced(store, runtime, request, retained, results)
         }
         PersistenceRequest::Lookup {
             request_id,
@@ -204,6 +197,60 @@ fn process_unsequenced(
         PersistenceRequest::Capture(_)
         | PersistenceRequest::Commit(_)
         | PersistenceRequest::Retry(_) => false,
+    }
+}
+
+fn process_transfer_unsequenced(
+    store: &mut SqliteStore,
+    runtime: Option<&mut transfer::TransferRuntime>,
+    request: PersistenceRequest,
+    retained: &mut BTreeMap<OperationSequence, RetainedCommit>,
+    results: &SyncSender<PersistenceResult>,
+) -> bool {
+    match request {
+        PersistenceRequest::DiscoverTransferSessions {
+            current_session_id,
+            generation,
+        } => {
+            let result = transfer::discover(store, current_session_id);
+            results
+                .send(PersistenceResult::TransferSessions { generation, result })
+                .is_ok()
+        }
+        PersistenceRequest::TransferThoughts(request) => {
+            let result = runtime
+                .ok_or_else(|| "session transfer runtime is unavailable".to_owned())
+                .and_then(|runtime| transfer::deliver_batch(store, runtime, &request));
+            results
+                .send(PersistenceResult::ThoughtsTransferred { request, result })
+                .is_ok()
+        }
+        PersistenceRequest::FinishTransfer {
+            request,
+            removal: None,
+            reason,
+        } => results
+            .send(PersistenceResult::TransferFinished {
+                operation_id: request.operation_id,
+                sequence: None,
+                result: store.finish_transfer(&request, None, reason),
+                retried: false,
+            })
+            .is_ok(),
+        PersistenceRequest::FinishTransfer {
+            request,
+            removal: Some(removal),
+            reason,
+        } => transfer::commit_transfer_removal(
+            store,
+            Box::new(request),
+            removal,
+            reason,
+            retained,
+            results,
+            false,
+        ),
+        _ => false,
     }
 }
 
@@ -331,6 +378,13 @@ fn retry_from(
                 results,
                 true,
             ),
+            RetainedCommit::TransferRemoval {
+                request,
+                removal,
+                reason,
+            } => transfer::commit_transfer_removal(
+                store, request, removal, reason, retained, results, true,
+            ),
         };
         if !completed {
             return false;
@@ -341,6 +395,7 @@ fn retry_from(
     }
     results.send(PersistenceResult::RetryFinished).is_ok()
 }
+
 fn commit_batch(
     store: &mut SqliteStore,
     sequence: OperationSequence,

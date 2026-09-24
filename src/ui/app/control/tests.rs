@@ -14,6 +14,7 @@ use super::BoardApp;
 mod compose;
 mod new_thought;
 mod rename;
+mod selected_transfer;
 mod semantic_ids;
 
 #[test]

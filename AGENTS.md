@@ -120,7 +120,9 @@ These rules become mandatory with the first real TUI implementation:
 - Treat Up/Down arrows and the configured `k`/`j`-style vertical board keys as
   equivalent spellings of the same intention at every modifier level. The
   Board ladder is plain focus movement, Shift range extension, and
-  Primary+Shift single-thought reordering. Other modifiers retain the base
+  Primary+Shift reordering of the selected Board items or the focused item.
+  Selected runs exchange one adjacent unselected item without wrapping;
+  a single focused item retains wrapping. Other modifiers retain the base
   focus intention. At the insertion row, range and reorder are thought-only
   no-ops while base focus keeps its boundary behavior.
 - Non-text list and direction owners ignore irrelevant modifiers equally for

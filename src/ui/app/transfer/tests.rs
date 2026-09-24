@@ -1,13 +1,15 @@
 use crate::ui::input::RoutedInput as UiInput;
 #[path = "tests/names.rs"]
 mod names;
+#[path = "tests/selected.rs"]
+mod selected;
 
 use crate::{
     adapters::{
         editor::RopeEditorFactory,
         memory::{FakeClock, FakeIdGenerator},
     },
-    application::{AppState, Effect, FirstRunEnvironment, ThoughtMutation, first_run_board},
+    application::{AppState, Effect, FirstRunEnvironment, first_run_board},
     domain::{
         BoardOperationKind, ContentAnnotation, OperationSequence, Session, SessionBoard, Thought,
         ThoughtName, ThoughtPosition, Timestamp,
@@ -53,15 +55,15 @@ fn transfer_preserves_annotations_and_removes_only_after_destination_receipt() {
     app.complete_transfer_discovery(1, Ok(vec![session_hit(destination)]));
     assert_modified_delete_edits_query(&mut app, &mut ids, &clock);
     let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
-    let [Effect::TransferThought(request)] = effects.as_slice() else {
+    let [Effect::TransferThoughts(request)] = effects.as_slice() else {
         panic!("expected transfer request");
     };
-    assert_eq!(request.content, thought.content);
-    assert_eq!(request.annotations, thought.annotations);
-    assert_eq!(request.name, thought.name);
-    assert_eq!(request.source_thought_id, thought_id);
+    assert_eq!(request.items[0].content, thought.content);
+    assert_eq!(request.items[0].annotations, thought.annotations);
+    assert_eq!(request.items[0].name, thought.name);
+    assert_eq!(request.items[0].source_thought_id, thought_id);
     assert_thought_is_live(&app, thought_id);
-    let failed = app.complete_session_transfer(
+    let failed = app.complete_session_transfer_batch(
         request,
         Err("destination unavailable".to_owned()),
         &mut ids,
@@ -76,28 +78,24 @@ fn transfer_preserves_annotations_and_removes_only_after_destination_receipt() {
     );
     app.complete_transfer_discovery(2, Ok(vec![session_hit(destination)]));
     let retry_effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
-    let [Effect::TransferThought(retry_request)] = retry_effects.as_slice() else {
+    let [Effect::TransferThoughts(retry_request)] = retry_effects.as_slice() else {
         panic!("expected retry transfer request");
     };
-    assert_ne!(retry_request.operation_id, request.operation_id);
+    assert_eq!(retry_request, request);
     let receipt = CommitReceipt {
         session_id: destination,
         sequence: OperationSequence::new(1),
         identity: DurableIdentity::Operation(retry_request.operation_id),
         idempotent_replay: false,
     };
-    let completion = app.complete_session_transfer(
-        retry_request,
-        Ok(ThoughtMutation {
-            thought_id: ids.thought_id(),
-            receipt,
-        }),
-        &mut ids,
-        &clock,
-    );
+    let completion =
+        app.complete_session_transfer_batch(retry_request, Ok(receipt), &mut ids, &clock);
     assert!(matches!(
         completion.as_slice(),
-        [Effect::CommitBoardOperation(_)]
+        [Effect::FinishTransfer {
+            removal: Some(_),
+            ..
+        }]
     ));
     assert!(app.state.board.live_thoughts().is_empty());
 }
@@ -126,18 +124,18 @@ fn stale_transfer_receipt_keeps_newer_source_content_and_annotations() {
     app.begin_session_transfer(true, &mut ids, &clock);
     app.complete_transfer_discovery(1, Ok(vec![session_hit(destination)]));
     let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
-    let [Effect::TransferThought(request)] = effects.as_slice() else {
+    let [Effect::TransferThoughts(request)] = effects.as_slice() else {
         panic!("expected transfer request");
     };
 
     let edit_effects = app.reduce(crate::application::Action::EditThought {
         thought_id,
         revision_id: ids.revision_id(),
-        before_content: request.content.clone(),
+        before_content: request.items[0].content.clone(),
         after_content: "newer local version".to_owned(),
-        before_annotations: request.annotations.clone(),
+        before_annotations: request.items[0].annotations.clone(),
         after_annotations: Vec::new(),
-        before_cursor: crate::domain::TextPosition::new(0, request.content.len()),
+        before_cursor: crate::domain::TextPosition::new(0, request.items[0].content.len()),
         after_cursor: crate::domain::TextPosition::new(0, 19),
         at: Timestamp::from_millis(4),
     });
@@ -145,11 +143,14 @@ fn stale_transfer_receipt_keeps_newer_source_content_and_annotations() {
         edit_effects.as_slice(),
         [Effect::CommitRevision(_)]
     ));
-    let result = successful_transfer(destination, request.operation_id, &mut ids);
+    let result = successful_transfer(destination, request.operation_id);
 
-    let completion = app.complete_session_transfer(request, Ok(result), &mut ids, &clock);
+    let completion = app.complete_session_transfer_batch(request, Ok(result), &mut ids, &clock);
 
-    assert!(completion.is_empty());
+    assert!(matches!(
+        completion.as_slice(),
+        [Effect::FinishTransfer { removal: None, .. }]
+    ));
     let current = app
         .state
         .board
@@ -189,18 +190,18 @@ fn stale_transfer_receipt_keeps_an_annotation_only_source_change() {
     app.begin_session_transfer(true, &mut ids, &clock);
     app.complete_transfer_discovery(1, Ok(vec![session_hit(destination)]));
     let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
-    let [Effect::TransferThought(request)] = effects.as_slice() else {
+    let [Effect::TransferThoughts(request)] = effects.as_slice() else {
         panic!("expected transfer request");
     };
     let edit_effects = app.reduce(crate::application::Action::EditThought {
         thought_id,
         revision_id: ids.revision_id(),
-        before_content: request.content.clone(),
-        after_content: request.content.clone(),
-        before_annotations: request.annotations.clone(),
+        before_content: request.items[0].content.clone(),
+        after_content: request.items[0].content.clone(),
+        before_annotations: request.items[0].annotations.clone(),
         after_annotations: Vec::new(),
-        before_cursor: crate::domain::TextPosition::new(0, request.content.len()),
-        after_cursor: crate::domain::TextPosition::new(0, request.content.len()),
+        before_cursor: crate::domain::TextPosition::new(0, request.items[0].content.len()),
+        after_cursor: crate::domain::TextPosition::new(0, request.items[0].content.len()),
         at: Timestamp::from_millis(4),
     });
     assert!(matches!(
@@ -214,17 +215,12 @@ fn stale_transfer_receipt_keeps_an_annotation_only_source_change() {
         idempotent_replay: false,
     };
 
-    let completion = app.complete_session_transfer(
-        request,
-        Ok(ThoughtMutation {
-            thought_id: ids.thought_id(),
-            receipt,
-        }),
-        &mut ids,
-        &clock,
-    );
+    let completion = app.complete_session_transfer_batch(request, Ok(receipt), &mut ids, &clock);
 
-    assert!(completion.is_empty());
+    assert!(matches!(
+        completion.as_slice(),
+        [Effect::FinishTransfer { removal: None, .. }]
+    ));
     let current = app
         .state
         .board
@@ -264,17 +260,17 @@ fn stale_transfer_receipt_reports_a_changed_then_deleted_source_as_already_remov
     app.begin_session_transfer(true, &mut ids, &clock);
     app.complete_transfer_discovery(1, Ok(vec![session_hit(destination)]));
     let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
-    let [Effect::TransferThought(request)] = effects.as_slice() else {
+    let [Effect::TransferThoughts(request)] = effects.as_slice() else {
         panic!("expected transfer request");
     };
     let edit_effects = app.reduce(crate::application::Action::EditThought {
         thought_id,
         revision_id: ids.revision_id(),
-        before_content: request.content.clone(),
+        before_content: request.items[0].content.clone(),
         after_content: "changed before delete".to_owned(),
-        before_annotations: request.annotations.clone(),
+        before_annotations: request.items[0].annotations.clone(),
         after_annotations: Vec::new(),
-        before_cursor: crate::domain::TextPosition::new(0, request.content.len()),
+        before_cursor: crate::domain::TextPosition::new(0, request.items[0].content.len()),
         after_cursor: crate::domain::TextPosition::new(0, 21),
         at: Timestamp::from_millis(4),
     });
@@ -295,11 +291,14 @@ fn stale_transfer_receipt_reports_a_changed_then_deleted_source_as_already_remov
         deletion.as_slice(),
         [Effect::CommitBoardOperation(_)]
     ));
-    let result = successful_transfer(destination, request.operation_id, &mut ids);
+    let result = successful_transfer(destination, request.operation_id);
 
-    let completion = app.complete_session_transfer(request, Ok(result), &mut ids, &clock);
+    let completion = app.complete_session_transfer_batch(request, Ok(result), &mut ids, &clock);
 
-    assert!(completion.is_empty());
+    assert!(matches!(
+        completion.as_slice(),
+        [Effect::FinishTransfer { removal: None, .. }]
+    ));
     assert!(
         app.state
             .board
@@ -334,11 +333,11 @@ fn tutorial_shortcut_annotations_cross_the_session_transfer_boundary_exactly() {
     );
     app.complete_transfer_discovery(1, Ok(vec![session_hit(ids.session_id())]));
     let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
-    let [Effect::TransferThought(request)] = effects.as_slice() else {
+    let [Effect::TransferThoughts(request)] = effects.as_slice() else {
         panic!("expected transfer request");
     };
-    assert_eq!(request.content, thought.content);
-    assert_eq!(request.annotations, thought.annotations);
+    assert_eq!(request.items[0].content, thought.content);
+    assert_eq!(request.items[0].annotations, thought.annotations);
 }
 
 #[test]
@@ -389,7 +388,7 @@ fn stale_discovery_cannot_mutate_a_reopened_transfer_owner() {
     app.complete_transfer_discovery(1, Err(crate::ports::store::StoreError::Busy));
     let current = app.transfer.as_ref().expect("reopened transfer owner");
     assert_eq!(current.generation, 2);
-    assert_eq!(current.source_thought_id, second_id);
+    assert_eq!(current.source_thought_ids, vec![second_id]);
     assert!(current.remove_source);
     assert!(current.loading);
     assert_eq!(current.query.text(), "n");
@@ -443,16 +442,12 @@ fn assert_thought_is_live(app: &BoardApp, thought_id: crate::domain::ThoughtId) 
 fn successful_transfer(
     destination: crate::domain::SessionId,
     operation_id: crate::domain::OperationId,
-    ids: &mut FakeIdGenerator,
-) -> ThoughtMutation {
-    ThoughtMutation {
-        thought_id: ids.thought_id(),
-        receipt: CommitReceipt {
-            session_id: destination,
-            sequence: OperationSequence::new(1),
-            identity: DurableIdentity::Operation(operation_id),
-            idempotent_replay: false,
-        },
+) -> CommitReceipt {
+    CommitReceipt {
+        session_id: destination,
+        sequence: OperationSequence::new(1),
+        identity: DurableIdentity::Operation(operation_id),
+        idempotent_replay: false,
     }
 }
 

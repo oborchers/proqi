@@ -1,7 +1,10 @@
 //! Whole-thought spacing cleanup through the annotation-safe paste policy.
 
 use crate::{
-    application::{Action, Effect, InteractionMode, OwnedThoughtEdit, OwnedThoughtReflow},
+    application::{
+        Action, Effect, InteractionMode, OwnedThoughtEdit, OwnedThoughtReflow,
+        OwnedThoughtReflowBatch,
+    },
     domain::{ContentAnnotation, TextPosition},
     ports::{
         editor::{EditorSnapshot, OffsetAffinity, TextChangeSet},
@@ -22,15 +25,14 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        if matches!(self.state.mode, InteractionMode::Board) && self.selection_len() > 1 {
+            return self.reflow_selected_thoughts(ids, clock);
+        }
         let mut effects = match self.flush_edit_boundary(ids, clock) {
             EditFlush::Complete(effects) => effects,
             EditFlush::Blocked(effects) => return effects,
         };
-        let thought_id = match self.state.mode {
-            InteractionMode::Edit { thought_id } => Some(thought_id),
-            InteractionMode::Board if !self.insertion_focused() => self.state.focused_thought_id(),
-            InteractionMode::Board | InteractionMode::Compose => None,
-        };
+        let thought_id = self.reflow_target_thought_id();
         let Some(source) = thought_id
             .and_then(|id| self.state.board.thought(id))
             .cloned()
@@ -38,6 +40,9 @@ impl BoardApp {
             self.set_warning("focus a thought before cleaning up its spacing");
             return effects;
         };
+        if !self.reflow_mutable(source.id) {
+            return effects;
+        }
         let payload =
             PastePayload::preserved_clipboard(source.content.clone(), source.annotations.clone());
         let transformed = payload
@@ -93,14 +98,130 @@ impl BoardApp {
             self.clear_expanded_folds(source.id);
             self.expanded_folds
                 .extend(expanded.into_iter().map(|index| (source.id, index)));
-            self.edit_generation = self.edit_generation.wrapping_add(1);
-            self.board_viewport = self.board_viewport.follow_focus();
-            self.scroll_geometry = None;
-            self.layout = None;
-            self.set_info("spacing cleaned up");
+            self.note_reflow_success();
         }
         effects.extend(mutations);
         effects
+    }
+
+    fn reflow_selected_thoughts(
+        &mut self,
+        ids: &mut impl IdGenerator,
+        clock: &impl Clock,
+    ) -> Vec<Effect> {
+        let mut effects = match self.flush_edit_boundary(ids, clock) {
+            EditFlush::Complete(effects) => effects,
+            EditFlush::Blocked(effects) => return effects,
+        };
+        let Some(selected) = self.reflow_eligible_selection() else {
+            return effects;
+        };
+        let mut changes = Vec::new();
+        let mut folds = Vec::new();
+        let operation_id = ids.operation_id();
+        let at = clock.now();
+        for thought_id in selected {
+            let Some(source) = self.state.board.thought(thought_id).cloned() else {
+                self.set_warning("could not clean up selection; thoughts kept unchanged");
+                return effects;
+            };
+            let payload = PastePayload::preserved_clipboard(
+                source.content.clone(),
+                source.annotations.clone(),
+            );
+            let Ok(projection) = payload
+                .map_err(|_| ())
+                .and_then(|payload| payload.reflow_with_changes())
+            else {
+                self.set_warning("could not clean up selection; thoughts kept unchanged");
+                return effects;
+            };
+            let payload = match projection.outcome {
+                PasteReflow::Changed(payload) => payload,
+                PasteReflow::Empty => {
+                    self.set_warning("cleanup removed all content; selection kept unchanged");
+                    return effects;
+                }
+                PasteReflow::Unchanged => continue,
+            };
+            let expanded = projection
+                .annotation_origins
+                .iter()
+                .filter_map(|(old, new)| {
+                    self.expanded_folds
+                        .contains(&(thought_id, *old))
+                        .then_some((thought_id, *new))
+                });
+            folds.push((thought_id, expanded.collect::<Vec<_>>()));
+            changes.push(OwnedThoughtReflow {
+                thought_id,
+                operation_id,
+                before_content: source.content,
+                before_annotations: source.annotations,
+                after_content: payload.content,
+                after_annotations: payload.annotations,
+                at,
+            });
+        }
+        if changes.is_empty() {
+            self.set_info("spacing already clean");
+            return effects;
+        }
+        let mutations = self.reduce(Action::ReflowThoughts(OwnedThoughtReflowBatch {
+            operation_id,
+            changes,
+            at,
+        }));
+        if mutations
+            .iter()
+            .any(|effect| matches!(effect, Effect::CommitBoardOperation(_)))
+        {
+            for (thought_id, expanded) in folds {
+                self.clear_expanded_folds(thought_id);
+                self.expanded_folds.extend(expanded);
+            }
+            self.note_reflow_success();
+        }
+        effects.extend(mutations);
+        effects
+    }
+
+    fn note_reflow_success(&mut self) {
+        self.edit_generation = self.edit_generation.wrapping_add(1);
+        self.board_viewport = self.board_viewport.follow_focus();
+        self.scroll_geometry = None;
+        self.layout = None;
+        self.set_info("spacing cleaned up");
+    }
+
+    fn reflow_eligible_selection(&mut self) -> Option<Vec<crate::domain::ThoughtId>> {
+        let selected = self.action_thought_ids();
+        if selected.is_empty() {
+            self.set_warning("select a thought before cleaning up spacing");
+            return None;
+        }
+        if selected.iter().any(|id| !self.thought_mutable(*id)) {
+            self.set_warning("selected thought has an operation in progress");
+            return None;
+        }
+        Some(selected)
+    }
+
+    fn reflow_mutable(&mut self, thought_id: crate::domain::ThoughtId) -> bool {
+        if self.thought_mutable(thought_id) {
+            true
+        } else {
+            self.set_warning("thought has an operation in progress");
+            false
+        }
+    }
+
+    fn reflow_target_thought_id(&self) -> Option<crate::domain::ThoughtId> {
+        match self.state.mode {
+            InteractionMode::Edit { thought_id } => Some(thought_id),
+            InteractionMode::Board if !self.insertion_focused() => self.state.focused_thought_id(),
+            InteractionMode::Board | InteractionMode::Compose => None,
+        }
     }
 
     fn reflow_editor(

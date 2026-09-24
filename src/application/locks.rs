@@ -30,6 +30,10 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
             .iter()
             .filter_map(|id| id.thought())
             .find_map(|id| locked_one(state, id)),
+        Action::MoveItems { item_ids, .. } => item_ids
+            .iter()
+            .filter_map(|id| id.thought())
+            .find_map(|id| locked_one(state, id)),
         Action::Undo { scope, .. } => locked_history(state, *scope, true),
         Action::Redo { scope, .. } => locked_history(state, *scope, false),
         Action::RenameSession { .. }
@@ -42,6 +46,7 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
         | Action::InsertSeparator { .. }
         | Action::CreateComposeThought { .. }
         | Action::CreateOwnedThought(_)
+        | Action::CreateOwnedThoughts { .. }
         | Action::PasteAsThought { .. }
         | Action::CopyThoughts { .. }
         | Action::ClipboardResult { .. }
@@ -56,6 +61,10 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
             ..
         } => None,
         Action::ReflowThought(reflow) => locked_one(state, reflow.thought_id),
+        Action::ReflowThoughts(batch) => batch
+            .changes
+            .iter()
+            .find_map(|change| locked_one(state, change.thought_id)),
         Action::EditOwnedThought(edit) => locked_one(state, edit.thought_id),
     };
     locked.map_or(Ok(()), |thought_id| {

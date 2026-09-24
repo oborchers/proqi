@@ -16,6 +16,11 @@ use rusqlite::Connection;
 use super::{DatabaseFixture, test_path};
 
 fn downgrade_to(connection: &Connection, version: u32) {
+    connection
+        .execute_batch(
+            "DROP TABLE IF EXISTS transfer_source_claims; DROP TABLE IF EXISTS transfer_attempts;",
+        )
+        .expect("remove later transfer schema");
     if version < 11 {
         connection
             .execute_batch("DROP TABLE onboarding_state;")

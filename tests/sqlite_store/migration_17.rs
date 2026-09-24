@@ -7,7 +7,9 @@ ALTER TABLE thoughts DROP COLUMN name;
 DROP INDEX separators_session;
 DROP INDEX separators_live_position;
 DROP TABLE separators;
-DELETE FROM migration_history WHERE version >= 17;
+DROP TABLE IF EXISTS transfer_source_claims;
+             DROP TABLE IF EXISTS transfer_attempts;
+             DELETE FROM migration_history WHERE version >= 17;
 UPDATE schema_meta SET schema_version = 16, storage_protocol = 15;
 ";
 

@@ -124,6 +124,11 @@ fn matched_ids(
         {
             (Some(*thought_id), Vec::new())
         }
+        ControlMutation::PreserveAddMany { .. }
+            if mixed::matches_preserve_add_many(existing, session_id, mutation) =>
+        {
+            (None, mutation.item_ids())
+        }
         ControlMutation::Delete { thought_id, .. }
             if matches_delete(existing, session_id, *thought_id) =>
         {

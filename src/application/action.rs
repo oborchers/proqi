@@ -81,6 +81,16 @@ pub enum Action {
     /// Create content whose existing metadata was produced by a Proqi-owned policy.
     #[doc(hidden)]
     CreateOwnedThought(OwnedThoughtCreation),
+    /// Preserve several already-valid copied thoughts in one destination operation.
+    #[doc(hidden)]
+    CreateOwnedThoughts {
+        /// One durable operation identity for the complete cohort.
+        operation_id: OperationId,
+        /// Exact ordered copy payloads.
+        items: Vec<crate::ports::transfer::TransferItem>,
+        /// Event time.
+        at: Timestamp,
+    },
     /// Board-mode paste, intentionally equivalent to one create operation.
     PasteAsThought {
         /// New thought identity.
@@ -118,6 +128,9 @@ pub enum Action {
     /// Apply a Proqi-owned reflow as one Board history operation.
     #[doc(hidden)]
     ReflowThought(OwnedThoughtReflow),
+    /// Clean several exact Board-selected thoughts in one history operation.
+    #[doc(hidden)]
+    ReflowThoughts(OwnedThoughtReflowBatch),
     /// Split one exact thought at a UTF-8 byte boundary.
     SplitThought {
         /// Source thought.
@@ -272,6 +285,17 @@ pub enum Action {
         item_id: BoardItemId,
         /// Desired zero-based live position.
         to: usize,
+        /// Event time.
+        at: Timestamp,
+    },
+    /// Exchange each selected run with one adjacent unselected item.
+    MoveItems {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Exact Board-ordered selected identities.
+        item_ids: Vec<BoardItemId>,
+        /// Up (-1) or down (1).
+        delta: isize,
         /// Event time.
         at: Timestamp,
     },
@@ -457,5 +481,13 @@ pub struct OwnedThoughtReflow {
     pub(crate) before_annotations: Vec<ContentAnnotation>,
     pub(crate) after_content: String,
     pub(crate) after_annotations: Vec<ContentAnnotation>,
+    pub(crate) at: Timestamp,
+}
+
+/// Sealed ordered group of annotation-safe spacing replacements.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OwnedThoughtReflowBatch {
+    pub(crate) operation_id: OperationId,
+    pub(crate) changes: Vec<OwnedThoughtReflow>,
     pub(crate) at: Timestamp,
 }

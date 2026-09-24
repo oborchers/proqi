@@ -378,3 +378,56 @@ pub(in crate::application) fn reflow_thought(
     record_transform(state, &operation, &[source.id])?;
     Ok(vec![Effect::CommitBoardOperation(operation)])
 }
+
+pub(in crate::application) fn reflow_thoughts(
+    state: &mut AppState,
+    batch: crate::application::OwnedThoughtReflowBatch,
+) -> ApplicationResult<Vec<Effect>> {
+    if batch.changes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut changed = Vec::new();
+    let mut forward = Vec::new();
+    let mut inverse = Vec::new();
+    let mut previous_position = None;
+    for reflow in batch.changes {
+        if reflow.operation_id != batch.operation_id || reflow.at != batch.at {
+            return Err(ApplicationError::InvalidState);
+        }
+        let source = state.live_thought(reflow.thought_id)?.clone();
+        if source.content != reflow.before_content
+            || source.annotations != reflow.before_annotations
+            || previous_position.is_some_and(|position| source.position <= position)
+        {
+            return Err(ApplicationError::ContentConflict(source.id));
+        }
+        if source.content == reflow.after_content && source.annotations == reflow.after_annotations
+        {
+            return Err(ApplicationError::InvalidState);
+        }
+        previous_position = Some(source.position);
+        forward.push(replacement(
+            &source,
+            reflow.after_content.clone(),
+            reflow.after_annotations.clone(),
+        ));
+        inverse.push(replacement_values(
+            source.id,
+            reflow.after_content,
+            reflow.after_annotations,
+            source.content,
+            source.annotations,
+        ));
+        changed.push(source.id);
+    }
+    let operation = operation(
+        state,
+        batch.operation_id,
+        BoardOperationKind::Reflow,
+        forward,
+        inverse,
+        batch.at,
+    )?;
+    record_transform(state, &operation, &changed)?;
+    Ok(vec![Effect::CommitBoardOperation(operation)])
+}

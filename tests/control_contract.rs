@@ -6,22 +6,23 @@ use proqi::ports::control::{
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-const REQUEST: &str = include_str!("fixtures/control/v11/add.request.json");
-const ACCEPTED: &str = include_str!("fixtures/control/v11/add.accepted.json");
-const REJECTED: &str = include_str!("fixtures/control/v11/add.rejected.json");
-const PRESERVE: &str = include_str!("fixtures/control/v11/preserve_add.request.json");
-const UPDATE_PREPARE: &str = include_str!("fixtures/control/v11/update_prepare.request.json");
-const UPDATE_READY: &str = include_str!("fixtures/control/v11/update_prepare.ready.json");
-const UPDATE_QUIESCE: &str = include_str!("fixtures/control/v11/update_quiesce.request.json");
-const UPDATE_QUIESCED: &str = include_str!("fixtures/control/v11/update_quiesce.ready.json");
-const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v11/capture_takeover.request.json");
+const REQUEST: &str = include_str!("fixtures/control/v12/add.request.json");
+const ACCEPTED: &str = include_str!("fixtures/control/v12/add.accepted.json");
+const REJECTED: &str = include_str!("fixtures/control/v12/add.rejected.json");
+const PRESERVE: &str = include_str!("fixtures/control/v12/preserve_add.request.json");
+const PRESERVE_MANY: &str = include_str!("fixtures/control/v12/preserve_add_many.request.json");
+const UPDATE_PREPARE: &str = include_str!("fixtures/control/v12/update_prepare.request.json");
+const UPDATE_READY: &str = include_str!("fixtures/control/v12/update_prepare.ready.json");
+const UPDATE_QUIESCE: &str = include_str!("fixtures/control/v12/update_quiesce.request.json");
+const UPDATE_QUIESCED: &str = include_str!("fixtures/control/v12/update_quiesce.ready.json");
+const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v12/capture_takeover.request.json");
 const CAPTURE_SCHEDULED: &str =
-    include_str!("fixtures/control/v11/capture_takeover.scheduled.json");
-const RENAME: &str = include_str!("fixtures/control/v11/rename.request.json");
-const RENAME_THOUGHT: &str = include_str!("fixtures/control/v11/rename_thought.request.json");
-const INSERT_SEPARATOR: &str = include_str!("fixtures/control/v11/insert_separator.request.json");
-const SPLIT_THOUGHT: &str = include_str!("fixtures/control/v11/split_thought.request.json");
-const ITEMS_ACCEPTED: &str = include_str!("fixtures/control/v11/items.accepted.json");
+    include_str!("fixtures/control/v12/capture_takeover.scheduled.json");
+const RENAME: &str = include_str!("fixtures/control/v12/rename.request.json");
+const RENAME_THOUGHT: &str = include_str!("fixtures/control/v12/rename_thought.request.json");
+const INSERT_SEPARATOR: &str = include_str!("fixtures/control/v12/insert_separator.request.json");
+const SPLIT_THOUGHT: &str = include_str!("fixtures/control/v12/split_thought.request.json");
+const ITEMS_ACCEPTED: &str = include_str!("fixtures/control/v12/items.accepted.json");
 
 #[test]
 fn current_request_success_and_error_fixtures_round_trip_canonically() {
@@ -44,6 +45,16 @@ fn current_preservation_fixture_round_trips_with_closed_semantics() {
         request.mutation,
         proqi::ports::control::ControlMutation::PreserveAdd { .. }
     ));
+}
+
+#[test]
+fn selected_preservation_requires_protocol_twelve_and_round_trips_exactly() {
+    let request: ControlRequest = assert_round_trip(PRESERVE_MANY);
+    assert_eq!(request.protocol, CONTROL_PROTOCOL_VERSION);
+    assert_eq!(request.mutation.minimum_protocol(), 12);
+    assert!(
+        matches!(request.mutation, ControlMutation::PreserveAddMany { items, .. } if items.len() == 1)
+    );
 }
 
 #[test]

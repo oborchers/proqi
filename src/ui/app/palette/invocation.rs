@@ -68,6 +68,8 @@ struct MutationContext {
     action_thoughts: MutationReadiness,
     focused_thought: MutationReadiness,
     all_thoughts: MutationReadiness,
+    transfer_keep: MutationReadiness,
+    transfer_remove: MutationReadiness,
 }
 
 #[derive(Clone, Copy)]
@@ -107,6 +109,8 @@ struct SelectionContext {
     count: usize,
     thought_count: usize,
     contiguous: bool,
+    can_move_up: bool,
+    can_move_down: bool,
     editor_handoff: Option<EditorSelectionHandoff>,
     merge_handoff: Option<Vec<Thought>>,
 }
@@ -131,8 +135,11 @@ impl CommandContext {
             A::Cut => self.cut_applicability(),
             A::MutableItem => self.when_item_mutable(),
             A::MutableThought | A::Editor => self.when_mutable(),
+            A::TransferKeep => self.when_transfer(false),
+            A::TransferRemove => self.when_transfer(true),
             A::FocusedMutableThought => self.when_focused_mutable_thought(),
-            A::Reorder => self.reorder_applicability(),
+            A::ReorderUp => self.reorder_applicability(true),
+            A::ReorderDown => self.reorder_applicability(false),
             A::BoardItem => Self::when(self.board_item(), "Available from Board focus"),
             A::BoardThought => Self::when(self.board_thought(), "Available from Board focus"),
             A::Submission => self.submission_applicability(),
@@ -261,6 +268,22 @@ impl CommandContext {
         }
     }
 
+    const fn when_transfer(&self, remove_source: bool) -> Applicability {
+        if self.selection.thought_count == 0 {
+            Applicability::disabled("No thought is focused")
+        } else if self.recovery.failed() {
+            Applicability::disabled("Resolve the failed save first")
+        } else if !(if remove_source {
+            self.mutation.transfer_remove.is_ready()
+        } else {
+            self.mutation.transfer_keep.is_ready()
+        }) {
+            Applicability::disabled("Thought has an operation in progress")
+        } else {
+            Applicability::ENABLED
+        }
+    }
+
     const fn when_item_mutable(&self) -> Applicability {
         if !self.board.focus.item {
             Applicability::disabled("No Board item is focused")
@@ -345,13 +368,20 @@ impl CommandContext {
         )
     }
 
-    fn reorder_applicability(&self) -> Applicability {
+    fn reorder_applicability(&self, up: bool) -> Applicability {
         let mutable = self.when_item_mutable();
         if !mutable.enabled {
             return mutable;
         }
         if self.selection.count > 1 {
-            return Applicability::disabled("Unavailable for multiple selected items");
+            return Self::when(
+                if up {
+                    self.selection.can_move_up
+                } else {
+                    self.selection.can_move_down
+                },
+                "Selected items are already at the edge",
+            );
         }
         Self::when(self.board.live_item_count > 1, "Nothing to reorder")
     }

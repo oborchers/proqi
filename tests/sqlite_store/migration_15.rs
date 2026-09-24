@@ -48,6 +48,8 @@ fn reflow_migration_requires_authority_and_preserves_a_pre_migration_backup() {
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
              DROP TABLE browser_history_state;
+             DROP TABLE IF EXISTS transfer_source_claims;
+             DROP TABLE IF EXISTS transfer_attempts;
              DELETE FROM migration_history WHERE version >= 15;
              UPDATE schema_meta SET schema_version = 14, storage_protocol = 13;",
         )
@@ -102,6 +104,8 @@ fn browser_history_migrates_exact_reflow_schema_and_protocol() {
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
              DROP TABLE browser_history_state;
+             DROP TABLE IF EXISTS transfer_source_claims;
+             DROP TABLE IF EXISTS transfer_attempts;
              DELETE FROM migration_history WHERE version >= 16;
              UPDATE schema_meta SET schema_version = 15, storage_protocol = 14;",
         )
@@ -148,6 +152,8 @@ fn thought_name_migration_is_additive_and_backed_up() {
         .execute_batch(
             "ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
              ALTER TABLE thoughts DROP COLUMN name;
+             DROP TABLE IF EXISTS transfer_source_claims;
+             DROP TABLE IF EXISTS transfer_attempts;
              DELETE FROM migration_history WHERE version >= 18;
              UPDATE schema_meta SET schema_version = 17, storage_protocol = 16;",
         )
