@@ -91,9 +91,10 @@ where
             session_id: id,
             name: replacement.clone(),
         };
-        if let Some(receipt) = self.leased_replay(id, operation_id, &request)? {
-            return Ok(receipt);
-        }
+        let _lease = match self.leased_replay(id, operation_id, &request)? {
+            Leased::Replayed(receipt) => return Ok(receipt),
+            Leased::Held(lease) => lease,
+        };
         let current = self.store.load_session(id)?.board.session.name;
         let now = self.clock.now();
         if current == replacement {
@@ -123,9 +124,10 @@ where
     ) -> Result<SessionAdministrationReceipt, SessionServiceError> {
         let operation_id = supplied.unwrap_or_else(|| self.ids.operation_id());
         let request = SessionRequest::Trash { session_id: id };
-        if let Some(receipt) = self.leased_replay(id, operation_id, &request)? {
-            return Ok(receipt);
-        }
+        let _lease = match self.leased_replay(id, operation_id, &request)? {
+            Leased::Replayed(receipt) => return Ok(receipt),
+            Leased::Held(lease) => lease,
+        };
         let session = self.store.load_session(id)?.board.session;
         let now = self.clock.now();
         if session.deleted_at.is_some() {
@@ -153,9 +155,10 @@ where
     ) -> Result<SessionAdministrationReceipt, SessionServiceError> {
         let operation_id = supplied.unwrap_or_else(|| self.ids.operation_id());
         let request = SessionRequest::Restore { session_id: id };
-        if let Some(receipt) = self.leased_replay(id, operation_id, &request)? {
-            return Ok(receipt);
-        }
+        let _lease = match self.leased_replay(id, operation_id, &request)? {
+            Leased::Replayed(receipt) => return Ok(receipt),
+            Leased::Held(lease) => lease,
+        };
         let session = self.store.load_session(id)?.board.session;
         let deleted_at = session
             .deleted_at
@@ -187,9 +190,10 @@ where
     ) -> Result<SessionAdministrationReceipt, SessionServiceError> {
         let operation_id = supplied.unwrap_or_else(|| self.ids.operation_id());
         let request = SessionRequest::Prune { session_id: id };
-        if let Some(receipt) = self.leased_replay(id, operation_id, &request)? {
-            return Ok(receipt);
-        }
+        let _lease = match self.leased_replay(id, operation_id, &request)? {
+            Leased::Replayed(receipt) => return Ok(receipt),
+            Leased::Held(lease) => lease,
+        };
         if self
             .store
             .load_session(id)?
@@ -273,27 +277,38 @@ where
     }
 
     /// Replay before and after acquiring the addressed session lease.
+    ///
+    /// A new request returns the held lease, which the caller must keep alive
+    /// until its mutation is durable.
     fn leased_replay(
         &mut self,
         id: SessionId,
         operation_id: OperationId,
         request: &SessionRequest,
-    ) -> Result<Option<SessionAdministrationReceipt>, SessionServiceError> {
+    ) -> Result<Leased<R::SessionLease>, SessionServiceError> {
         if self
             .session_request_replay(operation_id, request)?
             .is_some()
         {
-            return Ok(Some(replayed_receipt(id, operation_id)));
+            return Ok(Leased::Replayed(replayed_receipt(id, operation_id)));
         }
-        let _lease = self.runtime.acquire_session(id)?;
+        let lease = self.runtime.acquire_session(id)?;
         if self
             .session_request_replay(operation_id, request)?
             .is_some()
         {
-            return Ok(Some(replayed_receipt(id, operation_id)));
+            return Ok(Leased::Replayed(replayed_receipt(id, operation_id)));
         }
-        Ok(None)
+        Ok(Leased::Held(lease))
     }
+}
+
+/// Either an exact earlier result or the lease that protects a new mutation.
+enum Leased<L> {
+    /// The operation identity already committed this exact request.
+    Replayed(SessionAdministrationReceipt),
+    /// The session lease held for the new mutation.
+    Held(L),
 }
 
 const fn administration_receipt(

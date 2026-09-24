@@ -206,6 +206,16 @@ pub(in crate::adapters::sqlite) fn decode_retained(
     Ok(retained)
 }
 
+/// Whether a retained payload must outlive the permanent prune of its session.
+pub(in crate::adapters::sqlite) fn survives_session_prune(
+    payload: &str,
+) -> Result<bool, StoreError> {
+    Ok(matches!(
+        decode_payload(payload)?,
+        RetainedPayload::Receipt(RequestReceipt::Create { .. } | RequestReceipt::Prune { .. })
+    ))
+}
+
 fn decode_payload(payload: &str) -> Result<RetainedPayload, StoreError> {
     let value: Value = serde_json::from_str(payload)
         .map_err(|_| StoreError::Corrupt("invalid Browser operation receipt".to_owned()))?;

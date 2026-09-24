@@ -125,7 +125,10 @@ where
         };
         let idempotent_replay = match self.store.create_named_session(&creation)? {
             NamedSessionOutcome::Created => false,
-            NamedSessionOutcome::Replayed => true,
+            NamedSessionOutcome::Replayed => {
+                self.require_replayed_session(session_id)?;
+                true
+            }
             NamedSessionOutcome::IdentityReused => {
                 return Err(SessionServiceError::IdempotencyConflict);
             }
@@ -142,6 +145,28 @@ where
             operation_id: Some(operation_id),
             idempotent_replay,
         })
+    }
+}
+
+impl<S, R, C, I> SessionService<'_, S, R, C, I>
+where
+    S: Store,
+    R: RuntimeCoordinator,
+    C: Clock,
+    I: IdGenerator,
+{
+    /// A replayed creation still names its session unless it was permanently pruned.
+    fn require_replayed_session(
+        &mut self,
+        session_id: SessionId,
+    ) -> Result<(), SessionServiceError> {
+        match self.store.load_session(session_id) {
+            Ok(_) => Ok(()),
+            Err(StoreError::NotFound(_)) => {
+                Err(SessionServiceError::SessionNotFound(session_id.to_string()))
+            }
+            Err(error) => Err(error.into()),
+        }
     }
 }
 

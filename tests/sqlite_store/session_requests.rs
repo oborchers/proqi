@@ -364,6 +364,46 @@ fn prune_receipt_survives_the_pruned_session_and_replays() {
     ));
 }
 
+#[test]
+fn prune_retains_creation_receipts_so_a_creation_retry_cannot_resurrect() {
+    let fixture = DatabaseFixture::new();
+    let mut store = fixture.open();
+    let mut ids = FakeIdGenerator::new(1_725_400_700_000);
+    let operation_id = ids.operation_id();
+    let session_id = operation_id_session(operation_id);
+    let creation = NamedSessionCreation {
+        session: Session::with_name(
+            session_id,
+            PathBuf::from("/work"),
+            Timestamp::from_millis(5),
+            Some("pruned".to_owned()),
+        )
+        .expect("session"),
+        policy: NamedSessionPolicy::Always,
+        operation_id: Some(operation_id),
+    };
+    assert_eq!(
+        store.create_named_session(&creation),
+        Ok(NamedSessionOutcome::Created)
+    );
+    store
+        .trash_session(session_id, Timestamp::from_millis(6))
+        .expect("trash");
+    store
+        .prune_session_request(session_id, ids.operation_id(), Timestamp::from_millis(7))
+        .expect("prune");
+
+    assert_eq!(
+        store.create_named_session(&creation),
+        Ok(NamedSessionOutcome::Replayed)
+    );
+    assert!(named_rows(&fixture, "pruned").is_empty());
+    assert!(matches!(
+        store.load_session(session_id),
+        Err(StoreError::NotFound(_))
+    ));
+}
+
 fn operation_id_session(operation_id: OperationId) -> proqi::domain::SessionId {
     proqi::domain::SessionId::from_database_bytes(operation_id.database_bytes())
         .expect("derived session identity")

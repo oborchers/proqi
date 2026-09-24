@@ -165,13 +165,21 @@ Rename, trash, restore, and prune return
 `{session_id, status, changed, receipt: {session_id, operation_id,
 idempotent_replay}}`. `changed` reports whether the call changed durable state.
 Trashing an already trashed session succeeds with `changed: false`. A rename to
-the current name also reports `changed: false`. Undo and redo return
+the current name also reports `changed: false`.
+
+A rename of a session that is open in an interactive Proqi is applied by that
+process. The operation identity still applies it at most once, and a later retry
+reports `idempotent_replay: true`. The owner does not report replays, however.
+If two calls with the same identity overlap, both can report
+`idempotent_replay: false`. `changed` is then derived from the name observed
+before forwarding. Undo and redo return
 `{history, operation, cursor, receipt: {operation_id, idempotent_replay}}`.
 
 Prune retains its receipt after the session is deleted, so an exact retry
-succeeds as a replay. Pruning also forgets the session's other request
-receipts. A replayed `sessions create` for a pruned session therefore creates
-it again.
+succeeds as a replay. Pruning forgets the session's rename, trash, and restore
+receipts but retains its creation receipt. Retrying the `sessions create` that
+made a pruned session therefore fails with `session_not_found` and never
+recreates it.
 
 ## Change Board items
 

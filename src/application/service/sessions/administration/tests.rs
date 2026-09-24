@@ -1,6 +1,6 @@
 //! Replay, conflict, and no-op orchestration for session administration.
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{cell::Cell, collections::HashMap, path::PathBuf, rc::Rc};
 
 use crate::{
     application::{
@@ -24,6 +24,8 @@ use super::super::SessionService;
 
 #[derive(Default)]
 struct AdministrationStore {
+    held: Rc<Cell<usize>>,
+    unleased_writes: usize,
     session: Option<Session>,
     requests: HashMap<OperationId, StoredSessionRequest>,
     history: BrowserHistoryStatus,
@@ -39,6 +41,13 @@ impl AdministrationStore {
             session: Some(session),
             ..Self::default()
         }
+    }
+
+    fn write(&mut self, operation_id: OperationId) -> BrowserCommitReceipt {
+        if self.held.get() == 0 {
+            self.unleased_writes += 1;
+        }
+        Self::receipt(operation_id)
     }
 
     fn receipt(operation_id: OperationId) -> BrowserCommitReceipt {
@@ -91,7 +100,7 @@ impl Store for AdministrationStore {
         operation: &crate::domain::BrowserOperation,
     ) -> Result<BrowserCommitReceipt, StoreError> {
         self.browser_commits += 1;
-        Ok(Self::receipt(operation.id()))
+        Ok(self.write(operation.id()))
     }
 
     fn browser_history_status(&mut self) -> Result<BrowserHistoryStatus, StoreError> {
@@ -106,7 +115,7 @@ impl Store for AdministrationStore {
         _at: Timestamp,
     ) -> Result<BrowserCommitReceipt, StoreError> {
         self.history_moves += 1;
-        Ok(Self::receipt(operation_id))
+        Ok(self.write(operation_id))
     }
 
     fn session_request(
@@ -123,7 +132,7 @@ impl Store for AdministrationStore {
         _at: Timestamp,
     ) -> Result<BrowserCommitReceipt, StoreError> {
         self.noop_trashes += 1;
-        Ok(Self::receipt(operation_id))
+        Ok(self.write(operation_id))
     }
 
     fn prune_session_request(
@@ -133,7 +142,7 @@ impl Store for AdministrationStore {
         _at: Timestamp,
     ) -> Result<BrowserCommitReceipt, StoreError> {
         self.prunes += 1;
-        Ok(Self::receipt(operation_id))
+        Ok(self.write(operation_id))
     }
 
     fn operation_request(
@@ -356,4 +365,81 @@ fn blank_names_fail_before_the_lease_or_a_write() {
         ))
     ));
     assert_eq!(store.browser_commits, 0);
+}
+
+struct TrackedLease(Rc<Cell<usize>>);
+
+impl crate::ports::runtime::Lease for TrackedLease {}
+
+impl Drop for TrackedLease {
+    fn drop(&mut self) {
+        self.0.set(self.0.get() - 1);
+    }
+}
+
+/// Runtime whose leases report whether any is still held.
+struct TrackingRuntime(Rc<Cell<usize>>);
+
+impl crate::ports::runtime::RuntimeCoordinator for TrackingRuntime {
+    type SessionLease = TrackedLease;
+    type SharedSchemaLease = TrackedLease;
+    type ExclusiveSchemaLease = TrackedLease;
+
+    fn acquire_session(&self, _session_id: SessionId) -> Result<TrackedLease, RuntimeError> {
+        self.0.set(self.0.get() + 1);
+        Ok(TrackedLease(Rc::clone(&self.0)))
+    }
+
+    fn acquire_schema_shared(&self) -> Result<TrackedLease, RuntimeError> {
+        self.acquire_session(
+            SessionId::from_database_bytes([0; 16])
+                .map_err(|_| RuntimeError::Invalid("test lease".to_owned()))?,
+        )
+    }
+
+    fn acquire_schema_exclusive(&self) -> Result<TrackedLease, RuntimeError> {
+        self.acquire_schema_shared()
+    }
+
+    fn scan_runtime(&self) -> Result<crate::ports::runtime::RuntimeScan, RuntimeError> {
+        Ok(crate::ports::runtime::RuntimeScan::default())
+    }
+}
+
+#[test]
+fn every_administration_write_happens_while_the_session_lease_is_held() {
+    let mut ids = TestIds::new(1_725_300_600_000);
+    let live = session(&mut ids, false);
+    let id = live.id;
+    let mut store = AdministrationStore::with_session(live);
+    let runtime = TrackingRuntime(Rc::clone(&store.held));
+    let clock = TestClock(Timestamp::from_millis(30));
+    let mut service =
+        SessionService::new(&mut store, &runtime, &clock, &mut ids, "/".into()).expect("service");
+    service
+        .rename_session(id, Some("renamed"), None)
+        .expect("rename");
+    service.trash_session(id, None).expect("trash");
+    drop(service);
+    store.session = store.session.take().map(|mut session| {
+        session.deleted_at = Some(Timestamp::from_millis(31));
+        session
+    });
+    let mut service =
+        SessionService::new(&mut store, &runtime, &clock, &mut ids, "/".into()).expect("service");
+    service.trash_session(id, None).expect("no-op trash");
+    service.restore_session(id, None).expect("restore");
+    service.prune_session(id, None).expect("prune");
+    drop(service);
+
+    assert_eq!(store.browser_commits + store.noop_trashes + store.prunes, 5);
+    assert_eq!(
+        store.unleased_writes, 0,
+        "a write ran after its lease was dropped"
+    );
+    assert_eq!(
+        store.held.get(),
+        0,
+        "every lease is released after its request"
+    );
 }

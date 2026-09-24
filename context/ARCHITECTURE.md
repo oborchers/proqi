@@ -839,9 +839,10 @@ event-sourced system.
   retained independently of the active Browser cursor. A row holds either one
   reversible Browser operation or one versioned request receipt that
   intentionally creates no history: a same-name rename, a trash request for an
-  already trashed session, a named session creation, or a permanent prune. The
-  prune receipt is written after the pruned session's other receipts are
-  removed, so an exact prune retry remains a replay.
+  already trashed session, a named session creation, or a permanent prune. Pruning
+  removes the session's rename, trash, and restore receipts but retains its
+  creation receipt and writes its own prune receipt, so exact creation and
+  prune retries replay without recreating the deleted session.
 - `browser_history_receipts`: idempotent, compare-and-set Browser undo and redo
   receipts tied to the exact operation that was presented to the caller.
 - `browser_history_state`: the single applied-prefix cursor for Browser

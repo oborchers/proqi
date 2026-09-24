@@ -336,6 +336,34 @@ fn create_with_an_operation_identity_replays_and_rejects_divergent_reuse() {
 }
 
 #[test]
+fn a_creation_retry_after_prune_reports_the_session_as_gone() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let root = temporary.path();
+    let operation = operation_id();
+    let arguments = [
+        "sessions",
+        "create",
+        "--name",
+        "brief",
+        "--operation-id",
+        &operation,
+    ];
+    let created = success(root, &arguments, None);
+    let session = created["session_id"].as_str().expect("ID").to_owned();
+    success(root, &["sessions", "trash", &session], None);
+    success(root, &["sessions", "prune", &session, "--yes"], None);
+
+    let retry = run(root, &arguments, None);
+    assert_eq!(retry.status.code(), Some(3));
+    assert_eq!(error_code(&retry)["code"], "session_not_found");
+    assert_eq!(
+        session_count(root),
+        0,
+        "a retry never resurrects a pruned session"
+    );
+}
+
+#[test]
 fn human_named_creation_needs_no_terminal() {
     let temporary = tempfile::tempdir().expect("temporary directory");
     let output = Command::new(env!("CARGO_BIN_EXE_proqi"))

@@ -32,12 +32,7 @@ pub(in crate::adapters::sqlite) fn remove_session(
             [session_id.database_bytes().as_slice()],
         )
         .map_err(map_sql_error)?;
-    transaction
-        .execute(
-            "DELETE FROM browser_operation_receipts WHERE target_session_id = ?1",
-            [session_id.database_bytes().as_slice()],
-        )
-        .map_err(map_sql_error)?;
+    remove_session_receipts(transaction, session_id)?;
     transaction
         .execute(
             "DELETE FROM browser_operations WHERE target_session_id = ?1",
@@ -101,6 +96,40 @@ fn normalize_indices(transaction: &Transaction<'_>, prior_count: usize) -> Resul
                 params![id, usize_to_i64(index)?],
             )
             .map_err(map_sql_error)?;
+    }
+    Ok(())
+}
+
+/// Remove the pruned session's request receipts except creation receipts.
+///
+/// A retained creation receipt keeps an exact creation retry from inserting the
+/// permanently deleted session again under its derived identity.
+fn remove_session_receipts(
+    transaction: &Transaction<'_>,
+    session_id: SessionId,
+) -> Result<(), StoreError> {
+    let mut statement = transaction
+        .prepare(
+            "SELECT id, payload_json FROM browser_operation_receipts WHERE target_session_id = ?1",
+        )
+        .map_err(map_sql_error)?;
+    let rows = statement
+        .query_map([session_id.database_bytes().as_slice()], |row| {
+            Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(map_sql_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(map_sql_error)?;
+    drop(statement);
+    for (id, payload) in rows {
+        if !super::request_codec::survives_session_prune(&payload)? {
+            transaction
+                .execute(
+                    "DELETE FROM browser_operation_receipts WHERE id = ?1",
+                    [id.as_slice()],
+                )
+                .map_err(map_sql_error)?;
+        }
     }
     Ok(())
 }
