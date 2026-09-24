@@ -272,21 +272,19 @@ where
         let Some(pane_id) = record.pane_id.as_deref() else {
             continue;
         };
-        // An unclassifiable pane is not proof of an opening companion; the
-        // session lease checked before remains the authority.
+        // A pane that cannot be classified might be a companion still starting,
+        // so it blocks the open; refusing is safe and a retry resolves it.
         match host.process(pane_id).unwrap_or(Some(PaneProcess::Unknown)) {
-            Some(PaneProcess::Launcher) => return Ok(true),
+            Some(PaneProcess::Launcher | PaneProcess::Unknown) => return Ok(true),
             // The same predicate as the tab's own record: only the exact
             // session is the plugin's. A Proqi resuming it by name holds the
             // session lease, which the preceding state check already reports.
             Some(PaneProcess::Proqi {
                 session_id: Some(running),
             }) if running == session_id => return Ok(true),
-            Some(_) => {}
-            None => records.save(&CompanionRecord {
-                pane_id: None,
-                ..record
-            })?,
+            // A vanished pane is left recorded; that tab corrects it on its
+            // own next toggle, so this loop never writes plugin state.
+            Some(_) | None => {}
         }
     }
     Ok(false)

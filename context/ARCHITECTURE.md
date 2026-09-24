@@ -2049,15 +2049,16 @@ the `herdr_companion_toggle` capability, and replaces itself with
   worktree checkout or repository root, since Herdr's `workspace_cwd` follows
   the focused pane), and the
   close rules. A pane closes only when it is the tab's recorded pane, its
-  foreground Proqi resumes exactly the recorded session, and the owner confirms
-  a durable flush. A recorded idle shell labeled `Proqi`, with no Proqi signal,
+  foreground process is Proqi resuming exactly the recorded session or the
+  plugin's own launcher, and the session owner confirms a durable flush. A recorded idle shell labeled `Proqi`, with no Proqi signal,
   is replaced after a restart, and it is rechecked immediately before it
-  closes. `Unknown`, foreign, and lease-carrying panes are only focused.
+  closes. `Unknown`, foreign, and lease-carrying panes are only focused, and an
+  `Unknown` pane recorded by another tab for the same session blocks the open.
 - The Herdr adapter `adapters::herdr::companion`. It reads the plugin
   environment, runs direct bounded Herdr CLI calls without a shell, recognizes
-  Proqi by its display lease or foreground process, spends at most twelve
-  one-second process probes per toggle and reports `Unknown` beyond that or on
-  failure, preserves the tab's zoom state when it must focus by zooming, and
+  Proqi by its display lease or foreground process, probes every unleased
+  non-agent pane within one twelve-second window (at most one second per probe)
+  and reports `Unknown` after the window or on failure, preserves the tab's zoom state when it must focus by zooming, and
   keeps one record per tab in `HERDR_PLUGIN_STATE_DIR`. Records are strict,
   bounded JSON written by atomic rename under an exclusive `fs4` lock that
   serializes toggles; the lock wait exceeds the slowest complete toggle. A

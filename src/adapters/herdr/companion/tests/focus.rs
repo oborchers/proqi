@@ -78,3 +78,24 @@ fn an_already_focused_pane_changes_nothing() {
         .expect("focus");
     assert_eq!(runner.requests().len(), 2);
 }
+
+#[test]
+fn a_failed_refocus_in_a_zoomed_tab_restores_the_original_zoom() {
+    let runner = ScriptedRunner::with(vec![
+        rejected("plugin_pane_not_found"),
+        layout(true, "w1:p1"),
+        ok(&json!({})),
+        rejected("pane_not_found"),
+        ok(&json!({})),
+    ]);
+    let result = host(&runner, &plugin_context()).focus("w1:p5");
+    assert!(result.is_err());
+    assert_eq!(
+        runner.requests()[2..],
+        [
+            vec!["pane", "zoom", "w1:p1", "--off"],
+            vec!["pane", "zoom", "w1:p5", "--on"],
+            vec!["pane", "zoom", "w1:p1", "--on"],
+        ]
+    );
+}

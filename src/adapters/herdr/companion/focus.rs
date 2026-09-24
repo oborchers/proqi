@@ -43,6 +43,11 @@ impl<R: ProcessRunner> HerdrCompanionHost<R> {
             self.run(&["pane", "zoom", &focused_pane_id, "--off"], QUERY_TIMEOUT)?;
             self.run(&["pane", "zoom", pane_id, "--on"], QUERY_TIMEOUT)
                 .map(|_| ())
+                .inspect_err(|_| {
+                    // Put the user's zoom back before reporting the failure.
+                    let _best_effort =
+                        self.run(&["pane", "zoom", &focused_pane_id, "--on"], QUERY_TIMEOUT);
+                })
         } else {
             self.run(&["pane", "zoom", pane_id, "--on"], QUERY_TIMEOUT)?;
             self.run(&["pane", "zoom", pane_id, "--off"], QUERY_TIMEOUT)

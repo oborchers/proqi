@@ -271,26 +271,25 @@ fn other_tab(pane: Option<&str>) -> CompanionRecord {
 }
 
 #[test]
-fn a_companion_another_tab_is_launching_or_running_blocks_a_racing_open() {
-    for process in [PaneProcess::Launcher, own_proqi()] {
-        let mut host =
-            FakeHost::new("w1:p1", vec![agent("w1:p1", true)]).with_process("w2:p4", process);
+fn a_companion_another_tab_is_launching_running_or_unclassified_blocks_the_open() {
+    for process in [PaneProcess::Launcher, own_proqi(), PaneProcess::Unknown] {
+        let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)])
+            .with_process("w2:p4", process.clone());
         let mut records = FakeRecords(vec![other_tab(Some("w2:p4"))]);
         let mut sessions = FakeSessions::with_named("agent-tab", OWN);
-        let error = toggle_companion(&mut host, &mut records, &mut sessions).expect_err("racing");
-        assert!(matches!(error, CompanionToggleError::SessionActive { .. }));
-        assert!(host.calls.is_empty());
+        let error = toggle_companion(&mut host, &mut records, &mut sessions)
+            .expect_err("never two panes for one session");
+        assert!(
+            matches!(error, CompanionToggleError::SessionActive { .. }),
+            "{process:?}"
+        );
+        assert!(host.calls.is_empty(), "{process:?}");
     }
 }
 
 #[test]
-fn unidentified_unknown_or_vanished_panes_in_other_tabs_do_not_block_this_tab() {
-    let cases = [
-        Some(PaneProcess::Proqi { session_id: None }),
-        Some(PaneProcess::Unknown),
-        None,
-    ];
-    for process in cases {
+fn unidentified_or_vanished_panes_in_other_tabs_do_not_block_and_are_not_rewritten() {
+    for process in [Some(PaneProcess::Proqi { session_id: None }), None] {
         let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)]);
         if let Some(process) = process.clone() {
             host = host.with_process("w2:p4", process);
@@ -299,12 +298,7 @@ fn unidentified_unknown_or_vanished_panes_in_other_tabs_do_not_block_this_tab() 
         let mut sessions = FakeSessions::with_named("agent-tab", OWN);
         let outcome = toggle_companion(&mut host, &mut records, &mut sessions).expect("open");
         assert!(matches!(outcome, CompanionToggleOutcome::Opened { .. }));
-        let expected_other = if process.is_none() {
-            other_tab(None)
-        } else {
-            other_tab(Some("w2:p4"))
-        };
-        assert!(records.0.contains(&expected_other), "{process:?}");
+        assert!(records.0.contains(&other_tab(Some("w2:p4"))), "{process:?}");
     }
 }
 

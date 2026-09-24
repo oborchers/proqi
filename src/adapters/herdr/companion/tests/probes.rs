@@ -1,5 +1,7 @@
 //! Process probes: a bounded budget, and unknown results that never enable a close.
 
+use std::time::Duration;
+
 use serde_json::json;
 
 use crate::ports::{
@@ -45,33 +47,31 @@ fn an_unrelated_failing_pane_does_not_abort_the_tab_snapshot() {
 }
 
 #[test]
-fn probes_beyond_the_budget_report_unknown_without_calling_herdr() {
-    let responses = (0..12).map(|_| info(5, 5, &[(5, &["-zsh"])])).collect();
-    let runner = ScriptedRunner::with(responses);
-    let mut host = host(&runner, &plugin_context());
-    for _ in 0..12 {
-        assert_eq!(
-            host.process("w1:p3").expect("probe"),
-            Some(PaneProcess::IdleShell)
-        );
-    }
+fn probes_after_the_window_closes_report_unknown_without_calling_herdr() {
+    let runner = ScriptedRunner::with(Vec::new());
+    let mut host = host(&runner, &plugin_context()).with_probe_window(Duration::ZERO);
     assert_eq!(
-        host.process("w1:p3").expect("budget"),
+        host.process("w1:p3").expect("window"),
         Some(PaneProcess::Unknown)
     );
-    assert_eq!(runner.requests().len(), 12);
+    assert!(runner.requests().is_empty());
 }
 
 #[test]
-fn presence_probes_are_capped_so_the_recorded_pane_keeps_budget() {
+fn every_unleased_non_agent_pane_is_probed_within_the_window() {
     let panes: Vec<_> = (0..20)
         .map(|index| json!({ "pane_id": format!("w1:p{index}"), "tab_id": "w1:t1" }))
         .collect();
     let mut responses = vec![ok(&json!({ "type": "pane_list", "panes": panes }))];
-    responses.extend((0..8).map(|_| info(5, 5, &[(5, &["-zsh"])])));
+    responses.extend((0..19).map(|_| info(5, 5, &[(5, &["-zsh"])])));
+    responses.push(info(9, 11, &[(11, &["proqi", "--resume", super::SESSION])]));
     let runner = ScriptedRunner::with(responses);
-    host(&runner, &plugin_context())
+    let panes = host(&runner, &plugin_context())
         .tab_panes("w1:t1")
         .expect("snapshot");
-    assert_eq!(runner.requests().len(), 9);
+    assert_eq!(runner.requests().len(), 21);
+    assert!(
+        panes[19].proqi_presence,
+        "a late lease-free Proqi is still found"
+    );
 }

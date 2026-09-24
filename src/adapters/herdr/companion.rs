@@ -51,18 +51,18 @@ const OPEN_SECONDS: u64 = 10;
 const QUERY_TIMEOUT: Duration = Duration::from_secs(QUERY_SECONDS);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(PROBE_SECONDS);
 const OPEN_TIMEOUT: Duration = Duration::from_secs(OPEN_SECONDS);
-/// Process probes one toggle may spend; later probes report `Unknown`.
-const PROBE_BUDGET: u64 = 12;
-/// Presence probes of unlabeled panes, leaving budget for the recorded pane.
-const PRESENCE_PROBES: usize = 8;
+/// Total time one toggle may spend on process probes; later probes report `Unknown`.
+const PROBE_WINDOW_SECONDS: u64 = 12;
 /// Sequential Herdr calls that focus, close, or notify in one toggle.
 const CONTROL_CALLS: u64 = 6;
-/// Owner flush plus store and schema admission, bounded by their own adapters.
-const SESSION_SECONDS: u64 = 10;
-/// Slowest complete toggle; the plugin lock waits longer than this.
+/// Proqi's own bounded waits under the lock: schema admission (5 s), update
+/// convergence admission (5 s), store transactions with bounded retry (about
+/// 1 s each, at most three), and the confirmed owner flush (5 s).
+const SESSION_SECONDS: u64 = 5 + 5 + 3 + 5;
+/// Upper bound of one toggle built from its bounded parts; the lock waits longer.
 pub(crate) const TOGGLE_WORST_CASE: Duration = Duration::from_secs(
     QUERY_SECONDS
-        + PROBE_BUDGET * PROBE_SECONDS
+        + PROBE_WINDOW_SECONDS
         + OPEN_SECONDS
         + CONTROL_CALLS * QUERY_SECONDS
         + SESSION_SECONDS,
@@ -134,7 +134,8 @@ impl HerdrPluginEnvironment {
 pub struct HerdrCompanionHost<R> {
     runner: R,
     environment: HerdrPluginEnvironment,
-    probes_left: u64,
+    probe_window: Duration,
+    probe_deadline: Option<std::time::Instant>,
 }
 
 impl<R> HerdrCompanionHost<R> {
@@ -144,8 +145,24 @@ impl<R> HerdrCompanionHost<R> {
         Self {
             runner,
             environment,
-            probes_left: PROBE_BUDGET,
+            probe_window: Duration::from_secs(PROBE_WINDOW_SECONDS),
+            probe_deadline: None,
         }
+    }
+
+    /// Shorten the probe window, for deterministic tests of its exhaustion.
+    #[cfg(test)]
+    pub(crate) fn with_probe_window(mut self, window: Duration) -> Self {
+        self.probe_window = window;
+        self
+    }
+
+    /// Remaining probe time, starting the window on first use.
+    fn probe_time_left(&mut self) -> Duration {
+        let deadline = *self
+            .probe_deadline
+            .get_or_insert_with(|| std::time::Instant::now() + self.probe_window);
+        deadline.saturating_duration_since(std::time::Instant::now())
     }
 }
 
@@ -215,7 +232,6 @@ impl<R: ProcessRunner> CompanionHost for HerdrCompanionHost<R> {
         for pane in panes
             .iter_mut()
             .filter(|pane| !pane.proqi_presence && !pane.agent)
-            .take(PRESENCE_PROBES)
         {
             if let Some(PaneProcess::Proqi { .. } | PaneProcess::Launcher) =
                 self.process(&pane.pane_id)?
@@ -227,13 +243,13 @@ impl<R: ProcessRunner> CompanionHost for HerdrCompanionHost<R> {
     }
 
     fn process(&mut self, pane_id: &str) -> Result<Option<PaneProcess>, CompanionError> {
-        if self.probes_left == 0 {
+        let left = self.probe_time_left();
+        if left.is_zero() {
             return Ok(Some(PaneProcess::Unknown));
         }
-        self.probes_left -= 1;
         match self.json::<wire::ProcessInfoBody>(
             &["pane", "process-info", "--pane", pane_id],
-            PROBE_TIMEOUT,
+            left.min(PROBE_TIMEOUT),
         ) {
             Ok(body) => Ok(Some(wire::classify(&body.process_info))),
             Err(HostFailure::Rejected { code, .. }) if code == "pane_not_found" => Ok(None),
