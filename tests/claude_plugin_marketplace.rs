@@ -10,7 +10,6 @@ use std::{
     collections::BTreeSet,
     fs,
     path::{Component, Path, PathBuf},
-    process::Command,
 };
 
 use serde_json::Value;
@@ -203,31 +202,58 @@ fn both_install_paths_read_the_same_physical_skill_files() {
         );
         assert_eq!(fs::read_to_string(plugin).expect("plugin skill"), expected);
     }
+}
 
-    let output = Command::new("git")
-        .args(["ls-files", "-z", "--", "*SKILL.md"])
-        .current_dir(root())
-        .output()
-        .expect("git ls-files");
-    assert!(output.status.success());
-    let tracked = String::from_utf8(output.stdout).expect("UTF-8 paths");
+#[test]
+fn every_repository_skill_name_has_one_physical_definition() {
+    let mut definitions = Vec::new();
+    for skill_root in ["skills", ".agents", ".claude", ".claude-plugin"] {
+        collect_skill_definitions(&root().join(skill_root), &mut definitions);
+    }
     let mut names = BTreeSet::new();
-    for path in tracked.split('\0').filter(|path| !path.is_empty()) {
-        let contents = fs::read_to_string(root().join(path)).expect("tracked skill");
-        let name = contents
-            .lines()
-            .nth(1)
-            .and_then(|line| line.strip_prefix("name: "))
-            .expect("skill name");
+    for path in definitions {
+        let contents = fs::read_to_string(&path).expect("skill definition");
+        let name = frontmatter_name(&contents)
+            .unwrap_or_else(|| panic!("{} has no frontmatter name", path.display()));
         assert!(
             names.insert(name.to_owned()),
-            "duplicate skill {name} at {path}"
+            "duplicate skill {name} at {}",
+            path.display()
         );
+    }
+    assert!(names.contains("proqi") && names.contains("proqi-debug"));
+}
+
+/// Reads the `name` field from a skill's leading frontmatter block.
+fn frontmatter_name(contents: &str) -> Option<&str> {
+    let block = contents.strip_prefix("---\n")?.split_once("\n---")?.0;
+    block
+        .lines()
+        .find_map(|line| line.strip_prefix("name:"))
+        .map(str::trim)
+}
+
+/// Collects physical `SKILL.md` files without following symlinked aliases.
+fn collect_skill_definitions(directory: &Path, definitions: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries {
+        let path = entry.expect("skill root entry").path();
+        let metadata = fs::symlink_metadata(&path).expect("skill root metadata");
+        if metadata.is_dir() {
+            collect_skill_definitions(&path, definitions);
+        } else if metadata.is_file() && path.file_name().is_some_and(|name| name == "SKILL.md") {
+            definitions.push(path);
+        }
     }
 }
 
 #[test]
 fn both_install_paths_are_documented() {
+    for document in [README, CLI_REFERENCE] {
+        assert!(document.contains("/plugin update proqi@proqi"));
+    }
     for document in [README, CLI_REFERENCE, GETTING_STARTED] {
         assert!(document.contains("/plugin marketplace add oborchers/proqi"));
         assert!(document.contains("/plugin install proqi@proqi"));

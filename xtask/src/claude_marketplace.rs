@@ -6,6 +6,10 @@
 //! branch while updates are announced only when release preparation bumps the
 //! Cargo version. A tag-pinned remote source is rejected because the tag does
 //! not exist between release preparation and tag creation.
+//!
+//! This gate owns only release agreement. The published plugin name, the
+//! `./skills` source, and the exact shipped skill set are owned by the
+//! required `tests/claude_plugin_marketplace.rs` contract suite.
 
 use std::{fs, path::Path};
 

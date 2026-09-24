@@ -550,10 +550,12 @@ uses that name.
 The marketplace serves the default branch, and the plugin version equals the
 Cargo version. Claude Code therefore offers an update when a release changes
 that version, not for every commit. Automatic updates are off by default for
-third-party marketplaces. Refresh manually with:
+third-party marketplaces. Refresh the catalog, then update the installed
+plugin:
 
 ```text
 /plugin marketplace update proqi
+/plugin update proqi@proqi
 ```
 
 Between release preparation and publication, the default branch can describe

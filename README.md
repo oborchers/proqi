@@ -479,8 +479,9 @@ instead:
 
 The plugin ships the same `skills/proqi` and `skills/proqi-debug` files, invoked
 as `/proqi:proqi` and `/proqi:proqi-debug`. It follows the default branch and
-reports a new version when a release changes the Cargo version. Refresh with
-`/plugin marketplace update proqi`. It does not install the Proqi executable.
+reports a new version when a release changes the Cargo version. Update with
+`/plugin marketplace update proqi`, then `/plugin update proqi@proqi`. It does
+not install the Proqi executable.
 
 ## Privacy, durability, and recovery
 
