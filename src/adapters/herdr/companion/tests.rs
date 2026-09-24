@@ -119,23 +119,29 @@ fn tab_panes_keep_only_the_invoking_tab_and_detect_the_proqi_lease() {
 }
 
 #[test]
-fn a_proqi_without_a_display_lease_is_recognized_by_its_process_only() {
+fn a_proqi_or_launcher_without_a_display_lease_is_recognized_by_its_process() {
     let runner = ScriptedRunner::with(vec![
         ok(&json!({ "type": "pane_list", "panes": [
             { "pane_id": "w1:p1", "tab_id": "w1:t1", "agent": "codex" },
             { "pane_id": "w1:p4", "tab_id": "w1:t1" },
             { "pane_id": "w1:p5", "tab_id": "w1:t1" },
-            { "pane_id": "w1:p6", "tab_id": "w1:t1" }
+            { "pane_id": "w1:p6", "tab_id": "w1:t1" },
+            { "pane_id": "w1:p7", "tab_id": "w1:t1" }
         ]})),
         info(9, 11, &[(11, &["proqi", "--resume", SESSION])]),
         info(5, 5, &[(5, &["-zsh"])]),
         rejected("pane_not_found"),
+        info(
+            7,
+            7,
+            &[(7, &["sh", "/plugins/proqi/herdr-plugin/proqi.sh", "board"])],
+        ),
     ]);
     let panes = host(&runner, &plugin_context())
         .tab_panes("w1:t1")
         .expect("panes");
     let present: Vec<_> = panes.iter().map(|pane| pane.proqi_presence).collect();
-    assert_eq!(present, vec![false, true, false, false]);
+    assert_eq!(present, vec![false, true, false, false, true]);
     let queried: Vec<_> = runner
         .requests()
         .into_iter()
@@ -144,7 +150,7 @@ fn a_proqi_without_a_display_lease_is_recognized_by_its_process_only() {
         .collect();
     assert_eq!(
         queried,
-        vec!["w1:p4", "w1:p5", "w1:p6"],
+        vec!["w1:p4", "w1:p5", "w1:p6", "w1:p7"],
         "agents are never probed"
     );
 }
@@ -160,10 +166,25 @@ fn info(shell: u32, group: u32, processes: &[(u32, &[&str])]) -> ProcessOutput {
     }}))
 }
 
+fn assert_classified(cases: Vec<(ProcessOutput, Option<PaneProcess>)>) {
+    for (response, expected) in cases {
+        let runner = ScriptedRunner::with(vec![response]);
+        let process = host(&runner, &plugin_context())
+            .process("w1:p3")
+            .expect("process");
+        assert_eq!(process, expected);
+        assert_eq!(
+            runner.requests(),
+            vec![vec!["pane", "process-info", "--pane", "w1:p3"]]
+        );
+    }
+}
+
 #[test]
-fn process_classification_distinguishes_proqi_launcher_idle_shell_and_other_work() {
+fn process_classification_recognizes_proqi_and_both_launcher_phases() {
     let session = SESSION.parse().expect("session");
-    let cases: Vec<(ProcessOutput, Option<PaneProcess>)> = vec![
+    let launcher = "exec sh \"/plugins/proqi/herdr-plugin/proqi.sh\" board";
+    assert_classified(vec![
         (
             info(
                 7,
@@ -199,20 +220,15 @@ fn process_classification_distinguishes_proqi_launcher_idle_shell_and_other_work
             Some(PaneProcess::Launcher),
         ),
         (
-            info(
-                7,
-                7,
-                &[(
-                    7,
-                    &[
-                        "sh",
-                        "-c",
-                        "exec sh \"/plugins/proqi/herdr-plugin/proqi.sh\" board",
-                    ],
-                )],
-            ),
+            info(7, 7, &[(7, &["sh", "-c", launcher])]),
             Some(PaneProcess::Launcher),
         ),
+    ]);
+}
+
+#[test]
+fn process_classification_separates_idle_shells_from_other_work() {
+    assert_classified(vec![
         (
             info(5, 8, &[(8, &["vim", "herdr-plugin/proqi.sh"])]),
             Some(PaneProcess::Other),
@@ -232,18 +248,7 @@ fn process_classification_distinguishes_proqi_launcher_idle_shell_and_other_work
         ),
         (info(5, 5, &[(5, &["python3"])]), Some(PaneProcess::Other)),
         (rejected("pane_not_found"), None),
-    ];
-    for (response, expected) in cases {
-        let runner = ScriptedRunner::with(vec![response]);
-        let process = host(&runner, &plugin_context())
-            .process("w1:p3")
-            .expect("process");
-        assert_eq!(process, expected);
-        assert_eq!(
-            runner.requests(),
-            vec![vec!["pane", "process-info", "--pane", "w1:p3"]]
-        );
-    }
+    ]);
 }
 
 #[test]

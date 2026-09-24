@@ -93,7 +93,9 @@ the pane open; toggle again or quit Proqi with its own Quit action.
 
 If the plugin cannot write its private state after opening Proqi, it reports
 the error and leaves that Proqi open rather than risk your edits. Later toggles
-focus it but never close it; quit it with Proqi's own Quit action.
+focus it but never close it; quit it with Proqi's own Quit action. An empty
+shell left over from a Herdr restart also stays open in that case until a later
+toggle replaces it or you close it.
 
 ## Limitations
 

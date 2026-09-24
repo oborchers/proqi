@@ -204,14 +204,16 @@ impl<R: ProcessRunner> CompanionHost for HerdrCompanionHost<R> {
             .filter(|pane| pane.tab_id == tab_id)
             .map(PaneObservation::from)
             .collect();
-        // A Proqi that cannot reach Herdr publishes no display lease. Recognize
-        // it by its foreground process so the toggle focuses it instead of
-        // opening a second one. Recognition never makes the pane closable.
+        // A Proqi that cannot reach Herdr, or is still being launched, publishes
+        // no display lease. Recognize it by its foreground process so the toggle
+        // focuses it instead of opening a second one. Recognition never makes the pane closable.
         for pane in panes
             .iter_mut()
             .filter(|pane| !pane.proqi_presence && !pane.agent)
         {
-            if let Some(PaneProcess::Proqi { .. }) = self.process(&pane.pane_id)? {
+            if let Some(PaneProcess::Proqi { .. } | PaneProcess::Launcher) =
+                self.process(&pane.pane_id)?
+            {
                 pane.proqi_presence = true;
             }
         }
