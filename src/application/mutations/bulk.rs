@@ -6,6 +6,63 @@ use super::{
     ThoughtPresentation, Timestamp,
 };
 use crate::domain::Separator;
+use crate::ports::transfer::TransferItem;
+
+pub(in crate::application) fn create_owned_thoughts(
+    state: &mut AppState,
+    operation_id: OperationId,
+    items: &[TransferItem],
+    at: Timestamp,
+) -> ApplicationResult<Vec<Effect>> {
+    if items.is_empty()
+        || items.iter().enumerate().any(|(index, item)| {
+            item.source_thought_id == item.destination_thought_id
+                || items[..index].iter().any(|previous| {
+                    previous.source_thought_id == item.source_thought_id
+                        || previous.destination_thought_id == item.destination_thought_id
+                })
+        })
+    {
+        return Err(ApplicationError::InvalidState);
+    }
+    let mut counters = state.board.attachment_counters();
+    let start = state.board.live_items().len();
+    let mut additions = Vec::new();
+    let mut removals = Vec::new();
+    for (index, item) in items.iter().enumerate() {
+        let mut annotations = item.annotations.clone();
+        crate::domain::validate_annotations(&item.content, &annotations)?;
+        crate::domain::renew_attachment_occurrences(&mut annotations);
+        counters.assign(&mut annotations)?;
+        let position = ThoughtPosition::new(super::position_u32(start + index)?);
+        let mut thought = Thought::new(
+            item.destination_thought_id,
+            state.board.session.id,
+            item.content.clone(),
+            position,
+            at,
+        );
+        thought.set_annotations(annotations)?;
+        thought.set_name(item.name.clone());
+        additions.push(BoardMutation::AddThought { thought });
+        removals.push(BoardMutation::SetDeletion {
+            thought_id: item.destination_thought_id,
+            deleted_at: Some(at),
+            position,
+        });
+    }
+    removals.reverse();
+    let operation = batch_operation(
+        state,
+        operation_id,
+        BoardOperationKind::Create,
+        additions,
+        removals,
+        at,
+    )?;
+    state.record_board_operation(&operation)?;
+    Ok(vec![Effect::CommitBoardOperation(operation)])
+}
 
 pub(in crate::application) fn delete_thoughts(
     state: &mut AppState,

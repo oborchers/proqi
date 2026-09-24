@@ -17,6 +17,8 @@ use rusqlite::Connection;
 use super::{DatabaseFixture, one_effect, persist_effect, session_state, test_path};
 
 const DOWNGRADE_TO_18: &str = r"
+DROP TABLE IF EXISTS transfer_source_claims;
+DROP TABLE IF EXISTS transfer_attempts;
 ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
 DELETE FROM migration_history WHERE version >= 19;
 UPDATE schema_meta SET schema_version = 18, storage_protocol = 17;
@@ -106,6 +108,11 @@ fn conflicting_semantic_receipt_column_rolls_back_and_exact_retry_recovers() {
     let fixture = DatabaseFixture::new();
     drop(fixture.open());
     let connection = Connection::open(&fixture.config.database_path).expect("current database");
+    connection
+        .execute_batch(
+            "DROP TABLE IF EXISTS transfer_source_claims; DROP TABLE IF EXISTS transfer_attempts;",
+        )
+        .expect("remove later transfer schema");
     connection
         .execute("DELETE FROM migration_history WHERE version >= 19", [])
         .expect("remove current migration marker");

@@ -63,7 +63,7 @@ fn selected_thoughts_copy_and_delete_in_board_order_as_one_undo_step() {
 }
 
 #[test]
-fn selected_fully_visible_thoughts_collapse_as_one_undo_step_but_cannot_reorder() {
+fn selected_fully_visible_thoughts_collapse_as_one_undo_step_and_edge_reorder_is_noop() {
     let mut fixture = Fixture::new();
     for content in ["first", "second"] {
         fixture.paste(content);

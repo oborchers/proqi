@@ -51,7 +51,8 @@ pub(super) fn enqueue_effects(
             | Effect::StoreIntegrationContext { .. }
             | Effect::CommitBrowserOperation(_)
             | Effect::DiscoverTransferSessions { .. }
-            | Effect::TransferThought(_)
+            | Effect::TransferThoughts(_)
+            | Effect::FinishTransfer { .. }
             | Effect::PrepareSubmission(_)
             | Effect::MarkSubmissionSending { .. }
             | Effect::FinishSubmission { .. } => {
@@ -146,7 +147,16 @@ fn enqueue_persistence_effect(
         Effect::DiscoverTransferSessions { generation } => lanes
             .persistence
             .discover_transfer_sessions(app.state.board.session.id, generation)?,
-        Effect::TransferThought(request) => lanes.persistence.transfer_thought(request)?,
+        Effect::TransferThoughts(request) => lanes.persistence.transfer_thoughts(request)?,
+        Effect::FinishTransfer {
+            request,
+            removal,
+            reason,
+        } => {
+            lanes
+                .persistence
+                .finish_transfer(request, removal, reason)?;
+        }
         Effect::PrepareSubmission(attempt) => {
             crate::adapters::diagnostics::record(
                 crate::adapters::diagnostics::SafeEvent::Submission {
@@ -248,10 +258,11 @@ fn complete_result(
             pending.persistence = pending.persistence.saturating_sub(1);
             app.complete_transfer_discovery(generation, result);
         }
-        PersistenceResult::ThoughtTransferred { request, result } => {
-            pending.persistence = pending.persistence.saturating_sub(1);
-            let effects = app.complete_session_transfer(&request, result, ids, clock);
-            enqueue_effects(app, lanes, effects, pending)?;
+        result @ PersistenceResult::ThoughtsTransferred { .. } => {
+            complete_transferred(app, lanes, pending, ids, clock, result)?;
+        }
+        result @ PersistenceResult::TransferFinished { .. } => {
+            complete_transfer_finished(app, lanes, pending, result)?;
         }
         PersistenceResult::Lookup { request_id, result } => {
             pending.persistence = pending.persistence.saturating_sub(1);
@@ -285,6 +296,61 @@ fn complete_result(
     }
     owner_control::complete_sync(pending);
     Ok(true)
+}
+
+fn complete_transferred(
+    app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
+    pending: &mut PendingWork,
+    ids: &mut impl crate::ports::environment::IdGenerator,
+    clock: &impl crate::ports::environment::Clock,
+    result: PersistenceResult,
+) -> Result<(), TerminalError> {
+    pending.persistence = pending.persistence.saturating_sub(1);
+    let effects = match result {
+        PersistenceResult::ThoughtsTransferred { request, result } => {
+            app.complete_session_transfer_batch(&request, result, ids, clock)
+        }
+        _ => return Ok(()),
+    };
+    enqueue_effects(app, lanes, effects, pending)
+}
+
+fn complete_transfer_finished(
+    app: &mut BoardApp,
+    lanes: &WorkerLanes<'_>,
+    pending: &mut PendingWork,
+    result: PersistenceResult,
+) -> Result<(), TerminalError> {
+    let PersistenceResult::TransferFinished {
+        operation_id,
+        sequence,
+        result,
+        retried,
+    } = result
+    else {
+        return Ok(());
+    };
+    if !retried {
+        pending.persistence = pending.persistence.saturating_sub(1);
+    }
+    if let Some(sequence) = sequence {
+        if result.is_ok() {
+            app.complete_transfer_journal(operation_id);
+        }
+        let receipt = result.and_then(|receipt| {
+            receipt
+                .ok_or_else(|| StoreError::Integrity("transfer removal lacked receipt".to_owned()))
+        });
+        let application_result = complete_sequence(app, pending, sequence, receipt);
+        let effects = app.acknowledge_persistence_result(sequence, application_result);
+        enqueue_effects(app, lanes, effects, pending)?;
+    } else if let Err(error) = result {
+        app.set_warning(format!("transfer journal could not be completed: {error}"));
+    } else {
+        app.complete_transfer_journal(operation_id);
+    }
+    Ok(())
 }
 
 fn complete_submission_finished(

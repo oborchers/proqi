@@ -32,6 +32,10 @@ mod active_transfer_failures;
 mod active_transfer_names;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/inactive_tui_transfer.rs"]
+mod inactive_tui_transfer;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/bottom_boundary.rs"]
 mod bottom_boundary;
 
@@ -114,6 +118,9 @@ mod recovery;
 #[cfg(target_os = "macos")]
 #[path = "pty/reorder.rs"]
 mod reorder;
+#[cfg(target_os = "macos")]
+#[path = "pty/selected_actions.rs"]
+mod selected_actions;
 
 #[cfg(target_os = "macos")]
 #[path = "pty/sentence_deletion.rs"]

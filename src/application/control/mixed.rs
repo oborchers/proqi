@@ -20,6 +20,37 @@ fn board_operation(
     }
 }
 
+pub(super) fn matches_preserve_add_many(
+    existing: &StoredOperationRequest,
+    session_id: SessionId,
+    mutation: &ControlMutation,
+) -> bool {
+    let ControlMutation::PreserveAddMany { items, .. } = mutation else {
+        return false;
+    };
+    let Some(operation) = board_operation(existing, session_id) else {
+        return false;
+    };
+    let BoardMutation::Batch { mutations } = &operation.forward else {
+        return false;
+    };
+    operation.kind == BoardOperationKind::Create
+        && mutations.len() == items.len()
+        && mutations.iter().zip(items).all(|(mutation, item)| {
+            let BoardMutation::AddThought { thought } = mutation else {
+                return false;
+            };
+            let mut copied_annotations = thought.annotations.clone();
+            crate::domain::renew_attachment_occurrences(&mut copied_annotations);
+            let mut source_annotations = item.annotations.clone();
+            crate::domain::renew_attachment_occurrences(&mut source_annotations);
+            thought.id == item.destination_thought_id
+                && thought.content == item.content
+                && thought.name == item.name
+                && copied_annotations == source_annotations
+        })
+}
+
 pub(super) fn matches_insert_separator(
     existing: &StoredOperationRequest,
     session_id: SessionId,

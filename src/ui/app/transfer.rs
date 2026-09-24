@@ -1,18 +1,18 @@
 //! Searchable cross-session destination picker and completion handling.
 
 use crate::{
-    application::{Action, Effect},
-    domain::BoardOperationKind,
+    application::Effect,
+    domain::ThoughtId,
     ports::{
         editor::CursorMovement,
         environment::{Clock, IdGenerator},
         store::{SessionHit, StoreError},
-        transfer::SessionTransferRequest,
     },
 };
 
 use super::{BoardApp, UiInput, UiKey, pending_types::EditFlush, query::QueryEditor};
 
+mod batch;
 #[path = "transfer/view.rs"]
 mod view;
 use view::SessionHitLabel as _;
@@ -23,12 +23,35 @@ pub(super) struct TransferState {
     sessions: Vec<SessionHit>,
     selected: usize,
     scroll: usize,
-    source_thought_id: crate::domain::ThoughtId,
+    source_thought_ids: Vec<crate::domain::ThoughtId>,
     remove_source: bool,
     loading: bool,
 }
 
 impl BoardApp {
+    pub(super) fn transfer_action_ready(&self, ids: &[ThoughtId], remove_source: bool) -> bool {
+        if ids.is_empty() || self.state.deferred_board_operation_pending() {
+            return false;
+        }
+        let overlapping = self
+            .pending_transfer_batches
+            .values()
+            .filter(|request| {
+                request
+                    .items
+                    .iter()
+                    .any(|item| ids.contains(&item.source_thought_id))
+            })
+            .collect::<Vec<_>>();
+        if overlapping.is_empty() {
+            return ids.iter().all(|id| self.thought_mutable(*id));
+        }
+        matches!(overlapping.as_slice(), [request]
+            if request.remove_source == remove_source
+                && request.items.iter().map(|item| item.source_thought_id).eq(ids.iter().copied()))
+            && ids.iter().all(|id| !self.state.thought_locked(*id))
+    }
+
     pub(super) fn begin_session_transfer(
         &mut self,
         remove_source: bool,
@@ -36,10 +59,15 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.deactivate_range_latch();
-        let Some(source_thought_id) = self.active_thought_id() else {
+        let source_thought_ids = self.action_thought_ids();
+        if source_thought_ids.is_empty() {
             self.set_warning("select a thought before sending it to another session");
             return Vec::new();
-        };
+        }
+        if !self.transfer_action_ready(&source_thought_ids, remove_source) {
+            self.set_warning("selected thought has an operation in progress");
+            return Vec::new();
+        }
         let mut effects = match self.flush_edit_boundary(ids, clock) {
             EditFlush::Complete(effects) => effects,
             EditFlush::Blocked(effects) => return effects,
@@ -52,7 +80,7 @@ impl BoardApp {
             sessions: Vec::new(),
             selected: 0,
             scroll: 0,
-            source_thought_id,
+            source_thought_ids,
             remove_source,
             loading: true,
         });
@@ -85,69 +113,6 @@ impl BoardApp {
             Err(error) => {
                 self.transfer = None;
                 self.set_error(format!("could not list destination sessions: {error}"));
-            }
-        }
-    }
-
-    pub(crate) fn complete_session_transfer(
-        &mut self,
-        request: &SessionTransferRequest,
-        result: Result<crate::application::ThoughtMutation, String>,
-        ids: &mut impl IdGenerator,
-        clock: &impl Clock,
-    ) -> Vec<Effect> {
-        let pending_source = request
-            .remove_source
-            .then(|| self.pending_transfer_removals.remove(&request.operation_id))
-            .flatten();
-        match result {
-            Err(error) => {
-                self.set_error(format!("thought was not sent: {error}"));
-                Vec::new()
-            }
-            Ok(_) if !request.remove_source => {
-                self.set_success("thought sent to the destination session");
-                Vec::new()
-            }
-            Ok(_) if pending_source != Some(request.source_thought_id) => {
-                self.set_warning("thought was sent, but source removal was no longer pending");
-                Vec::new()
-            }
-            Ok(_)
-                if self
-                    .state
-                    .board
-                    .thought(request.source_thought_id)
-                    .is_none_or(|thought| !thought.is_live()) =>
-            {
-                self.set_info("thought sent; source was already removed");
-                Vec::new()
-            }
-            Ok(_)
-                if self
-                    .state
-                    .board
-                    .thought(request.source_thought_id)
-                    .is_some_and(|thought| {
-                        thought.content != request.content
-                            || thought.annotations != request.annotations
-                            || thought.name != request.name
-                    }) =>
-            {
-                self.set_info("thought sent; source changed and was kept");
-                Vec::new()
-            }
-            Ok(_) => {
-                self.set_info("thought sent; removing the source");
-                self.reduce_with_empty_transition(
-                    Action::DeleteThought {
-                        operation_id: ids.operation_id(),
-                        thought_id: request.source_thought_id,
-                        kind: BoardOperationKind::TransferAndRemove,
-                        at: clock.now(),
-                    },
-                    crate::application::EmptyBoardTransition::ComposeAfterLocalRemoval,
-                )
             }
         }
     }
@@ -277,27 +242,7 @@ impl BoardApp {
         if self.transfer.as_ref().is_some_and(|state| state.loading) {
             return Vec::new();
         }
-        let request = self.transfer.as_ref().and_then(|state| {
-            let destination = state.matches().get(state.selected)?.id;
-            let thought = self.state.board.thought(state.source_thought_id)?;
-            Some(SessionTransferRequest {
-                destination_session_id: destination,
-                source_thought_id: thought.id,
-                operation_id: ids.operation_id(),
-                content: thought.content.clone(),
-                annotations: thought.annotations.clone(),
-                name: thought.name.clone(),
-                remove_source: state.remove_source,
-            })
-        });
-        self.transfer = None;
-        request.map_or_else(Vec::new, |request| {
-            if request.remove_source {
-                self.pending_transfer_removals
-                    .insert(request.operation_id, request.source_thought_id);
-            }
-            vec![Effect::TransferThought(request)]
-        })
+        self.choose_transfer_batch(ids)
     }
 
     fn update_transfer_query(&mut self, update: impl FnOnce(&mut QueryEditor)) -> Vec<Effect> {

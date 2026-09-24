@@ -46,10 +46,12 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         | Action::InsertSeparator { .. }
         | Action::CreateComposeThought { .. }
         | Action::CreateOwnedThought(_)
+        | Action::CreateOwnedThoughts { .. }
         | Action::PasteAsThought { .. }
         | Action::EditThought { .. }
         | Action::EditOwnedThought(_) => reduce_content(state, action),
         Action::ReflowThought(reflow) => super::mutations::transform::reflow_thought(state, reflow),
+        Action::ReflowThoughts(batch) => super::mutations::transform::reflow_thoughts(state, batch),
         Action::SplitThought { .. } | Action::ExtractThought { .. } => {
             reduce_content_transform(state, action)
         }
@@ -66,6 +68,7 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         | Action::MoveThought { .. }
         | Action::RenameThought { .. }
         | Action::MoveItem { .. }
+        | Action::MoveItems { .. }
         | Action::SetPresentation { .. }
         | Action::SetPresentationMany { .. }
         | Action::DuplicateThoughts { .. }
@@ -197,6 +200,11 @@ fn reduce_creation(state: &mut AppState, action: Action) -> ApplicationResult<Ve
             at,
         ),
         Action::CreateOwnedThought(creation) => create_owned_thought(state, creation),
+        Action::CreateOwnedThoughts {
+            operation_id,
+            items,
+            at,
+        } => super::mutations::bulk::create_owned_thoughts(state, operation_id, &items, at),
         Action::PasteAsThought {
             thought_id,
             operation_id,

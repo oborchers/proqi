@@ -6,7 +6,7 @@ mod separator;
 mod session_metadata;
 pub(super) mod transform;
 pub(super) use history::history_move;
-pub(super) use separator::{insert_separator, move_item};
+pub(super) use separator::{insert_separator, move_item, move_items};
 pub(super) use session_metadata::rename_session;
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};

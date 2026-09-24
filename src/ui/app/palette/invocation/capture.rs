@@ -1,7 +1,7 @@
 //! Capture one stable Commands context from the current application state.
 
 use crate::{
-    application::InteractionMode,
+    application::{InteractionMode, selected_move_steps},
     domain::{ContentAnnotationKind, ThoughtId},
 };
 
@@ -40,6 +40,18 @@ impl BoardApp {
         let live_thoughts = self.state.board.live_thoughts();
         let mutation = self.capture_mutation_context(&selected_ids, has_item);
         let selection_count = self.selection_len();
+        let ordered_items = self.live_item_ids();
+        let selected_items = self.selection.selected_in(&ordered_items);
+        let can_move = |delta| {
+            selected_move_steps(&ordered_items, &selected_items, delta).is_ok_and(|steps| {
+                !steps.is_empty()
+                    && selected_items
+                        .iter()
+                        .chain(steps.iter().map(|step| &step.item_id))
+                        .filter_map(|item| item.thought())
+                        .all(|id| self.thought_mutable(id))
+            })
+        };
         let selection_contiguous =
             selection_is_contiguous(self, &selected_ids, selected_thought_count);
         let merge_handoff = (selected_thought_count >= 2).then(|| {
@@ -80,6 +92,8 @@ impl BoardApp {
                 count: selection_count,
                 thought_count: selected_thought_count,
                 contiguous: selection_contiguous,
+                can_move_up: can_move(-1),
+                can_move_down: can_move(1),
                 editor_handoff: self.palette_selection_handoff.take(),
                 merge_handoff,
             },
@@ -113,15 +127,9 @@ impl BoardApp {
                 .iter()
                 .all(|thought| self.thought_mutable(thought.id))
                 .into(),
+            transfer_keep: self.transfer_action_ready(selected_ids, false).into(),
+            transfer_remove: self.transfer_action_ready(selected_ids, true).into(),
         }
-    }
-
-    fn thought_mutable(&self, thought_id: ThoughtId) -> bool {
-        !self.submission_locked(thought_id)
-            && !self
-                .pending_transfer_removals
-                .values()
-                .any(|pending| *pending == thought_id)
     }
 
     fn command_has_item(&self, has_thought: bool) -> bool {

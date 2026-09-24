@@ -38,6 +38,9 @@ enum FingerprintRequest {
         position: Option<u64>,
         preserve_owned_annotations: bool,
     },
+    PreserveAddMany {
+        items: Vec<(ThoughtId, ThoughtId, [u8; 32])>,
+    },
     RenameThought {
         thought_id: ThoughtId,
         name_digest: Option<[u8; 32]>,
@@ -119,6 +122,22 @@ fn canonical_request(mutation: &ControlMutation) -> Result<Option<FingerprintReq
         ControlMutation::Add { .. } | ControlMutation::PreserveAdd { .. } => {
             canonical_add(mutation)?
         }
+        ControlMutation::PreserveAddMany { items, .. } => FingerprintRequest::PreserveAddMany {
+            items: items
+                .iter()
+                .map(|item| {
+                    Ok((
+                        item.source_thought_id,
+                        item.destination_thought_id,
+                        thought_payload_digest_with_name(
+                            &item.content,
+                            &item.annotations,
+                            item.name.as_ref(),
+                        )?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, StoreError>>()?,
+        },
         ControlMutation::RenameThought {
             thought_id, name, ..
         } => FingerprintRequest::RenameThought {

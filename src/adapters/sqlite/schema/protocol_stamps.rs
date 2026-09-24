@@ -27,7 +27,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
 // Register session-administration request receipts, including creation
 // receipts that must survive a permanent prune, so an older writer cannot
 // discard them.
-pub(in crate::adapters::sqlite) const MIGRATION_20: &str = r"
-UPDATE schema_meta SET schema_version = 20, storage_protocol = 19;
-INSERT INTO migration_history(version, applied_at) VALUES (20, 0);
+pub(in crate::adapters::sqlite) const MIGRATION_21: &str = r"
+UPDATE schema_meta SET schema_version = 21, storage_protocol = 20;
+INSERT INTO migration_history(version, applied_at) VALUES (21, 0);
 ";

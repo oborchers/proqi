@@ -18,6 +18,7 @@ mod recovery;
 mod reducer;
 mod rehydrate;
 mod release_highlights;
+mod reorder;
 mod service;
 #[cfg(test)]
 mod test_support;
@@ -26,7 +27,9 @@ mod update;
 mod update_coordination;
 
 pub use action::Action;
-pub(crate) use action::{OwnedThoughtCreation, OwnedThoughtEdit, OwnedThoughtReflow};
+pub(crate) use action::{
+    OwnedThoughtCreation, OwnedThoughtEdit, OwnedThoughtReflow, OwnedThoughtReflowBatch,
+};
 pub use admission::{PendingMutationIntent, PendingMutationIntents};
 pub use attachments::{
     AttachmentAccessibilityState, AttachmentPreflightOutcome, AttachmentPresentationState,
@@ -49,6 +52,7 @@ pub(crate) use prompt::{
 pub use recovery::capture_recovery;
 pub use reducer::reduce;
 pub use release_highlights::{ReleaseHighlightPresentation, ReleaseHighlightSelection};
+pub(crate) use reorder::selected_move_steps;
 pub(crate) use service::derived_duplicate_item_ids;
 pub use service::{
     BoardItemMutation, BrowserHistoryMovement, LeasedSession, NamedSession,

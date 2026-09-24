@@ -54,8 +54,10 @@ impl Action {
             Self::CreateThought { .. }
             | Self::InsertSeparator { .. }
             | Self::CreateOwnedThought(_)
+            | Self::CreateOwnedThoughts { .. }
             | Self::PasteAsThought { .. }
             | Self::ReflowThought(_)
+            | Self::ReflowThoughts(_)
             | Self::SplitThought { .. }
             | Self::ExtractThought { .. }
             | Self::MergeThoughts { .. }
@@ -66,6 +68,7 @@ impl Action {
             | Self::MoveThought { .. }
             | Self::RenameThought { .. }
             | Self::MoveItem { .. }
+            | Self::MoveItems { .. }
             | Self::SetPresentation { .. }
             | Self::SetPresentationMany { .. }
             | Self::DuplicateThoughts { .. }

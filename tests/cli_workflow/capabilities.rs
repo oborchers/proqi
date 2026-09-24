@@ -54,7 +54,7 @@ fn assert_capability_manifest(root: &std::path::Path) {
     let capabilities = success(root, &["capabilities"], None);
     assert_eq!(capabilities["cli_schema_version"], 1);
     assert_eq!(capabilities["active_session_control"], cfg!(unix));
-    assert_eq!(capabilities["control_protocol"], 11);
+    assert_eq!(capabilities["control_protocol"], 12);
     assert_eq!(capabilities["active_session_read_sync"], cfg!(unix));
     assert_eq!(capabilities["cross_session_transfer"], true);
     assert_eq!(capabilities["exact_thought_replacement"], true);

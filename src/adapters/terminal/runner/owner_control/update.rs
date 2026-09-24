@@ -65,6 +65,7 @@ pub(super) fn handle(
         }
         ControlMutation::Add { .. }
         | ControlMutation::PreserveAdd { .. }
+        | ControlMutation::PreserveAddMany { .. }
         | ControlMutation::RenameSession { .. }
         | ControlMutation::RenameThought { .. }
         | ControlMutation::InsertSeparator { .. }

@@ -45,7 +45,7 @@ surface.
 | Anchored range selection | Shipped | Extend, reverse, shrink, page, Shift-click, or use a modifier-free latch. | [Selection](../guides/selection.md#select-a-contiguous-range) |
 | Select all | Shipped | Board selection and editor text selection remain context-specific. | [Selection](../guides/selection.md#toggle-an-arbitrary-group) |
 | Group copy, cut, delete, duplicate, collapse, and delivery | Shipped | Each action declares how thoughts and separators participate. | [Selection](../guides/selection.md#what-group-actions-include) |
-| Single-item reorder | Shipped | Keyboard wraps; drag is positional; selected-block reorder is unavailable. | [Selection](../guides/selection.md#reordering-stays-single-item) |
+| Selected Board reorder | Shipped | Each selected run exchanges with one neighbor without wrapping; single-item keyboard movement still wraps. | [Selection](../guides/selection.md#reorder-selected-items) |
 | Thought names | Shipped | Optional names organize without entering copied or delivered bodies. | [Sessions and recovery](../guides/organization-and-recovery.md) |
 | Session names | Shipped | Set, clear, search, and resume by unique name. | [Sessions and recovery](../guides/organization-and-recovery.md) |
 | Payload-free separators | Shipped | Persistent structural items can move and participate in history without becoming prompt content. | [Transform and organize](../guides/edit-and-transform.md#add-visual-structure-without-payload) |
@@ -87,7 +87,7 @@ surface.
 | Submit and keep | Conditional on Herdr | Deliver one ordered prompt and retain every source. | [Agent delivery](../guides/agent-delivery.md#understand-remove-and-keep) |
 | Submit and remove | Conditional on Herdr | Remove unchanged sources only after a matching accepted receipt is durably journaled. | [Agent delivery](../guides/agent-delivery.md#understand-remove-and-keep) |
 | Submit complete board | Conditional on Herdr | Deliver all live thought bodies in canonical order, keeping or removing together. | [Agent delivery](../guides/agent-delivery.md) |
-| Cross-session transfer | Shipped | Copy one thought to another Proqi session, optionally removing after destination durability. | [Commands](commands.md#delivery-and-transfer) |
+| Cross-session transfer | Shipped | Copy selected thoughts as one durable destination cohort, optionally removing all sources after acceptance. | [Commands](commands.md#delivery-and-transfer) |
 | Pane presentation identity | Conditional on Herdr | Advertise bounded display-only Proqi identity without impersonating an agent. | [Agent delivery](../guides/agent-delivery.md) |
 | Conversation reading or response waiting | Not shipped | Proqi deliberately does neither and never falls back to raw key injection. | [Agent delivery](../guides/agent-delivery.md#choose-copy-or-direct-delivery) |
 

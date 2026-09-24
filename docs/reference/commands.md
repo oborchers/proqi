@@ -26,10 +26,10 @@ available actions below.
 | **Cut thought text** | Copies, then removes thoughts after clipboard success. | Separators remain on the Board. |
 | **Paste exactly** | Inserts clipboard content without cleanup. | Creates a thought on Board or edits at the cursor. |
 | **Paste and clean up** | Applies explicit safe spacing cleanup while pasting. | Protected structures stay exact. |
-| **Clean up spacing** | Cleans the complete focused or active thought. | A no-op creates no history entry. |
+| **Clean up spacing** | Cleans eligible selected thoughts in Board, or the focused or active thought. | Separators stay untouched. An effective Board selection is one history entry; a no-op creates none. |
 | **Duplicate thought or selection** | Duplicates focused or selected items below the source. | Duplicated results become selected. |
-| **Move item up** | Reorders the focused item upward. | Keyboard movement wraps at the edge. |
-| **Move item down** | Reorders the focused item downward. | Selected-block reorder is unavailable. |
+| **Move item up** | Moves selected Board items up one unselected neighbor, or the focused item. | Selected edge runs stay put; a single item wraps. |
+| **Move item down** | Moves selected Board items down one unselected neighbor, or the focused item. | Selected edge runs stay put; a single item wraps. |
 | **Go to first thought** | Moves Board focus to the first live thought. | Does not select it. |
 | **Go to last thought** | Moves Board focus to the last live thought. | Does not select it. |
 | **Expand or collapse thought** | Toggles durable compact presentation. | Canonical text does not change. |
@@ -70,8 +70,8 @@ available actions below.
 | **Submit to agent...** | Searches verified agents on the current Herdr server. | Does not address arbitrary panes or remote servers. |
 | **Submit all** | Delivers every live thought and removes sources after acceptance. | Empty, failed, or ambiguous delivery preserves the Board. |
 | **Submit all and keep** | Delivers every live thought and retains the Board. | Separators and names are omitted from payload. |
-| **Send to another Proqi session** | Copies one thought into another durable Proqi session. | Destination can be an ID or unique name. |
-| **Send to another Proqi session and remove thought** | Copies, then removes source after destination durability. | Destination copy is not undone with source removal. |
+| **Send to another Proqi session** | Copies eligible selected thoughts in order into another durable Proqi session. | The selected destination cohort commits as one unit; separators stay in the source. |
+| **Send to another Proqi session and remove thought** | Copies the complete selected cohort, then removes its sources after destination durability. | Source removal is one undoable unit; undo leaves destination copies intact. |
 | **Refresh adjacent agents** | Rediscovers eligible Herdr targets. | Does not send a prompt. |
 
 ## Sessions

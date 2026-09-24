@@ -11,7 +11,7 @@ use crate::{
         invocation::{InvocationDiscoveryRequest, InvocationReferenceDiscoveryRequest},
         recovery::RecoveryDocument,
         store::{OperationBatch, SubmissionAttempt, SubmissionOutcome},
-        transfer::SessionTransferRequest,
+        transfer::SessionTransferBatchRequest,
     },
 };
 
@@ -35,8 +35,17 @@ pub enum Effect {
         /// Picker generation used to discard a completion from an earlier owner.
         generation: u64,
     },
-    /// Copy one exact thought to another session before optional source removal.
-    TransferThought(SessionTransferRequest),
+    /// Deliver one thought cohort as one durable destination operation.
+    TransferThoughts(SessionTransferBatchRequest),
+    /// Complete a selected transfer journal, atomically committing source removal when present.
+    FinishTransfer {
+        /// Exact prepared cohort.
+        request: SessionTransferBatchRequest,
+        /// Exact source removal, if the accepted cohort can be removed.
+        removal: Option<BoardOperation>,
+        /// Stable completion classification.
+        reason: &'static str,
+    },
     /// Persist one installation-wide Browser administration operation.
     CommitBrowserOperation(crate::domain::BrowserOperation),
     /// Discover verified adjacent agents without blocking the reducer lane.

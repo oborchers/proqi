@@ -79,7 +79,9 @@ impl Fixture {
         let connection = self.connection();
         connection
             .execute_batch(
-                "ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
+                "DROP TABLE transfer_source_claims;
+            DROP TABLE transfer_attempts;
+            ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
             DROP INDEX separators_session;
             DROP INDEX separators_live_position;
             DROP TABLE separators;

@@ -183,7 +183,8 @@ pub struct BoardApp {
     deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     preflight_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
-    pending_transfer_removals: BTreeMap<OperationId, ThoughtId>,
+    pending_transfer_batches:
+        BTreeMap<OperationId, crate::ports::transfer::SessionTransferBatchRequest>,
     screenshot: screenshot::ScreenshotInbox,
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
@@ -206,7 +207,6 @@ impl BoardApp {
     pub fn new(state: AppState, editor_factory: impl EditorFactory + 'static) -> Self {
         Self::with_settings(state, UiSettings::default(), editor_factory)
     }
-
     /// Construct a board with validated user settings.
     #[must_use]
     pub fn with_settings(
@@ -216,7 +216,6 @@ impl BoardApp {
     ) -> Self {
         Self::with_settings_and_cwd(state, settings, PathBuf::new(), editor_factory)
     }
-
     /// Construct a board with validated settings and an explicit discovery cwd.
     #[must_use]
     pub fn with_settings_and_cwd(
@@ -226,7 +225,6 @@ impl BoardApp {
         editor_factory: impl EditorFactory + 'static,
     ) -> Self {
         let footer_chrome_visibility = FooterChromeVisibility::from_hidden(settings.footer_hidden);
-        let insertion_focus = InsertionFocus::Inactive;
         let editor_factory: Box<dyn EditorFactory> = Box::new(editor_factory);
         let editor = if matches!(state.mode, InteractionMode::Compose) {
             Some((EditorOwner::Compose, editor_factory.create("")))
@@ -259,7 +257,7 @@ impl BoardApp {
             overlay_activation: None,
             hovered: None,
             pointer_position: None,
-            insertion_focus,
+            insertion_focus: InsertionFocus::Inactive,
             insertion_confirmation: InsertionConfirmation::Idle,
             edit_boundary: None,
             palette_selection_handoff: None,
@@ -289,7 +287,7 @@ impl BoardApp {
             deferred_submissions: BTreeMap::new(),
             preflight_submissions: BTreeMap::new(),
             pending_submissions: BTreeMap::new(),
-            pending_transfer_removals: BTreeMap::new(),
+            pending_transfer_batches: BTreeMap::new(),
             screenshot: screenshot::ScreenshotInbox::default(),
             update_barrier: None,
             update_restart: None,
@@ -316,7 +314,6 @@ impl BoardApp {
     ) -> Vec<Effect> {
         self.handle_routed(UiInput::from(input), ids, clock)
     }
-
     fn handle_routed(
         &mut self,
         input: UiInput,
