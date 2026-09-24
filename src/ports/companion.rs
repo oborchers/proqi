@@ -33,7 +33,7 @@ pub struct PaneObservation {
     pub focused: bool,
     /// Whether the host recognizes a coding agent in this pane.
     pub agent: bool,
-    /// Whether a running Proqi currently publishes its display lease here.
+    /// Whether a running Proqi is present, by its display lease or foreground process.
     pub proqi_presence: bool,
     /// Persisted pane label, when one exists.
     pub label: Option<String>,

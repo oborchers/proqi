@@ -118,6 +118,37 @@ fn tab_panes_keep_only_the_invoking_tab_and_detect_the_proqi_lease() {
     assert_eq!(runner.requests(), vec![vec!["pane", "list"]]);
 }
 
+#[test]
+fn a_proqi_without_a_display_lease_is_recognized_by_its_process_only() {
+    let runner = ScriptedRunner::with(vec![
+        ok(&json!({ "type": "pane_list", "panes": [
+            { "pane_id": "w1:p1", "tab_id": "w1:t1", "agent": "codex" },
+            { "pane_id": "w1:p4", "tab_id": "w1:t1" },
+            { "pane_id": "w1:p5", "tab_id": "w1:t1" },
+            { "pane_id": "w1:p6", "tab_id": "w1:t1" }
+        ]})),
+        info(9, 11, &[(11, &["proqi", "--resume", SESSION])]),
+        info(5, 5, &[(5, &["-zsh"])]),
+        rejected("pane_not_found"),
+    ]);
+    let panes = host(&runner, &plugin_context())
+        .tab_panes("w1:t1")
+        .expect("panes");
+    let present: Vec<_> = panes.iter().map(|pane| pane.proqi_presence).collect();
+    assert_eq!(present, vec![false, true, false, false]);
+    let queried: Vec<_> = runner
+        .requests()
+        .into_iter()
+        .skip(1)
+        .map(|request| request[3].clone())
+        .collect();
+    assert_eq!(
+        queried,
+        vec!["w1:p4", "w1:p5", "w1:p6"],
+        "agents are never probed"
+    );
+}
+
 fn info(shell: u32, group: u32, processes: &[(u32, &[&str])]) -> ProcessOutput {
     let processes: Vec<_> = processes
         .iter()

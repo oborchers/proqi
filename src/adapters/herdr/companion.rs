@@ -196,12 +196,24 @@ impl<R: ProcessRunner> CompanionHost for HerdrCompanionHost<R> {
 
     fn tab_panes(&mut self, tab_id: &str) -> Result<Vec<PaneObservation>, CompanionError> {
         let body: wire::PaneListBody = self.json(&["pane", "list"], QUERY_TIMEOUT)?;
-        Ok(body
+        let mut panes: Vec<PaneObservation> = body
             .panes
             .into_iter()
             .filter(|pane| pane.tab_id == tab_id)
             .map(PaneObservation::from)
-            .collect())
+            .collect();
+        // A Proqi that cannot reach Herdr publishes no display lease. Recognize
+        // it by its foreground process so the toggle focuses it instead of
+        // opening a second one. Recognition never makes the pane closable.
+        for pane in panes
+            .iter_mut()
+            .filter(|pane| !pane.proqi_presence && !pane.agent)
+        {
+            if let Some(PaneProcess::Proqi { .. }) = self.process(&pane.pane_id)? {
+                pane.proqi_presence = true;
+            }
+        }
+        Ok(panes)
     }
 
     fn process(&mut self, pane_id: &str) -> Result<Option<PaneProcess>, CompanionError> {
