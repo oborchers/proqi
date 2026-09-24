@@ -28,6 +28,23 @@ ownership of scope, review, or merge authorization.
 4. Read every applicable `AGENTS.md`. Read repository product or architecture
    context when those instructions require it.
 
+## Release-note ownership
+
+- Implementation workers must not create, edit, delete, or rename release notes,
+  whether already published or prepared for a future release. This includes
+  `.github/release-notes/` and in-app release-note content in
+  `release-highlights.json`.
+- Release notes belong to the separate release process, not feature or bugfix
+  tickets. Keep user-visible changes and compatibility implications in the PR
+  and structured handoff so the release owner can prepare the notes later.
+- If repository guidance calls for release notes alongside a contract change,
+  update the required implementation and contract fixtures, but hand off the
+  release-note requirement without authoring notes. If a gate cannot pass
+  without release-note changes, report that boundary; do not bypass the gate.
+- Preserve release-note changes arriving through an ordinary `main` merge.
+  Do not revert them to manufacture an unchanged file; escalate any release-note
+  conflict to the coordinator instead of rewriting the notes.
+
 ## Learn and capture live state
 
 - Use `herdr --help` and the relevant `herdr worktree`, `herdr agent`, `herdr
@@ -36,11 +53,15 @@ ownership of scope, review, or merge authorization.
 - Capture the invoking workspace, tab, pane ID, repository root, current branch,
   tracked worktree state, remote, and authenticated GitHub identity. Use explicit
   IDs and `--no-focus`; never target another client's focused pane.
-- Fetch remote state when authorized by the requested PR workflow. Resolve and
-  record the exact base SHA. By default, require local `main` and `origin/main`
-  to agree. If they diverge or tracked changes would contaminate the lane, stop
-  and ask the invoking session to resolve the base. Do not disturb untracked
-  user files.
+- Fetch `origin/main` and use its exact resolved commit as the implementation
+  base unless the user explicitly requests another base. The invocation
+  authorizes this fetch and worktree creation without another confirmation.
+  Local `main` need not match `origin/main`; do not fast-forward it, stash,
+  commit, copy, or otherwise alter primary-checkout changes for dispatch.
+  Create the new worktree from the recorded commit, never from the dirty
+  working tree, and verify its HEAD and clean status before starting the worker.
+  Preserve all tracked and untracked user files. Stop only if the fetch fails,
+  the requested base cannot be resolved, or safe isolation cannot be established.
 - Derive a short unique topic branch, worktree label, and worker name from the
   ticket. Prefer `feature/`, `fix/`, or `docs/` according to the work.
 
@@ -68,14 +89,20 @@ ownership of scope, review, or merge authorization.
 
 1. Create one Herdr-managed Git worktree/workspace from the recorded base with
    `--no-focus`. Parse its workspace and root-pane IDs from returned JSON.
-2. Start one agent in that root pane. Use Codex by default. Use Claude only when
-   the user explicitly requests it or Codex is unavailable and Claude can honor
-   the same persistent-goal contract.
+2. Start one agent in that root pane with the invoking session's harness unless
+   the user explicitly selects another. Never silently fall back to a different
+   harness; if the selected one is unavailable or cannot honor the
+   persistent-goal contract, stop and report.
 3. Give the worker exactly one persistent goal covering the complete ticket.
-   Require the worker to create it through its supported goal mechanism before
-   editing and to keep it active until the pull request is ready. If the chosen
-   agent cannot maintain a goal, stop rather than silently replacing it with a
-   plain prompt.
+   The coordinator sets it, because Codex and Claude Code accept `/goal` only
+   as submitted input and an agent cannot invoke it from its own tools. After
+   startup and naming, read the worker's input line and confirm it is empty
+   (dimmed suggestion text counts as empty), then submit
+   `/goal <one-line ticket objective>` through `herdr agent prompt` without
+   `--wait`. Verify from `agent read` that the goal is active before submitting
+   the brief. The worker keeps it active until the pull request is ready and
+   must stop rather than edit if no goal is active. If the harness cannot
+   maintain a goal, stop rather than silently replacing it with a plain prompt.
 4. Include the invoking pane ID in the worker brief so the worker can report
    results and blockers through Herdr.
 
@@ -83,8 +110,12 @@ The brief must contain:
 
 - the task, acceptance criteria, out-of-scope boundaries, branch, base SHA, and
   worktree path;
+- the statement that the coordinator has already set the persistent goal, so
+  the worker verifies it is active instead of trying to create it;
 - the applicable repository instructions and required product or architecture
   reading;
+- the release-note ownership boundary above, explicitly forbidding both changes
+  to existing notes and creation of new notes;
 - an exploration-first phase covering relevant code, tests, contracts, history,
   and useful upstream or open-source implementations;
 - permission to use read-only research subagents when valuable, while keeping a
@@ -97,7 +128,8 @@ The brief must contain:
   use the Codex CLI; apply the equivalent native-versus-CLI rule to Claude Code;
 - focused and canonical test expectations, snapshot review, and the mandatory
   live Herdr stress checkpoint below, including real API, PTY, or visual paths
-  that the feature exposes, plus the prohibition against weakening gates;
+  that the feature exposes, plus the test-execution boundary below and the
+  prohibition against weakening gates;
 - permission boundaries for credentials and external actions: use only supplied
   credentials, never copy secrets into prompts, files, logs, commits, PRs, or
   comments, use the user's configured Git/GitHub identity, and state that this
@@ -142,8 +174,17 @@ blocked transition, keep the goal active and still report immediately.
   user work.
 - Run focused tests during development and every repository-required canonical
   gate before committing. Review all snapshot or golden-file diffs explicitly.
-- For live TUI, Herdr, harness, API, PTY, or visual qualification, the worker may
-  create disposable test tabs and panes inside its assigned Herdr workspace.
+- Run builds, code tests, automated PTY suites, linting, formatting, coverage,
+  audits, packaging, and quality gates through the coding agent's own harness
+  execution tools. Never create or repurpose a Herdr pane, tab, or workspace
+  merely to run these commands, monitor their logs, or bypass harness permission
+  restrictions. Long-running commands stay in harness-managed process sessions.
+- Create disposable Herdr tabs or panes only when exercising actual live Herdr
+  integration or TUI behavior requires them, such as launching the topic binary,
+  interacting with controls, testing commands in context, or verifying terminal
+  restoration. Automated tests may create their own PTYs through the agent
+  harness; this does not authorize Herdr panes for running the test suite.
+  Keep permitted live-test panes inside the assigned Herdr workspace.
   Address them by explicit IDs with `--no-focus`; never reuse the invoking
   coordinator's pane, another workstream's workspace, or a user's unrelated
   pane. Temporary test panes do not authorize another implementation agent,
@@ -177,18 +218,20 @@ blocked transition, keep the goal active and still report immediately.
   `log_user 0`), emit only explicit text sentinels, and verify the pane is back
   at an uncontaminated shell before reusing it.
 - Before handoff, run the implemented feature from the exact topic-branch build
-  in a disposable live pane inside the assigned Herdr workspace and actively try
-  to break it. This is a completion gate, not an optional walkthrough or a
-  substitute for automated tests.
+  and actively try to break it. For actual live Herdr or TUI behavior, use a
+  disposable live pane inside the assigned Herdr workspace. For nonvisual
+  behavior that does not require Herdr, exercise the real command, API,
+  persistence, or integration path through the agent harness without creating
+  a pane. This is a completion gate, not an optional walkthrough or a substitute
+  for automated tests.
 - Derive an adversarial matrix from the feature's actual risks. At minimum,
   exercise applicable boundary and empty inputs, unusually large content or
   collections, overflow and narrow/shallow layouts, Unicode and control-heavy
   text, rapid or repeated input, repeated activation/deactivation, cancellation,
   resize/reflow, and restart or recovery. Repeat idempotent actions enough to
   prove that they converge on the same result without duplicate durable writes,
-  deliveries, receipts, or resources. For a nonvisual feature, drive the real
-  command, API, persistence, or integration path from that live pane rather than
-  inventing a cosmetic TUI scenario.
+  deliveries, receipts, or resources. Do not invent a cosmetic TUI scenario or
+  spawn a pane solely to qualify a nonvisual feature.
 - Exercise meaningful combinations with neighboring state such as editing,
   selection, collapse, scrolling, pending persistence, failure, retry, and undo
   when the ticket can interact with them. Use both keyboard and mouse paths when
@@ -247,6 +290,8 @@ before submitting it. The handoff must contain:
   the live inputs, repetitions, boundary conditions, state combinations, and
   observed results; never summarize this only as "manual testing passed";
 - CI status and any residual risks or intentionally deferred work;
+- user-visible changes and compatibility implications for the separate release
+  process, without creating or editing release notes;
 - exact cleanup identifiers.
 
 The worker never merges its pull request. The invoking primary session reviews
