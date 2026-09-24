@@ -134,3 +134,31 @@ fn session_pages_follow_ranking_and_filters() {
     assert_eq!(exit, Some(3));
     assert_eq!(trashed_anchor["code"], "cursor_not_found");
 }
+
+#[test]
+fn filtered_session_pages_continue_within_the_same_query() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let root = temporary.path();
+    for name in ["alpha one", "beta", "alpha two", "alpha three"] {
+        let session = create_session(root);
+        success(root, &["sessions", "rename", &session, name], None);
+    }
+    let (all, total, _) = page(root, &["sessions", "list", "--query", "alpha"]);
+    assert_eq!(total, 3);
+    let mut walked = Vec::new();
+    let mut after: Option<String> = None;
+    loop {
+        let mut arguments = vec!["sessions", "list", "--query", "alpha", "--limit", "2"];
+        if let Some(anchor) = after.as_deref() {
+            arguments.extend(["--after", anchor]);
+        }
+        let (ids, total, next) = page(root, &arguments);
+        assert_eq!(total, 3);
+        walked.extend(ids);
+        match next.as_str() {
+            Some(anchor) => after = Some(anchor.to_owned()),
+            None => break,
+        }
+    }
+    assert_eq!(walked, all);
+}

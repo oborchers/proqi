@@ -2055,7 +2055,15 @@ Session rename, trash, restore, prune, undo, and redo accept caller-supplied
 operation identities. The application compares one typed `SessionRequest`
 against the retained receipt before and after acquiring the session lease, so an
 exact retry returns the original result and divergent reuse, including reuse of
-a Board or editor history identity, fails with `idempotency_conflict`. A trash
+a Board or editor history identity, fails with `idempotency_conflict`. The
+reverse direction uses the same matcher: the SQLite operation lookup reports a
+session-administration identity as a typed foreign request, so a Board, editor,
+or history mutation that reuses it is an idempotency conflict for inactive and
+active owners alike. A name reference with a recorded identity resolves to the
+recorded session only when the name no longer resolves or is ambiguous among
+sessions that include it. A name that resolves to another session is an
+idempotency conflict. The target identity of a retained undo or redo receipt
+stays reserved after its session is pruned. A trash
 request for an already trashed session reserves its identity and reports that
 nothing changed. `thoughts add --name` reuses the purpose-specific preserved
 creation request, which already carries an optional name through the owner
@@ -2097,8 +2105,9 @@ insecure fallback. Endpoint metadata lives beside runtime lock metadata. Peer-us
 bounded messages, protocol negotiation, idempotency keys, and timeouts are
 mandatory. Before reporting success, the client verifies the receipt's exact
 session, durable identity, affected thought, and typed item identities against
-the request. If forwarding is unsupported or the owner cannot be verified, the
-CLI returns `session_busy`.
+the request. If the owner cannot be verified or reached, the CLI returns `session_busy`. If
+the verified owner's control protocol cannot represent the request, the CLI
+returns `protocol_mismatch`, because a retry cannot succeed.
 
 Control protocol version 11 is current. Version 11 carries typed separator and
 mixed-item mutations plus split, extract, merge, and reflow requests. These

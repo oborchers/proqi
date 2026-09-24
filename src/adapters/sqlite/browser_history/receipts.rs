@@ -1,6 +1,6 @@
 //! Durable session-administration request receipts and their replay lookup.
 
-use rusqlite::{OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::{
     domain::{OperationId, SessionId, Timestamp},
@@ -166,6 +166,16 @@ pub(in crate::adapters::sqlite) fn stored_request(
     if let Some(receipt) = history_request(transaction, operation_id)? {
         return Ok(Some(StoredSessionRequest::Administration(receipt)));
     }
+    let retired_target: bool = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM browser_history_receipts WHERE target_operation_id = ?1)",
+            [id.as_slice()],
+            |row| row.get(0),
+        )
+        .map_err(map_sql_error)?;
+    if retired_target {
+        return Ok(Some(StoredSessionRequest::RetiredHistoryTarget));
+    }
     let used_by_session_history: bool = transaction
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM commit_receipts WHERE external_id = ?1)",
@@ -174,6 +184,28 @@ pub(in crate::adapters::sqlite) fn stored_request(
         )
         .map_err(map_sql_error)?;
     Ok(used_by_session_history.then_some(StoredSessionRequest::SessionHistory))
+}
+
+/// Whether a session-administration request owns or reserves one identity.
+///
+/// Board, editor, and history mutations consult this before committing, so a
+/// reused session identity is an idempotency conflict rather than a write.
+pub(in crate::adapters::sqlite) fn owns_identity(
+    connection: &Connection,
+    id: [u8; 16],
+) -> Result<bool, StoreError> {
+    connection
+        .query_row(
+            "SELECT EXISTS(
+                 SELECT 1 FROM browser_operation_receipts WHERE id = ?1
+                 UNION ALL
+                 SELECT 1 FROM browser_history_receipts
+                 WHERE id = ?1 OR target_operation_id = ?1
+             )",
+            [id.as_slice()],
+            |row| row.get(0),
+        )
+        .map_err(map_sql_error)
 }
 
 /// Whether a retained Browser payload is a request receipt rather than history.

@@ -175,6 +175,7 @@ pub(super) fn create_named(
     session
         .validate()
         .map_err(|error| StoreError::Invariant(error.to_string()))?;
+    validate_creation(creation)?;
     let request_digest = session_create_digest(&name, &session.origin_cwd);
     let receipt = creation
         .operation_id
@@ -208,6 +209,32 @@ pub(super) fn create_named(
         super::browser_history::insert_request_receipt(transaction, receipt, session.created_at)?;
     }
     Ok(NamedSessionOutcome::Created)
+}
+
+/// Reject creation requests whose shape could bypass identity or name policy.
+fn validate_creation(creation: &NamedSessionCreation) -> Result<(), StoreError> {
+    if creation.session.deleted_at.is_some() {
+        return Err(StoreError::Invariant(
+            "a named session must be created live".to_owned(),
+        ));
+    }
+    let Some(operation_id) = creation.operation_id else {
+        return Ok(());
+    };
+    if creation.policy == NamedSessionPolicy::UnlessNameExists {
+        return Err(StoreError::Invariant(
+            "get-or-create cannot reserve an operation identity".to_owned(),
+        ));
+    }
+    let derived = SessionId::from_database_bytes(operation_id.database_bytes())
+        .map_err(|error| StoreError::Invariant(error.to_string()))?;
+    if derived == creation.session.id {
+        Ok(())
+    } else {
+        Err(StoreError::Invariant(
+            "a created session identity must derive from its operation identity".to_owned(),
+        ))
+    }
 }
 
 fn session_exists(transaction: &Transaction<'_>, id: SessionId) -> Result<bool, StoreError> {

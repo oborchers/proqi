@@ -39,6 +39,7 @@ pub(crate) fn match_control_replay(
         | StoredOperationRequest::HistoryMove { receipt, .. }
         | StoredOperationRequest::Revision { receipt, .. }
         | StoredOperationRequest::Compacted { receipt, .. } => *receipt,
+        StoredOperationRequest::SessionAdministration => return ControlReplay::Conflict,
     };
     let Some(identity) = mutation.durable_identity() else {
         return ControlReplay::Conflict;
@@ -445,7 +446,8 @@ fn matches_history(
         } => *stored_session == session_id && *stored_scope == scope && *stored_undo == undo,
         StoredOperationRequest::Board { .. }
         | StoredOperationRequest::Revision { .. }
-        | StoredOperationRequest::Compacted { .. } => false,
+        | StoredOperationRequest::Compacted { .. }
+        | StoredOperationRequest::SessionAdministration => false,
     }
 }
 

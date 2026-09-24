@@ -19,6 +19,8 @@ mod diagnostics;
 mod doctor;
 #[path = "support/herdr.rs"]
 mod herdr_fixture;
+#[path = "cli_workflow/identity_namespace.rs"]
+mod identity_namespace;
 #[path = "cli_workflow/named_sessions.rs"]
 mod named_sessions;
 #[path = "cli_workflow/named_thoughts.rs"]

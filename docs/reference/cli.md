@@ -74,6 +74,25 @@ family, adds an `operations` inventory with the separate Board, editor, and
 Browser history scopes, and makes the active-session flags platform-aware.
 Read only fields that the installed response actually contains.
 
+<span class="version-scope">Next release</span>
+
+Next-release main also adds three discovery fields:
+
+- `options` lists the long options that each `sessions`, `items`, and
+  `thoughts` operation accepts, derived from the installed parser. For example,
+  `options.sessions.create` is `["name", "cwd", "operation-id"]`. Global options
+  such as `--json` are omitted.
+- `error_codes` lists every JSON error code with its exit status and retry class
+  (`no`, `after_change`, `yes`, or `same_identity`), as documented in
+  [Errors](#errors).
+- Six semantic flags describe behavior that option names cannot show:
+  `atomic_named_sessions` (`sessions ensure` and `sessions create`),
+  `named_thought_creation` (`thoughts add --name`),
+  `session_operation_identity` (`--operation-id` on session mutations),
+  `idempotent_session_trash` (repeated trash succeeds),
+  `bounded_lists` (`--limit`, `--after`, `total`, and `next_after`), and
+  `json_help_and_version` (successful JSON help and version output).
+
 ## Generate shell completions
 
 ```sh
@@ -155,7 +174,9 @@ session with `proqi --resume <session-id>`.
 
 <span class="version-scope">Next release</span>
 
-Every session mutation accepts `--operation-id`. A retry with the same
+Every session mutation except `sessions ensure` accepts `--operation-id`.
+`ensure` needs none, because repeating it with the same name and directory
+already returns the same session. A retry with the same
 identity and the same request returns the original result with
 `idempotent_replay: true` instead of applying anything again. Reusing the
 identity for another request, including a thought or item mutation, fails with
@@ -175,6 +196,8 @@ If two calls with the same identity overlap, both can report
 `idempotent_replay: false`. `changed` is then derived from the name observed
 before forwarding. Undo and redo return
 `{history, operation, cursor, receipt: {operation_id, idempotent_replay}}`.
+When the moved entry's session was pruned afterward, a replay reports
+`operation: null`, and the moved entry's identity stays reserved.
 
 Prune retains its receipt after the session is deleted, so an exact retry
 succeeds as a replay. Pruning forgets the session's rename, trash, and restore
@@ -186,8 +209,11 @@ the `sessions create` that made a pruned session therefore fails with
 
 A retry can address the session by the name it had before the request, for
 example after `sessions rename old new` or `sessions prune old --yes`. When the
-operation identity already names a session, a name reference resolves to that
-recorded session, even if another session has since taken the name. A typed
+operation identity already names a session and the name no longer resolves, or
+resolves ambiguously among sessions that include the recorded one, the recorded
+session is used. When the name currently resolves to a different session, the
+request fails with `idempotency_conflict` and changes nothing, so an
+operation identity never acts on a session other than the named one. A typed
 `ses_` identifier always addresses exactly that session.
 
 A `sessions create` retry recomputes its request identity from the name and the
@@ -285,7 +311,9 @@ list page contains Board items, including separators, so its `--after` accepts a
 follows the same ranking and filters as the first page. An `--after` entry that
 is no longer listed fails with `cursor_not_found` rather than restarting. Pages
 read the current state on each call, so concurrent changes can move entries
-between pages.
+between pages. Human output lists the same page, shows separators as
+`(separator)` rows, and ends with `Showing N of TOTAL. Continue with --after ID`
+when more entries remain.
 
 Rename requires a name or `--clear`. An empty thought name also clears it.
 
@@ -324,6 +352,16 @@ injection.
 
 ## Errors
 
+<span class="version-scope">Next release</span>
+
+The complete table, `capabilities.error_codes`, and the codes
+`session_name_conflict`, `cursor_not_found`, `clipboard_failed`, and
+`clipboard_metadata_unsupported` are next-release additions. An active owner
+whose advertised control protocol cannot represent a request now reports
+`protocol_mismatch` instead of the retryable `session_busy`. A lease holder
+that advertises no protocol yet, such as another command in progress, still
+reports `session_busy`.
+
 With `--json`, every failure writes
 `{"schema_version": 1, "ok": false, "error": {"code", "message", "details"}}` to
 standard output and exits with the status below. `message` is human text and can
@@ -361,7 +399,8 @@ any other failure.
 | `schema_busy` | 5 | Yes | `{}` |
 | `storage_busy` | 5 | Yes | `{}` |
 | `unsupported` | 6 | No | `{}` |
-| `protocol_mismatch` | 6 | No | `{}` |
+| `protocol_mismatch` | 6 | No | `{}`, or `{"session_id", "holder"}` when the active owner cannot represent the request |
+| `clipboard_metadata_unsupported` | 6 | No | `{}` |
 | `session_trashed` | 7 | After change | `{}` |
 | `session_not_trashed` | 7 | After change | `{}` |
 | `session_name_conflict` | 7 | After change | `{"name", "sessions": [{"id", "origin_cwd"}]}` |
@@ -386,6 +425,7 @@ any other failure.
 | `terminal_cleanup_failed` | 1 | After change | `{}` |
 | `control_failed` | 1 | After change | `{}` |
 | `output_failed` | 1 | After change | `{}` |
+| `clipboard_failed` | 1 | After change | `{}` |
 | `environment_failed` | 1 | After change | `{}` |
 | `diagnostics_failed` | 1 | After change | `{}` |
 | `doctor_failed` | 1 | After change | The complete `doctor` report |

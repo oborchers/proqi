@@ -31,10 +31,7 @@ pub(super) fn create(
     operation: Option<&str>,
 ) -> Result<Outcome, CliError> {
     let operation = parse_operation_id(operation)?;
-    let cwd = match cwd {
-        Some(cwd) => existing_directory(cwd)?,
-        None => context.cwd.clone(),
-    };
+    let cwd = existing_directory(cwd.unwrap_or(&context.cwd))?;
     let result = session_service(context)?.create_named_session(name, cwd, operation)?;
     outcome(context, &result)
 }

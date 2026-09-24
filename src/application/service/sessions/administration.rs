@@ -71,30 +71,48 @@ where
 
     /// Resolve the session addressed by a retry-safe administration request.
     ///
-    /// A name is mutable, so a retry may use a name that its own earlier commit
-    /// changed, removed, or that another session has since taken. When the
-    /// caller's operation identity already names a session, that recorded
-    /// session is authoritative for a name reference, and the ordinary replay
-    /// comparison still decides whether the retry is exact. A typed session
+    /// A retry may use a name that its own earlier commit changed, removed, or
+    /// pruned. When the name no longer resolves, or resolves ambiguously among
+    /// sessions that include the one recorded for the caller's operation
+    /// identity, the recorded session is used and the ordinary replay
+    /// comparison decides whether the retry is exact. When the name currently
+    /// resolves to another session, the identity cannot describe this request,
+    /// so it fails instead of acting on the recorded session. A typed session
     /// identifier always addresses exactly that session.
     ///
     /// # Errors
     ///
-    /// Returns an identifier, lookup, or resolution failure.
+    /// Returns an idempotency conflict, identifier, lookup, or resolution failure.
     pub fn resolve_session_for_request(
         &mut self,
         reference: &str,
         supplied: Option<OperationId>,
     ) -> Result<SessionId, SessionServiceError> {
-        if !super::looks_like_typed_id(reference)
-            && let Some(operation_id) = supplied
-            && let Some(StoredSessionRequest::Administration(stored)) =
-                self.store.session_request(operation_id)?
-            && let Some(session_id) = stored.request.session_id()
-        {
-            return Ok(session_id);
+        if super::looks_like_typed_id(reference) {
+            return self.resolve_session(reference, true);
         }
-        self.resolve_session(reference, true)
+        let recorded = match supplied {
+            Some(operation_id) => match self.store.session_request(operation_id)? {
+                Some(StoredSessionRequest::Administration(stored)) => stored.request.session_id(),
+                _ => None,
+            },
+            None => None,
+        };
+        match (self.resolve_session(reference, true), recorded) {
+            (Ok(resolved), Some(recorded)) if resolved != recorded => {
+                Err(SessionServiceError::IdempotencyConflict)
+            }
+            (Err(SessionServiceError::AmbiguousSession { ref matches, .. }), Some(recorded))
+                if matches.contains(&recorded) =>
+            {
+                Ok(recorded)
+            }
+            (Err(SessionServiceError::AmbiguousSession { .. }), Some(_)) => {
+                Err(SessionServiceError::IdempotencyConflict)
+            }
+            (Err(SessionServiceError::SessionNotFound(_)), Some(recorded)) => Ok(recorded),
+            (resolved, _) => resolved,
+        }
     }
 
     /// Rename or clear one inactive session while holding its lease.

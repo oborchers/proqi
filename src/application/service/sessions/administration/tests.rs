@@ -42,6 +42,7 @@ struct AdministrationStore {
     requests: HashMap<OperationId, StoredSessionRequest>,
     history: BrowserHistoryStatus,
     noop_trashes: usize,
+    noop_renames: usize,
     browser_commits: usize,
     prunes: usize,
     history_moves: usize,
@@ -141,6 +142,17 @@ impl Store for AdministrationStore {
         operation_id: OperationId,
     ) -> Result<Option<StoredSessionRequest>, StoreError> {
         Ok(self.requests.get(&operation_id).cloned())
+    }
+
+    fn commit_browser_noop_rename(
+        &mut self,
+        operation_id: OperationId,
+        _session_id: SessionId,
+        _name: Option<&str>,
+        _at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        self.noop_renames += 1;
+        Ok(self.write(operation_id))
     }
 
     fn commit_noop_trash(

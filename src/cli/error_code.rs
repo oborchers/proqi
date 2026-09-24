@@ -107,7 +107,13 @@ error_codes! {
     SchemaBusy => ("schema_busy", 5, Yes, "`{}`"),
     StorageBusy => ("storage_busy", 5, Yes, "`{}`"),
     Unsupported => ("unsupported", 6, No, "`{}`"),
-    ProtocolMismatch => ("protocol_mismatch", 6, No, "`{}`"),
+    ProtocolMismatch => (
+        "protocol_mismatch",
+        6,
+        No,
+        "`{}`, or `{\"session_id\", \"holder\"}` when the active owner cannot represent the request"
+    ),
+    ClipboardMetadataUnsupported => ("clipboard_metadata_unsupported", 6, No, "`{}`"),
     SessionTrashed => ("session_trashed", 7, AfterChange, "`{}`"),
     SessionNotTrashed => ("session_not_trashed", 7, AfterChange, "`{}`"),
     SessionNameConflict => (
@@ -142,6 +148,7 @@ error_codes! {
     TerminalCleanupFailed => ("terminal_cleanup_failed", 1, AfterChange, "`{}`"),
     ControlFailed => ("control_failed", 1, AfterChange, "`{}`"),
     OutputFailed => ("output_failed", 1, AfterChange, "`{}`"),
+    ClipboardFailed => ("clipboard_failed", 1, AfterChange, "`{}`"),
     EnvironmentFailed => ("environment_failed", 1, AfterChange, "`{}`"),
     DiagnosticsFailed => ("diagnostics_failed", 1, AfterChange, "`{}`"),
     DoctorFailed => ("doctor_failed", 1, AfterChange, "The complete `doctor` report"),

@@ -110,6 +110,12 @@ pub enum StoredSessionRequest {
     Administration(SessionRequestReceipt),
     /// A session's Board or editor history already owns the identity.
     SessionHistory,
+    /// A retained undo or redo receipt still names this identity as its target.
+    ///
+    /// The target's own receipt was removed with a permanently pruned session,
+    /// but the identity stays reserved so a retried history movement keeps one
+    /// deterministic meaning.
+    RetiredHistoryTarget,
 }
 
 /// Whether creation may proceed when the requested name is already in use.

@@ -32,7 +32,10 @@ pub(super) fn operation_request(
         .optional()
         .map_err(map_sql_error)?;
     let Some((session, sequence, request, semantic_fingerprint)) = row else {
-        return Ok(None);
+        return Ok(
+            super::browser_history::owns_identity(connection, id.database_bytes())?
+                .then_some(StoredOperationRequest::SessionAdministration),
+        );
     };
     let semantic_fingerprint = parse_fingerprint(semantic_fingerprint)?;
     let session_id = session_id_from_blob(session)?;

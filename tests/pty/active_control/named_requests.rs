@@ -128,12 +128,38 @@ fn forwarded_session_rename(binary: &str, state: &std::path::Path, session: &str
     );
     let conflict: Value = serde_json::from_slice(&conflict.stdout).expect("conflict JSON");
     assert_eq!(conflict["error"]["code"], "idempotency_conflict");
+    let unchanged_operation = operation_id();
     let unchanged = json_command(
         binary,
         state,
-        &["sessions", "rename", session, "Renamed live"],
+        &[
+            "sessions",
+            "rename",
+            session,
+            "Renamed live",
+            "--operation-id",
+            &unchanged_operation,
+        ],
     );
     assert_eq!(unchanged["data"]["changed"], false);
+    let reserved = raw_input_command(
+        binary,
+        state,
+        &[
+            "sessions",
+            "rename",
+            session,
+            "Something else",
+            "--operation-id",
+            &unchanged_operation,
+        ],
+        "",
+    );
+    let reserved: Value = serde_json::from_slice(&reserved.stdout).expect("reserved JSON");
+    assert_eq!(
+        reserved["error"]["code"], "idempotency_conflict",
+        "a forwarded unchanged rename reserves its identity"
+    );
     let trash = raw_input_command(binary, state, &["sessions", "trash", session], "");
     let trash: Value = serde_json::from_slice(&trash.stdout).expect("trash JSON");
     assert_eq!(trash["error"]["code"], "session_busy");

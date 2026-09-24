@@ -8,11 +8,11 @@ use crate::{
         RenameAdmission, SessionService, SessionServiceError,
         test_support::{TestClock, TestIds, TestRuntime},
     },
-    domain::{SessionId, Timestamp},
+    domain::{BrowserOperationKind, SessionId, Timestamp},
     ports::{
         environment::IdGenerator as _,
         runtime::{Lease, RuntimeCoordinator, RuntimeError, RuntimeScan},
-        store::SessionRequest,
+        store::{BrowserHistoryEntry, SessionRequest},
     },
 };
 
@@ -66,10 +66,22 @@ fn every_administration_write_happens_while_the_session_lease_is_held() {
     let mut service =
         SessionService::new(&mut store, &runtime, &clock, &mut ids, "/".into()).expect("service");
     service
+        .rename_session(id, None, None)
+        .expect("unchanged rename");
+    service
         .rename_session(id, Some("renamed"), None)
         .expect("rename");
     service.trash_session(id, None).expect("trash");
     drop(service);
+    store.history.undo = Some(BrowserHistoryEntry {
+        operation_id: ids.operation_id(),
+        session_id: id,
+        kind: BrowserOperationKind::Trash,
+    });
+    SessionService::new(&mut store, &runtime, &clock, &mut ids, "/".into())
+        .expect("service")
+        .move_browser_history(true, None)
+        .expect("history move");
     store.session = store.session.take().map(|mut session| {
         session.deleted_at = Some(Timestamp::from_millis(31));
         session
@@ -81,6 +93,8 @@ fn every_administration_write_happens_while_the_session_lease_is_held() {
     service.prune_session(id, None).expect("prune");
     drop(service);
 
+    assert_eq!(store.noop_renames, 1);
+    assert_eq!(store.history_moves, 1);
     assert_eq!(store.browser_commits + store.noop_trashes + store.prunes, 5);
     assert_eq!(
         store.unleased_writes, 0,

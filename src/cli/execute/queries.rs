@@ -9,7 +9,7 @@ use super::{
     super::args::PageArgs,
     CliError, Outcome, forwarding,
     helpers::{content_digest_hex, excerpt, parse_item_id, parse_thought_id},
-    pagination::paginate,
+    pagination::{human_page, paginate},
     session_service,
 };
 use crate::cli::runtime::RuntimeContext;
@@ -32,26 +32,27 @@ pub(super) fn list(
         parse_item_id,
     )?;
     let items = page.entries.iter().map(item_json).collect::<Vec<_>>();
-    let human = page
+    let lines = page
         .entries
         .iter()
-        .filter_map(|item| match item {
+        .map(|item| match item {
             BoardItemRef::Thought(thought) => {
                 let label = thought.name.as_ref().map_or_else(
                     || excerpt(&thought.content),
                     |name| name.as_str().to_owned(),
                 );
-                Some(format!(
-                    "{}  {}  {}",
-                    thought.position.get(),
-                    thought.id,
-                    label
-                ))
+                format!("{}  {}  {}", thought.position.get(), thought.id, label)
             }
-            BoardItemRef::Separator(_) => None,
+            BoardItemRef::Separator(separator) => {
+                format!(
+                    "{}  {}  (separator)",
+                    separator.position.get(),
+                    separator.id
+                )
+            }
         })
-        .collect::<Vec<_>>()
-        .join("\n");
+        .collect();
+    let human = human_page(&page, lines, "No items");
     Ok(Outcome {
         data: json!({
             "session_id": session_id,

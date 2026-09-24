@@ -223,41 +223,6 @@ fn browser_history_moves_replay_by_direction() {
 }
 
 #[test]
-fn session_and_thought_mutations_share_one_identity_namespace() {
-    let temporary = tempfile::tempdir().expect("temporary directory");
-    let root = temporary.path();
-    let session = create_session(root);
-    let operation = operation_id();
-    success(
-        root,
-        &["thoughts", "add", &session, "--operation-id", &operation],
-        Some("body"),
-    );
-    for arguments in [
-        vec![
-            "sessions",
-            "rename",
-            &session,
-            "x",
-            "--operation-id",
-            &operation,
-        ],
-        vec!["sessions", "trash", &session, "--operation-id", &operation],
-        vec!["sessions", "undo", "--operation-id", &operation],
-    ] {
-        let (exit, conflict) = error(root, &arguments);
-        assert_eq!(exit, Some(7), "{arguments:?}");
-        assert_eq!(conflict["code"], "idempotency_conflict", "{arguments:?}");
-    }
-    assert!(name_of(root, &session).is_null());
-    let (_, malformed) = error(
-        root,
-        &["sessions", "trash", &session, "--operation-id", "op_short"],
-    );
-    assert_eq!(malformed["code"], "invalid_identifier");
-}
-
-#[test]
 fn retries_may_address_a_session_by_the_name_their_request_changed() {
     let temporary = tempfile::tempdir().expect("temporary directory");
     let root = temporary.path();
@@ -280,12 +245,13 @@ fn retries_may_address_a_session_by_the_name_their_request_changed() {
 
     let other = create_session(root);
     success(root, &["sessions", "rename", &other, "old"], None);
-    let reused_name = success(root, &arguments, None);
-    assert_receipt(&reused_name, &rename, true);
+    let (exit, reused_name) = error(root, &arguments);
     assert_eq!(
-        reused_name["session_id"], session,
-        "the recorded session wins"
+        exit,
+        Some(7),
+        "a name now owned by another session conflicts"
     );
+    assert_eq!(reused_name["code"], "idempotency_conflict");
     assert_eq!(
         name_of(root, &other),
         "old",
@@ -359,4 +325,81 @@ fn a_history_retry_after_its_target_is_pruned_still_replays() {
         "later",
         "the retry must not undo another entry"
     );
+}
+
+#[test]
+fn a_recorded_identity_never_acts_on_a_differently_named_live_session() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let root = temporary.path();
+    let bar = create_session(root);
+    let foo = create_session(root);
+    success(root, &["sessions", "rename", &bar, "bar"], None);
+    success(root, &["sessions", "rename", &foo, "foo"], None);
+    let trash = operation_id();
+    success(
+        root,
+        &["sessions", "trash", "bar", "--operation-id", &trash],
+        None,
+    );
+    let replay = success(
+        root,
+        &["sessions", "trash", "bar", "--operation-id", &trash],
+        None,
+    );
+    assert_receipt(&replay, &trash, true);
+
+    for arguments in [
+        vec!["sessions", "trash", "foo", "--operation-id", &trash],
+        vec!["sessions", "restore", "foo", "--operation-id", &trash],
+        vec![
+            "sessions",
+            "prune",
+            "foo",
+            "--yes",
+            "--operation-id",
+            &trash,
+        ],
+        vec!["sessions", "rename", "foo", "x", "--operation-id", &trash],
+    ] {
+        let (exit, conflict) = error(root, &arguments);
+        assert_eq!(exit, Some(7), "{arguments:?}");
+        assert_eq!(conflict["code"], "idempotency_conflict", "{arguments:?}");
+    }
+    let live = success(root, &["sessions", "list"], None);
+    assert!(
+        live["sessions"]
+            .as_array()
+            .expect("sessions")
+            .iter()
+            .any(|entry| entry["id"] == foo && entry["name"] == "foo"),
+        "foo stays live and unchanged"
+    );
+
+    success(root, &["sessions", "trash", &foo], None);
+    let prune = operation_id();
+    success(
+        root,
+        &[
+            "sessions",
+            "prune",
+            "foo",
+            "--yes",
+            "--operation-id",
+            &prune,
+        ],
+        None,
+    );
+    let (exit, divergent) = error(
+        root,
+        &[
+            "sessions",
+            "prune",
+            "bar",
+            "--yes",
+            "--operation-id",
+            &prune,
+        ],
+    );
+    assert_eq!(exit, Some(7));
+    assert_eq!(divergent["code"], "idempotency_conflict");
 }

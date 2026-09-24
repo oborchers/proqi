@@ -14,6 +14,30 @@ pub(super) struct Page<T> {
     pub(super) next_after: Option<String>,
 }
 
+impl<T> Page<T> {
+    /// Human continuation hint, present only when more entries remain.
+    pub(super) fn human_continuation(&self) -> Option<String> {
+        self.next_after.as_ref().map(|anchor| {
+            format!(
+                "Showing {} of {}. Continue with --after {anchor}",
+                self.entries.len(),
+                self.total
+            )
+        })
+    }
+}
+
+/// Join human lines and append the continuation hint when more entries remain.
+pub(super) fn human_page<T>(page: &Page<T>, lines: Vec<String>, empty: &str) -> String {
+    let mut lines = if lines.is_empty() {
+        vec![empty.to_owned()]
+    } else {
+        lines
+    };
+    lines.extend(page.human_continuation());
+    lines.join("\n")
+}
+
 /// Slice an ordered projection after an optional anchor identity.
 ///
 /// `parse` validates the caller's anchor with the projection's typed identifier.
@@ -123,6 +147,26 @@ mod tests {
         .expect("large");
         assert_eq!(large.entries, [1]);
         assert_eq!(large.next_after, None);
+    }
+
+    #[test]
+    fn human_pages_name_the_continuation_only_when_more_remain() {
+        let first = paginate(
+            vec![1_u32, 2, 3],
+            &page(Some(2), None),
+            |entry| *entry,
+            parse,
+        )
+        .expect("first page");
+        assert_eq!(
+            super::human_page(&first, vec!["1".to_owned(), "2".to_owned()], "None"),
+            "1\n2\nShowing 2 of 3. Continue with --after 2"
+        );
+        let last = paginate(vec![1_u32], &page(None, None), |entry| *entry, parse).expect("last");
+        assert_eq!(super::human_page(&last, vec!["1".to_owned()], "None"), "1");
+        let empty =
+            paginate(Vec::<u32>::new(), &page(None, None), |entry| *entry, parse).expect("empty");
+        assert_eq!(super::human_page(&empty, Vec::new(), "None"), "None");
     }
 
     #[test]

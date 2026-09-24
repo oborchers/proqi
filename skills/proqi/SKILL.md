@@ -266,7 +266,8 @@ proqi --json sessions redo
 when the user explicitly requests permanent deletion of an already trashed
 session.
 
-Every session mutation accepts `--operation-id`. Supply a fresh `op_`
+Every session mutation except `sessions ensure` accepts `--operation-id`;
+`ensure` is already idempotent by name and directory. Supply a fresh `op_`
 identifier when a lost response must be retryable, and reuse it only to retry
 the exact same request; a replay reports `idempotent_replay: true`. Trashing an
 already trashed session succeeds with `changed: false`.

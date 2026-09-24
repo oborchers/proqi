@@ -345,21 +345,32 @@ fn send_control(
         .map_err(|error| map_error(error, owner, reports_invalid_state))
 }
 
+/// The active owner cannot represent the request, so a retry cannot succeed.
+fn protocol_mismatch(owner: &InstanceInfo, message: &str) -> CliError {
+    CliError::new(ErrorCode::ProtocolMismatch, message.to_owned()).with_details(json!({
+        "session_id": owner.session_id,
+        "holder": owner,
+    }))
+}
+
 fn required_protocol(owner: &InstanceInfo, mutation: &ControlMutation) -> Result<u32, CliError> {
+    // A holder without an advertised protocol may be another short-lived CLI
+    // mutation or an owner still publishing control, so a retry can succeed.
     let protocol = owner.control_protocol.ok_or_else(|| {
         CliError::new(
             ErrorCode::SessionBusy,
             "active owner does not advertise a control protocol".to_owned(),
         )
+        .with_details(json!({ "session_id": owner.session_id, "holder": owner }))
     })?;
     if !(crate::ports::control::MIN_CONTROL_PROTOCOL_VERSION
         ..=crate::ports::control::CONTROL_PROTOCOL_VERSION)
         .contains(&protocol)
         || protocol < mutation.minimum_protocol()
     {
-        return Err(CliError::new(
-            ErrorCode::SessionBusy,
-            "active owner does not support the required control protocol".to_owned(),
+        return Err(protocol_mismatch(
+            owner,
+            "active owner does not support the required control protocol",
         ));
     }
     Ok(protocol)
@@ -374,7 +385,7 @@ fn sync_protocol(advertised: Option<u32>) -> Result<Option<u32>, CliError> {
         .contains(&protocol)
     {
         return Err(CliError::new(
-            ErrorCode::SessionBusy,
+            ErrorCode::ProtocolMismatch,
             "active owner advertises an unsupported control protocol".to_owned(),
         ));
     }
@@ -402,7 +413,10 @@ fn map_error(error: ControlError, owner: &InstanceInfo, reports_invalid_state: b
             "outcome_unknown" => {
                 CliError::new(ErrorCode::OperationIndeterminate, message).with_details(details)
             }
-            "owner_busy" | "protocol_mismatch" | "wrong_session" => {
+            "protocol_mismatch" => {
+                CliError::new(ErrorCode::ProtocolMismatch, message).with_details(details)
+            }
+            "owner_busy" | "wrong_session" => {
                 CliError::new(ErrorCode::SessionBusy, message).with_details(details)
             }
             _ => CliError::new(ErrorCode::MutationRejected, message),

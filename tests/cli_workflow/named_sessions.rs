@@ -379,3 +379,46 @@ fn human_named_creation_needs_no_terminal() {
     assert!(human.contains("created"));
     assert!(human.contains("Resume later: proqi -r ses_"));
 }
+
+#[cfg(unix)]
+#[test]
+fn a_create_retry_may_switch_between_the_default_and_an_equivalent_cwd() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let root = temporary.path();
+    let workspace = tempfile::tempdir().expect("workspace");
+    let target = workspace.path().join("real");
+    std::fs::create_dir(&target).expect("target");
+    let link = workspace.path().join("link");
+    std::os::unix::fs::symlink(&target, &link).expect("symlink");
+    let operation = operation_id();
+    let created = Command::new(env!("CARGO_BIN_EXE_proqi"))
+        .current_dir(&link)
+        .arg("--state-dir")
+        .arg(root)
+        .args(["--json", "sessions", "create", "--name", "cwd-forms"])
+        .args(["--operation-id", &operation])
+        .env_remove("HERDR_ENV")
+        .stdin(Stdio::null())
+        .output()
+        .expect("create from the default directory");
+    assert!(created.status.success());
+    let created: Value = serde_json::from_slice(&created.stdout).expect("JSON");
+
+    let replay = success(
+        root,
+        &[
+            "sessions",
+            "create",
+            "--name",
+            "cwd-forms",
+            "--cwd",
+            link.to_str().expect("UTF-8"),
+            "--operation-id",
+            &operation,
+        ],
+        None,
+    );
+    assert_eq!(replay["session_id"], created["data"]["session_id"]);
+    assert_eq!(replay["receipt"]["idempotent_replay"], true);
+    assert_eq!(session_count(root), 1);
+}

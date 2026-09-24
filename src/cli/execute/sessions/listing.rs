@@ -14,7 +14,10 @@ use crate::{
 };
 
 use super::{
-    super::{super::args::PageArgs, pagination::paginate},
+    super::{
+        super::args::PageArgs,
+        pagination::{human_page, paginate},
+    },
     CliError, Outcome, RuntimeContext, session_service,
 };
 
@@ -61,7 +64,11 @@ pub(in crate::cli::execute) fn list_sessions(
             })
         })
         .collect();
-    let human = human_list(&page.entries, &active, &recovered);
+    let human = human_page(
+        &page,
+        human_lines(&page.entries, &active, &recovered),
+        "No sessions",
+    );
     Ok(Outcome {
         data: json!({
             "sessions": data,
@@ -100,14 +107,11 @@ pub(super) fn browser_items(
         .collect())
 }
 
-fn human_list(
+fn human_lines(
     hits: &[SessionHit],
     active: &HashSet<SessionId>,
     recovered: &HashSet<SessionId>,
-) -> String {
-    if hits.is_empty() {
-        return "No sessions".to_owned();
-    }
+) -> Vec<String> {
     hits.iter()
         .map(|hit| {
             let state = session_state(hit, active, recovered);
@@ -118,8 +122,7 @@ fn human_list(
                 hit.last_opened_cwd.display()
             )
         })
-        .collect::<Vec<_>>()
-        .join("\n")
+        .collect()
 }
 
 pub(in crate::cli::execute) fn session_state(

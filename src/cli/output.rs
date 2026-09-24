@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use super::error_code::ErrorCode;
 use crate::{
     adapters::terminal::TerminalError,
-    application::{ApplicationError, SessionServiceError},
+    application::{ApplicationError, FailureCode, SessionServiceError},
     ports::{
         runtime::RuntimeError,
         store::{StoreError, StoreFailureCode},
@@ -138,16 +138,16 @@ impl CliError {
 
 impl From<ApplicationError> for CliError {
     fn from(error: ApplicationError) -> Self {
-        let code = match error {
-            ApplicationError::ThoughtNotFound(_) => ErrorCode::ThoughtNotFound,
-            ApplicationError::ContentConflict(_) => ErrorCode::ContentConflict,
-            ApplicationError::ThoughtLocked(_) => ErrorCode::ThoughtLocked,
-            ApplicationError::RevisionConflict(_)
-            | ApplicationError::HistoryDependency(_)
-            | ApplicationError::NoncontiguousSelection
-            | ApplicationError::InvalidState
-            | ApplicationError::SequenceExhausted => ErrorCode::InvalidState,
-            ApplicationError::Domain(_) => ErrorCode::InvariantViolation,
+        let code = match error.code() {
+            FailureCode::ThoughtNotFound => ErrorCode::ThoughtNotFound,
+            FailureCode::ContentConflict => ErrorCode::ContentConflict,
+            FailureCode::ThoughtLocked => ErrorCode::ThoughtLocked,
+            FailureCode::InvalidState => ErrorCode::InvalidState,
+            FailureCode::ClipboardFailed => ErrorCode::ClipboardFailed,
+            FailureCode::ClipboardMetadataUnsupported => ErrorCode::ClipboardMetadataUnsupported,
+            FailureCode::StorageFailed => ErrorCode::StorageFailed,
+            FailureCode::RecoveryCapacity => ErrorCode::RecoveryCapacity,
+            FailureCode::InvariantViolation => ErrorCode::InvariantViolation,
         };
         Self::new(code, error.to_string())
     }
