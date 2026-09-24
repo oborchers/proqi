@@ -101,14 +101,18 @@ same get-or-create rule as `proqi sessions ensure`:
   which changes when tabs close or move, so a numeric label is replaced by the
   tab's stable identity, for example `api-w2-t4` for tab `w2:t4` in workspace
   `api`.
-- The origin is the workspace's root directory, not the focused split's.
+- The origin is the Herdr worktree checkout for a worktree workspace, else the
+  Git repository root containing the focused pane's directory, else that
+  directory itself. Splits in subdirectories of one repository therefore share
+  one origin. Herdr's own workspace directory follows the focused pane, so it
+  is not used.
 
 The plugin reuses an existing session only when this rule produces exactly its
 name and origin. It does not adopt sessions named by other tools. A Proqi that
 another tool keeps open in the tab is recognized and focused instead.
 
 If the session is already open in another pane, for example because two
-workspaces have tabs with the same label and root directory, the toggle shows a
+workspaces have tabs with the same label in the same repository, the toggle shows a
 Herdr notification and does not start a second Proqi. Rename one of the tabs,
 or close the other pane first.
 

@@ -28,13 +28,24 @@ pub(super) struct PluginContext {
     tab_label: Option<String>,
     focused_pane_id: String,
     focused_pane_cwd: Option<PathBuf>,
+    worktree: Option<WorktreeContext>,
+}
+
+/// Herdr reports this only for workspaces it created as Git worktrees.
+#[derive(Deserialize)]
+struct WorktreeContext {
+    checkout_path: Option<PathBuf>,
 }
 
 impl PluginContext {
     pub(super) fn into_context(self) -> Option<CompanionContext> {
-        let cwd = self
-            .focused_pane_cwd
-            .or_else(|| self.workspace_cwd.clone())?;
+        // Herdr's `workspace_cwd` follows the focused pane, so it cannot anchor
+        // a tab's session. A worktree checkout or repository root can.
+        let cwd = self.focused_pane_cwd.or(self.workspace_cwd)?;
+        let session_root = self
+            .worktree
+            .and_then(|worktree| worktree.checkout_path)
+            .or_else(|| crate::adapters::filesystem::repository_root(&cwd));
         Some(CompanionContext {
             workspace_id: self.workspace_id,
             workspace_label: self.workspace_label,
@@ -42,7 +53,7 @@ impl PluginContext {
             tab_label: self.tab_label,
             focused_pane_id: self.focused_pane_id,
             focused_pane_cwd: cwd,
-            workspace_cwd: self.workspace_cwd,
+            session_root,
         })
     }
 }

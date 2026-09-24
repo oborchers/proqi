@@ -505,7 +505,8 @@ It acts only on the tab that had focus:
   `sessions ensure`. The name is the tab label; a numeric default label, which
   Herdr derives from the tab's position, is replaced by the stable tab identity,
   so tab `w1:t4` in workspace `demo` uses `demo-w1-t4`. The origin is the
-  workspace's root directory.
+  Herdr worktree checkout, else the Git repository root containing the focused
+  pane's directory, else that directory.
 - When the tab already shows a Proqi pane, it focuses that pane.
 - When the focused pane is the Proqi pane the plugin opened, it asks that Proqi
   to make pending edits durable and closes the pane only after Proqi confirms.
@@ -520,7 +521,7 @@ It acts only on the tab that had focus:
   touched.
 
 When the session is already open in another pane, for example because another
-workspace has a tab with the same label and root directory, the toggle fails with
+workspace has a tab with the same label in the same repository, the toggle fails with
 `companion_session_active` instead of starting a second Proqi. When the tab's
 name already belongs to a session from another directory, for example two
 repositories that both have a tab labeled `main`, it fails with

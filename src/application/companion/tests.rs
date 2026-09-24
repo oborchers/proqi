@@ -69,11 +69,11 @@ fn duplicate_workspace_labels_still_yield_distinct_default_names() {
 }
 
 #[test]
-fn the_session_origin_is_the_workspace_root_not_the_focused_split() {
+fn the_session_origin_is_the_session_root_not_the_focused_split() {
     let context = context("w1:p1");
     assert_eq!(companion_session_cwd(&context), PathBuf::from("/work"));
     let mut without_root = context;
-    without_root.workspace_cwd = None;
+    without_root.session_root = None;
     assert_eq!(
         companion_session_cwd(&without_root),
         PathBuf::from("/work/sub")

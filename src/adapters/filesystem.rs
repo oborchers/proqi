@@ -18,6 +18,13 @@ pub(crate) fn canonical_existing_directory(path: &Path) -> io::Result<PathBuf> {
     }
 }
 
+/// Nearest ancestor of `path`, inclusive, that contains a `.git` entry.
+pub(crate) fn repository_root(path: &Path) -> Option<PathBuf> {
+    path.ancestors()
+        .find(|ancestor| ancestor.join(".git").exists())
+        .map(Path::to_path_buf)
+}
+
 pub(crate) fn validate_directory_path(path: &Path) -> io::Result<()> {
     if !path.is_absolute() {
         return Err(invalid_path(path, "must be absolute"));

@@ -52,7 +52,7 @@ pub fn companion_session_name(context: &CompanionContext) -> String {
 #[must_use]
 pub fn companion_session_cwd(context: &CompanionContext) -> PathBuf {
     context
-        .workspace_cwd
+        .session_root
         .clone()
         .unwrap_or_else(|| context.focused_pane_cwd.clone())
 }

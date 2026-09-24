@@ -2045,7 +2045,9 @@ the `herdr_companion_toggle` capability, and replaces itself with
   `Unknown`), and Proqi sessions.
 - The application policy `application::companion`, a pure planner plus one
   orchestrating use case. It owns session naming (meaningful tab label, else
-  the stable public tab identity), the session origin (workspace root), and the
+  the stable public tab identity), the session origin (the adapter-supplied
+  worktree checkout or repository root, since Herdr's `workspace_cwd` follows
+  the focused pane), and the
   close rules. A pane closes only when it is the tab's recorded pane, its
   foreground Proqi resumes exactly the recorded session, and the owner confirms
   a durable flush. A recorded idle shell labeled `Proqi`, with no Proqi signal,

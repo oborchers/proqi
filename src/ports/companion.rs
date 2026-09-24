@@ -22,8 +22,9 @@ pub struct CompanionContext {
     pub focused_pane_id: String,
     /// Working directory of the focused pane.
     pub focused_pane_cwd: PathBuf,
-    /// Workspace root directory, which does not change with the focused split.
-    pub workspace_cwd: Option<PathBuf>,
+    /// Stable directory that anchors the tab's first session: the Herdr worktree
+    /// checkout, else the repository root containing the focused directory.
+    pub session_root: Option<PathBuf>,
 }
 
 /// One pane of the invoking tab, observed from one bounded host snapshot.

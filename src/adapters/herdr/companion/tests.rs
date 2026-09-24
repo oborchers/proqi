@@ -106,6 +106,39 @@ fn context_reads_the_plugin_invocation_and_falls_back_to_the_workspace_directory
 }
 
 #[test]
+fn the_session_root_is_the_worktree_checkout_else_the_repository_root() {
+    let runner = ScriptedRunner::default();
+    let repository = tempfile::tempdir().expect("repository");
+    std::fs::create_dir_all(repository.path().join(".git")).expect("git marker");
+    let subdirectory = repository.path().join("sub dir");
+    std::fs::create_dir_all(&subdirectory).expect("subdirectory");
+
+    let mut in_repository = plugin_context();
+    in_repository["focused_pane_cwd"] = json!(subdirectory);
+    in_repository["workspace_cwd"] = json!(subdirectory);
+    let context = host(&runner, &in_repository).context().expect("context");
+    assert_eq!(context.session_root, Some(repository.path().to_path_buf()));
+
+    let mut worktree = in_repository.clone();
+    worktree["worktree"] = json!({ "checkout_path": "/checkouts/feature" });
+    let context = host(&runner, &worktree).context().expect("context");
+    assert_eq!(
+        context.session_root,
+        Some(PathBuf::from("/checkouts/feature"))
+    );
+
+    let outside = tempfile::tempdir().expect("outside");
+    let mut plain = plugin_context();
+    plain["focused_pane_cwd"] = json!(outside.path());
+    let context = host(&runner, &plain).context().expect("context");
+    assert_eq!(
+        context.session_root,
+        crate::adapters::filesystem::repository_root(outside.path()),
+        "Herdr's workspace_cwd follows the focused pane and is never the root"
+    );
+}
+
+#[test]
 fn tab_panes_keep_only_the_invoking_tab_and_detect_the_proqi_lease() {
     let runner = ScriptedRunner::with(vec![ok(&json!({ "type": "pane_list", "panes": [
         { "pane_id": "w1:p1", "tab_id": "w1:t1", "focused": true, "agent": "claude", "cwd": "/work" },

@@ -242,11 +242,11 @@ const fn catalog_only_global(relative: &'static str, precedence: u16) -> Compati
 }
 
 pub(super) fn project_bases(cwd: &Path) -> Vec<PathBuf> {
+    let root = crate::adapters::filesystem::repository_root(cwd);
     let mut bases = Vec::new();
-    let mut current = cwd.to_path_buf();
-    loop {
-        bases.push(current.clone());
-        if current.join(".git").exists() || !current.pop() {
+    for ancestor in cwd.ancestors() {
+        bases.push(ancestor.to_path_buf());
+        if Some(ancestor) == root.as_deref() {
             break;
         }
     }

@@ -1836,7 +1836,8 @@ tab's only agent.
 Each tab keeps one recorded session, reopened from any pane in the tab. A
 tab's first session uses the `sessions ensure` rule with the tab label as its
 name, or the stable tab identity when Herdr shows a numeric position label, and
-the workspace root as its origin. The plugin never adopts sessions by other
+the Herdr worktree checkout or the Git repository root containing the focused
+directory as its origin. The plugin never adopts sessions by other
 naming rules. It refuses to start a second Proqi for a session already open
 elsewhere.
 

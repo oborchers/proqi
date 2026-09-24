@@ -25,7 +25,7 @@ pub(super) fn context(focused: &str) -> CompanionContext {
         tab_label: Some("agent-tab".to_owned()),
         focused_pane_id: focused.to_owned(),
         focused_pane_cwd: PathBuf::from("/work/sub"),
-        workspace_cwd: Some(PathBuf::from("/work")),
+        session_root: Some(PathBuf::from("/work")),
     }
 }
 

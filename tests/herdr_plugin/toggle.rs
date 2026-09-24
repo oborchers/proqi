@@ -17,6 +17,9 @@ impl FakeHerdr {
         let sandbox = Sandbox::new();
         let work = sandbox.path().join("agent work");
         fs::create_dir_all(work.join("sub dir")).expect("work");
+        // The focused split is a subdirectory of this repository; the tab's
+        // session must be anchored at the repository root.
+        fs::create_dir_all(work.join(".git")).expect("repository marker");
         fs::create_dir_all(sandbox.path().join("herdr")).expect("herdr state");
         let dir = sandbox.path().join("herdr");
         write_tool(
