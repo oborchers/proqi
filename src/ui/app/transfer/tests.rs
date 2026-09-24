@@ -1,6 +1,8 @@
 use crate::ui::input::RoutedInput as UiInput;
 #[path = "tests/names.rs"]
 mod names;
+#[path = "tests/selected.rs"]
+mod selected;
 
 use crate::{
     adapters::{
@@ -389,7 +391,7 @@ fn stale_discovery_cannot_mutate_a_reopened_transfer_owner() {
     app.complete_transfer_discovery(1, Err(crate::ports::store::StoreError::Busy));
     let current = app.transfer.as_ref().expect("reopened transfer owner");
     assert_eq!(current.generation, 2);
-    assert_eq!(current.source_thought_id, second_id);
+    assert_eq!(current.source_thought_ids, vec![second_id]);
     assert!(current.remove_source);
     assert!(current.loading);
     assert_eq!(current.query.text(), "n");

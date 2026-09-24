@@ -229,7 +229,7 @@ configuration.
 | macOS `Ctrl+Z`; `Primary+Z` / `u` | Undo a board operation |
 | macOS `Ctrl+Shift+Z` / `Ctrl+Y`; `Primary+Shift+Z` / `Primary+Y` | **Redo a board operation** |
 | `Primary+Shift+V` / `Shift+P` | Paste and clean up spacing |
-| `f` | Clean up spacing in the focused thought |
+| `f` | Clean up spacing in selected Board thoughts or the focused thought |
 | `c`; `/`; `:`; `i`; `?` | Collapse; search; commands; Screenshot Inbox; help |
 | `Esc`; `Primary+Q` / `q` | Clear selection; exit after durable flush |
 

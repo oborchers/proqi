@@ -74,20 +74,19 @@ impl BoardApp {
             mutation @ (ControlMutation::Replace { .. }
             | ControlMutation::Add { .. }
             | ControlMutation::PreserveAdd { .. }) => self.content_control_action(mutation, at)?,
+            ControlMutation::PreserveAddMany {
+                operation_id,
+                items,
+            } => Action::CreateOwnedThoughts {
+                operation_id: *operation_id,
+                items: items.clone(),
+                at,
+            },
             ControlMutation::SetCollapsed {
                 operation_id,
                 thought_id,
                 collapsed,
-            } => Action::SetPresentation {
-                operation_id: *operation_id,
-                thought_id: *thought_id,
-                presentation: if *collapsed {
-                    crate::domain::ThoughtPresentation::Collapsed
-                } else {
-                    crate::domain::ThoughtPresentation::Automatic
-                },
-                at,
-            },
+            } => collapsed_action(*operation_id, *thought_id, *collapsed, at),
             ControlMutation::RenameThought {
                 operation_id,
                 thought_id,
@@ -324,6 +323,24 @@ fn create_action(
         content: content.to_owned(),
         annotations: annotations.to_vec(),
         insertion_index: position,
+        at,
+    }
+}
+
+fn collapsed_action(
+    operation_id: OperationId,
+    thought_id: ThoughtId,
+    collapsed: bool,
+    at: Timestamp,
+) -> Action {
+    Action::SetPresentation {
+        operation_id,
+        thought_id,
+        presentation: if collapsed {
+            crate::domain::ThoughtPresentation::Collapsed
+        } else {
+            crate::domain::ThoughtPresentation::Automatic
+        },
         at,
     }
 }

@@ -20,6 +20,30 @@ where
     C: Clock,
     I: IdGenerator,
 {
+    /// Preserve a selected transfer cohort atomically in an inactive destination.
+    pub(crate) fn preserve_thoughts(
+        &mut self,
+        session_id: SessionId,
+        operation_id: OperationId,
+        items: Vec<crate::ports::transfer::TransferItem>,
+    ) -> Result<BoardItemMutation, SessionServiceError> {
+        let mutation = ControlMutation::PreserveAddMany {
+            operation_id,
+            items: items.clone(),
+        };
+        let item_ids = mutation.item_ids();
+        self.apply_item_action(
+            session_id,
+            &mutation,
+            Action::CreateOwnedThoughts {
+                operation_id,
+                items,
+                at: self.clock.now(),
+            },
+            item_ids,
+        )
+    }
+
     /// Insert one payload-free separator at a shared Board position.
     ///
     /// # Errors

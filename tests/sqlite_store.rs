@@ -200,6 +200,8 @@ mod migration_17;
 
 #[path = "sqlite_store/migration_19.rs"]
 mod migration_19;
+#[path = "sqlite_store/migration_20.rs"]
+mod migration_20;
 
 #[path = "sqlite_store/attachment_numbering.rs"]
 mod attachment_numbering;

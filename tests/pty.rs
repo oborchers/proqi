@@ -110,6 +110,9 @@ mod recovery;
 #[cfg(target_os = "macos")]
 #[path = "pty/reorder.rs"]
 mod reorder;
+#[cfg(target_os = "macos")]
+#[path = "pty/selected_actions.rs"]
+mod selected_actions;
 
 #[cfg(target_os = "macos")]
 #[path = "pty/sentence_deletion.rs"]

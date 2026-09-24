@@ -8,7 +8,7 @@ use crate::{
             CaptureCommit, CaptureCommitOutcome, CommitReceipt, OperationBatch, SessionHit,
             StoreError, StoredOperationRequest, SubmissionAttempt, SubmissionOutcome,
         },
-        transfer::SessionTransferRequest,
+        transfer::{SessionTransferBatchRequest, SessionTransferRequest},
     },
 };
 
@@ -35,6 +35,16 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
     ThoughtTransferred {
         request: SessionTransferRequest,
         result: Result<ThoughtMutation, String>,
+    },
+    ThoughtsTransferred {
+        request: SessionTransferBatchRequest,
+        result: Result<CommitReceipt, String>,
+    },
+    TransferFinished {
+        operation_id: crate::domain::OperationId,
+        sequence: Option<OperationSequence>,
+        result: Result<Option<CommitReceipt>, StoreError>,
+        retried: bool,
     },
     Lookup {
         request_id: RequestId,
@@ -74,6 +84,12 @@ pub(super) enum PersistenceRequest {
         generation: u64,
     },
     TransferThought(SessionTransferRequest),
+    TransferThoughts(SessionTransferBatchRequest),
+    FinishTransfer {
+        request: SessionTransferBatchRequest,
+        removal: Option<Box<crate::domain::BoardOperation>>,
+        reason: &'static str,
+    },
     Retry(OperationSequence),
     Lookup {
         request_id: RequestId,

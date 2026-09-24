@@ -91,6 +91,39 @@ fn provenance_preserving_adds_fingerprint_exact_attachment_ordinals() {
 }
 
 #[test]
+fn selected_transfer_fingerprint_binds_the_complete_ordered_cohort() {
+    use crate::ports::transfer::TransferItem;
+
+    let item = TransferItem {
+        source_thought_id: thought(),
+        destination_thought_id: ThoughtId::from_database_bytes(operation().database_bytes())
+            .expect("destination"),
+        content: "first".to_owned(),
+        annotations: Vec::new(),
+        name: None,
+    };
+    let second = TransferItem {
+        source_thought_id: item.destination_thought_id,
+        destination_thought_id: thought(),
+        content: "second".to_owned(),
+        annotations: Vec::new(),
+        name: None,
+    };
+    let mutation = |items| ControlMutation::PreserveAddMany {
+        operation_id: operation(),
+        items,
+    };
+    let original = fingerprint(&mutation(vec![item.clone(), second.clone()]));
+    assert_ne!(
+        original,
+        fingerprint(&mutation(vec![second.clone(), item.clone()]))
+    );
+    let mut changed = second;
+    changed.content.push('!');
+    assert_ne!(original, fingerprint(&mutation(vec![item, changed])));
+}
+
+#[test]
 fn identical_extract_results_keep_distinct_exact_ranges() {
     let digest: [u8; 32] = Sha256::digest(b"aaa").into();
     let new_thought = ThoughtId::from_database_bytes(operation().database_bytes())

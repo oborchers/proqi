@@ -9,6 +9,7 @@ use crate::{
 };
 
 use super::{move_thought, position_u32};
+use crate::application::selected_move_steps;
 
 pub(in crate::application) fn insert_separator(
     state: &mut AppState,
@@ -87,4 +88,67 @@ pub(in crate::application) fn move_item(
     };
     state.record_board_operation(&operation)?;
     Ok(vec![Effect::CommitBoardOperation(operation)])
+}
+
+pub(in crate::application) fn move_items(
+    state: &mut AppState,
+    operation_id: OperationId,
+    item_ids: &[BoardItemId],
+    delta: isize,
+    at: Timestamp,
+) -> ApplicationResult<Vec<Effect>> {
+    let order = state
+        .board
+        .live_items()
+        .into_iter()
+        .map(crate::domain::BoardItemRef::id)
+        .collect::<Vec<_>>();
+    let steps = selected_move_steps(&order, item_ids, delta)?;
+    if steps.is_empty() {
+        return Ok(Vec::new());
+    }
+    if steps.iter().any(|step| {
+        step.item_id
+            .thought()
+            .is_some_and(|id| state.thought_locked(id))
+    }) {
+        return Err(ApplicationError::InvalidState);
+    }
+    let forward = steps
+        .iter()
+        .map(|step| item_move(step.item_id, step.from, step.to))
+        .collect::<ApplicationResult<Vec<_>>>()?;
+    let inverse = steps
+        .iter()
+        .rev()
+        .map(|step| item_move(step.item_id, step.to, step.from))
+        .collect::<ApplicationResult<Vec<_>>>()?;
+    let operation = BoardOperation {
+        id: operation_id,
+        session_id: state.board.session.id,
+        sequence: state.next_sequence()?,
+        kind: BoardOperationKind::Reorder,
+        forward: BoardMutation::Batch { mutations: forward },
+        inverse: BoardMutation::Batch { mutations: inverse },
+        created_at: at,
+    };
+    state.record_board_operation(&operation)?;
+    Ok(vec![Effect::CommitBoardOperation(operation)])
+}
+
+fn item_move(item_id: BoardItemId, from: usize, to: usize) -> ApplicationResult<BoardMutation> {
+    let from = ThoughtPosition::new(position_u32(from)?);
+    let to = ThoughtPosition::new(position_u32(to)?);
+    Ok(match item_id {
+        BoardItemId::Thought(thought_id) => BoardMutation::MoveThought {
+            thought_id,
+            from,
+            to,
+        },
+        BoardItemId::Separator(separator_id) => BoardMutation::MoveSeparator {
+            separator_id,
+            from,
+            to,
+        },
+    })
 }

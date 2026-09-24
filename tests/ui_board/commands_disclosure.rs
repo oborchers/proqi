@@ -8,6 +8,8 @@ mod feedback;
 mod geometry;
 #[path = "commands_disclosure/refresh.rs"]
 mod refresh;
+#[path = "commands_disclosure/selected.rs"]
+mod selected;
 
 fn open(fixture: &mut Fixture) {
     fixture.input(crate::key_input(UiKey::Character(':')));

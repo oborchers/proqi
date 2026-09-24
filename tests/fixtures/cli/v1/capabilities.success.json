@@ -4,7 +4,7 @@
     "active_session_read_sync": true,
     "cli_schema_version": 1,
     "commands": ["capabilities", "completions", "update", "diagnostics", "doctor", "sessions", "items", "thoughts"],
-    "control_protocol": 11,
+    "control_protocol": 12,
     "cross_session_transfer": true,
     "durable_browser_history": true,
     "durable_thought_collapse": true,

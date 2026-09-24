@@ -49,17 +49,20 @@ shortcut-emphasis range dissolves rather than describing only a fragment.
 
 - **Duplicate thought or selection** creates copies below the source range and
   selects the copies. Separators duplicate as structural items.
-- **Move item up** and **Move item down**, keyboard reorder, and dragging move
-  only the focused item. Selected-block reorder is intentionally unavailable.
+- **Move item up** and **Move item down** exchange each selected Board run with
+  one adjacent unselected item. Selected runs at an edge stay put. With one
+  focused item, keyboard reorder and dragging keep their existing behavior.
 - **Expand or collapse thought** changes durable presentation without changing
   text. In a mixed selection, separators are ignored.
 
-Keyboard reorder wraps at board edges. Dragging is positional and does not
+Single-item keyboard reorder wraps at board edges. Dragging is positional and does not
 wrap.
 
 ## Clean existing spacing
 
-Focus a thought and press `f`, or choose **Clean up spacing**. In Edit,
+Select thoughts and press `f`, or choose **Clean up spacing**. In Board, each
+eligible selected thought is cleaned in one durable undo step; separators
+remain untouched. With no selection, the focused thought is cleaned. In Edit,
 `Ctrl+Shift+F` cleans the complete thought rather than only the text
 selection. Protected code, tables, quotes, paths, URLs, controls, list
 structure, and attachment annotations stay exact.

@@ -183,6 +183,8 @@ pub struct BoardApp {
     preflight_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
     pending_transfer_removals: BTreeMap<OperationId, ThoughtId>,
+    pending_transfer_batches:
+        BTreeMap<OperationId, crate::ports::transfer::SessionTransferBatchRequest>,
     screenshot: screenshot::ScreenshotInbox,
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
@@ -205,7 +207,6 @@ impl BoardApp {
     pub fn new(state: AppState, editor_factory: impl EditorFactory + 'static) -> Self {
         Self::with_settings(state, UiSettings::default(), editor_factory)
     }
-
     /// Construct a board with validated user settings.
     #[must_use]
     pub fn with_settings(
@@ -215,7 +216,6 @@ impl BoardApp {
     ) -> Self {
         Self::with_settings_and_cwd(state, settings, PathBuf::new(), editor_factory)
     }
-
     /// Construct a board with validated settings and an explicit discovery cwd.
     #[must_use]
     pub fn with_settings_and_cwd(
@@ -288,6 +288,7 @@ impl BoardApp {
             preflight_submissions: BTreeMap::new(),
             pending_submissions: BTreeMap::new(),
             pending_transfer_removals: BTreeMap::new(),
+            pending_transfer_batches: BTreeMap::new(),
             screenshot: screenshot::ScreenshotInbox::default(),
             update_barrier: None,
             update_restart: None,
@@ -314,7 +315,6 @@ impl BoardApp {
     ) -> Vec<Effect> {
         self.handle_routed(UiInput::from(input), ids, clock)
     }
-
     fn handle_routed(
         &mut self,
         input: UiInput,

@@ -42,6 +42,11 @@ fn retained_commit_bytes(commit: &RetainedCommit) -> usize {
                     .as_ref()
                     .map_or(256, |code| code.len() + 256),
             ),
+        RetainedCommit::TransferRemoval {
+            request, removal, ..
+        } => serde_json::to_vec(request)
+            .map_or(usize::MAX, |value| value.len())
+            .saturating_add(serde_json::to_vec(removal).map_or(usize::MAX, |value| value.len())),
     }
 }
 

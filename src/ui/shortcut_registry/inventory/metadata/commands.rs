@@ -78,10 +78,11 @@ const fn command_applicability(action: Action) -> CommandApplicability {
         Action::ReflowThought
         | Action::Collapse
         | Action::InsertInvocation
-        | Action::SendSession
-        | Action::SendSessionRemove
         | Action::SubmitToAgent => CommandApplicability::MutableThought,
-        Action::MoveUp | Action::MoveDown => CommandApplicability::Reorder,
+        Action::SendSession => CommandApplicability::TransferKeep,
+        Action::SendSessionRemove => CommandApplicability::TransferRemove,
+        Action::MoveUp => CommandApplicability::ReorderUp,
+        Action::MoveDown => CommandApplicability::ReorderDown,
         _ => CommandApplicability::Always,
     }
 }

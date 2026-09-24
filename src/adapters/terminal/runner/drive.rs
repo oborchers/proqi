@@ -53,6 +53,7 @@ pub(super) fn run(
     executable: &std::path::Path,
     state_root: Option<&std::path::Path>,
     session_id: SessionId,
+    pending_transfers: Vec<crate::adapters::sqlite::PendingTransfer>,
 ) -> Result<(), TerminalError> {
     let mut pending = PendingWork::default();
     let mut capture = CaptureRuntime::default();
@@ -63,6 +64,13 @@ pub(super) fn run(
     let mut recovery_export_attempted = false;
     let mut held_input = None;
     enqueue_effects(app, lanes, BoardApp::discover_agents(), &mut pending)?;
+    let recovery = app.recover_pending_transfers(
+        pending_transfers
+            .into_iter()
+            .map(|pending| pending.request)
+            .collect(),
+    );
+    enqueue_effects(app, lanes, recovery, &mut pending)?;
     accessibility_results::start(app, lanes, &mut pending)?;
     let invocation_effects = app.refresh_invocations();
     enqueue_effects(app, lanes, invocation_effects, &mut pending)?;

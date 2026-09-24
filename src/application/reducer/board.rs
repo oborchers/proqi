@@ -8,7 +8,7 @@ use crate::application::mutations::{
         delete_items, delete_thoughts, duplicate_items, duplicate_thoughts, set_presentation_many,
         stage_submission_removal,
     },
-    delete_thought, move_item, move_thought, rename_thought, set_presentation,
+    delete_thought, move_item, move_items, move_thought, rename_thought, set_presentation,
     transform::merge_thoughts,
 };
 
@@ -52,6 +52,12 @@ pub(super) fn reduce_board(
             to,
             at,
         } => move_item(state, *operation_id, *item_id, *to, *at),
+        Action::MoveItems {
+            operation_id,
+            item_ids,
+            delta,
+            at,
+        } => move_items(state, *operation_id, item_ids, *delta, *at),
         Action::RenameThought {
             operation_id,
             thought_id,
