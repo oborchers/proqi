@@ -19,17 +19,21 @@ const WORKFLOW: &str = r#"
         -exact "\x1b\[?1049h" {}
         timeout { exit 91 }
     }
-    after 200
     if {$env(PROQI_TEST_SELECT_ALL) eq "1"} {
+        expect {
+            -re {2 thoughts.*board} {}
+            timeout { exit 92 }
+        }
         send -- $env(PROQI_TEST_PRIMARY_A)
-        after 100
+    } else {
+        after 200
     }
     send ":"
     expect {
         -exact "Relevant now" {}
         timeout { exit 92 }
     }
-    send -- "send to another Proqi session and remove thought"
+    send -- "\x1b\[200~and remove thought\x1b\[201~"
     after 200
     send "\r"
     expect {
@@ -38,7 +42,7 @@ const WORKFLOW: &str = r#"
     }
     send "\r"
     if {$env(PROQI_TEST_SELECT_ALL) eq "1"} {
-        set deadline [expr {[clock milliseconds] + 15000}]
+        set deadline [expr {[clock milliseconds] + 25000}]
         set committed 0
         while {[clock milliseconds] < $deadline} {
             if {![catch {exec $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) --json thoughts list $env(PROQI_TEST_SOURCE)} listed] && [regexp {"thoughts"\s*:\s*\[\s*\]} $listed]} {
@@ -47,7 +51,12 @@ const WORKFLOW: &str = r#"
             }
             after 50
         }
-        if {!$committed} { exit 94 }
+        if {!$committed} {
+            puts stderr "source after selected transfer: $listed"
+            set destination_listed [exec $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) --json thoughts list $env(PROQI_TEST_DESTINATION)]
+            puts stderr "destination after selected transfer: $destination_listed"
+            exit 94
+        }
     } else {
         expect {
             -re {thought sent; removing the source} {}
@@ -104,12 +113,13 @@ fn run_transfer(contents: &[&str], select_all: bool) {
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
         .env("PROQI_TEST_SOURCE", &source)
+        .env("PROQI_TEST_DESTINATION", &destination)
         .env("PROQI_TEST_SELECT_ALL", if select_all { "1" } else { "0" })
         .env("PROQI_TEST_PIDS", &cleanup_pids)
         .env_remove("HERDR_ENV");
     let status = watchdog::status_before(
         &mut command,
-        Duration::from_secs(35),
+        Duration::from_secs(50),
         &cleanup_pids,
         "inactive Commands transfer PTY workflow",
     );
