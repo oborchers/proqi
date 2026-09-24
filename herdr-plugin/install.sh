@@ -27,10 +27,14 @@ if found=$(command -v proqi 2>/dev/null) && [ -n "$found" ]; then
   printf 'Using the existing Proqi at %s; nothing was installed.\n' "$found"
   exit 0
 fi
-destination="${PROQI_INSTALL_DIR:-${HOME:-}/.local/bin}"
-if [ -e "$destination/proqi" ] || [ -L "$destination/proqi" ]; then
-  printf 'Using the existing Proqi at %s/proqi; nothing was installed.\n' "$destination"
+# The same predicate as the launcher: only an executable file counts.
+standalone="${PROQI_INSTALL_DIR:-${HOME:-}/.local/bin}/proqi"
+if [ -f "$standalone" ] && [ -x "$standalone" ]; then
+  printf 'Using the existing Proqi at %s; nothing was installed.\n' "$standalone"
   exit 0
+fi
+if [ -e "$standalone" ] || [ -L "$standalone" ]; then
+  fail "$standalone exists but is not an executable file; repair or remove it, then install again"
 fi
 
 for tool in curl mktemp rm sh; do

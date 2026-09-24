@@ -63,12 +63,39 @@ pub(super) fn rename_session(
 }
 
 pub(super) fn sync(context: &mut RuntimeContext, session_id: SessionId) -> Result<(), CliError> {
+    sync_owner(context, session_id, false)
+}
+
+/// Flush an active owner and fail unless it confirms, before its process is closed.
+pub(super) fn sync_confirmed(
+    context: &mut RuntimeContext,
+    session_id: SessionId,
+) -> Result<(), CliError> {
+    sync_owner(context, session_id, true)
+}
+
+fn sync_owner(
+    context: &mut RuntimeContext,
+    session_id: SessionId,
+    required: bool,
+) -> Result<(), CliError> {
+    let unconfirmed = || {
+        if required {
+            Err(CliError::new(
+                ErrorCode::SessionBusy,
+                "Proqi has not confirmed its pending edits yet; try again once it has started"
+                    .to_owned(),
+            ))
+        } else {
+            Ok(())
+        }
+    };
     let Some(owner) = owner(context, session_id)? else {
-        return Ok(());
+        return unconfirmed();
     };
     let mutation = ControlMutation::Sync;
     let Some(protocol) = sync_protocol(owner.control_protocol)? else {
-        return Ok(());
+        return unconfirmed();
     };
     let request = ControlRequest {
         protocol,

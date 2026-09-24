@@ -198,6 +198,21 @@ fn process_classification_distinguishes_proqi_launcher_idle_shell_and_other_work
             ),
             Some(PaneProcess::Launcher),
         ),
+        (
+            info(
+                7,
+                7,
+                &[(
+                    7,
+                    &[
+                        "sh",
+                        "-c",
+                        "exec sh \"/plugins/proqi/herdr-plugin/proqi.sh\" board",
+                    ],
+                )],
+            ),
+            Some(PaneProcess::Launcher),
+        ),
         (info(5, 5, &[(5, &["-zsh"])]), Some(PaneProcess::IdleShell)),
         (
             info(5, 5, &[(5, &["/bin/bash"])]),

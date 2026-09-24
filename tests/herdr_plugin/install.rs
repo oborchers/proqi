@@ -143,3 +143,29 @@ fn an_offline_install_fails_with_guidance_and_installs_nothing() {
     );
     assert!(!sandbox.home().join(".local/bin/proqi").exists());
 }
+
+#[test]
+fn an_unusable_standalone_entry_fails_with_repair_guidance_and_downloads_nothing() {
+    let dangling = Sandbox::new();
+    release(&dangling, &installer(&dangling), None);
+    let bin = dangling.home().join(".local/bin");
+    fs::create_dir_all(&bin).expect("standalone dir");
+    std::os::unix::fs::symlink(dangling.path().join("missing"), bin.join("proqi")).expect("link");
+    let output = dangling.run_script(SCRIPT, &[], &[]);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("repair or remove it"),
+        "{}",
+        stderr(&output)
+    );
+    assert!(dangling.calls().is_empty());
+
+    let plain = Sandbox::new();
+    release(&plain, &installer(&plain), None);
+    let bin = plain.home().join(".local/bin");
+    fs::create_dir_all(&bin).expect("standalone dir");
+    fs::write(bin.join("proqi"), "not executable").expect("plain file");
+    let output = plain.run_script(SCRIPT, &[], &[]);
+    assert!(!output.status.success());
+    assert!(plain.calls().is_empty());
+}

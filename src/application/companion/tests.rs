@@ -10,7 +10,10 @@ use super::{
     COMPANION_PANE_LABEL, CompanionToggleError, CompanionToggleOutcome, companion_session_name,
     toggle_companion,
 };
-use fakes::{FakeHost, FakeRecords, FakeSessions, agent, companion, context, session, shell};
+use fakes::{
+    FakeHost, FakeRecords, FakeSessions, UnwritableRecords, agent, companion, context, session,
+    shell,
+};
 
 const OWN: &str = "ses_06g30t7dv5qv55n1ppn3clis3k";
 const OTHER: &str = "ses_06g30t8fudrq55fdkjqr6mpe44";
@@ -313,4 +316,63 @@ fn companion_without_presence(pane: &str) -> crate::ports::companion::PaneObserv
     let mut pane = companion(pane, false);
     pane.proqi_presence = false;
     pane
+}
+
+#[test]
+fn a_focused_recorded_pane_running_an_unidentified_proqi_is_never_closed() {
+    let panes = vec![agent("w1:p1", false), companion("w1:p9", true)];
+    let mut host = FakeHost::new("w1:p9", panes)
+        .with_process("w1:p9", PaneProcess::Proqi { session_id: None });
+    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
+    let mut sessions = FakeSessions::default();
+    let outcome = toggle_companion(&mut host, &mut records, &mut sessions).expect("return");
+    assert_eq!(
+        outcome,
+        CompanionToggleOutcome::Returned {
+            pane_id: "w1:p1".to_owned()
+        }
+    );
+    assert!(sessions.flushed.is_empty());
+    assert!(!host.calls.iter().any(|call| call.starts_with("close")));
+}
+
+#[test]
+fn a_stale_display_lease_on_the_dead_pane_does_not_prevent_replacement() {
+    let panes = vec![agent("w1:p1", true), companion("w1:p9", false)];
+    let mut host = FakeHost::new("w1:p1", panes).with_process("w1:p9", PaneProcess::IdleShell);
+    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
+    let outcome =
+        toggle_companion(&mut host, &mut records, &mut FakeSessions::default()).expect("replace");
+    assert!(matches!(
+        outcome,
+        CompanionToggleOutcome::Opened { replaced_pane_id: Some(ref dead), .. } if dead == "w1:p9"
+    ));
+}
+
+#[test]
+fn a_failed_open_keeps_the_dead_pane_and_its_record() {
+    let panes = vec![agent("w1:p1", true), companion_without_presence("w1:p9")];
+    let mut host = FakeHost::new("w1:p1", panes).with_process("w1:p9", PaneProcess::IdleShell);
+    host.fail_open = true;
+    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
+    let error = toggle_companion(&mut host, &mut records, &mut FakeSessions::default())
+        .expect_err("open fails");
+    assert!(matches!(error, CompanionToggleError::Host(_)));
+    assert_eq!(host.calls, vec![format!("open w1:p1 /work {OWN}")]);
+    assert_eq!(records.0, vec![record("w1:p9", OWN)]);
+}
+
+#[test]
+fn an_unrecordable_open_is_rolled_back_and_leaves_the_dead_pane_alone() {
+    let panes = vec![agent("w1:p1", true), companion_without_presence("w1:p9")];
+    let mut host = FakeHost::new("w1:p1", panes).with_process("w1:p9", PaneProcess::IdleShell);
+    let mut records = UnwritableRecords(vec![record("w1:p9", OWN)]);
+    let error = toggle_companion(&mut host, &mut records, &mut FakeSessions::default())
+        .expect_err("save fails");
+    assert!(matches!(error, CompanionToggleError::Host(_)));
+    assert_eq!(
+        host.calls,
+        vec![format!("open w1:p1 /work {OWN}"), "close w1:p10".to_owned()]
+    );
+    assert_eq!(host.notifications.len(), 1);
 }

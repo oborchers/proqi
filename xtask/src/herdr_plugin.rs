@@ -10,7 +10,7 @@ use std::path::Path;
 use proqi::{
     adapters::herdr::{
         HerdrCompatibilityPolicy, INSTALL_PATH, LAUNCHER_PATH, MIN_HERDR_VERSION,
-        PANE_ENTRYPOINT_ID, PLUGIN_ID, TOGGLE_ACTION_ID,
+        PANE_ENTRYPOINT_ID, PLUGIN_ID, SESSION_ENVIRONMENT, TOGGLE_ACTION_ID, TOGGLE_CAPABILITY,
     },
     application::COMPANION_PANE_LABEL,
 };
@@ -37,9 +37,25 @@ pub(crate) fn findings(root: &Path) -> Result<Vec<String>, String> {
     let contents = std::fs::read_to_string(&path)
         .map_err(|error| format!("read {}: {error}", path.display()))?;
     let version = super::release::workspace_version(root)?.to_string();
-    Ok(manifest_findings(&contents, &version, |relative| {
+    let mut found = manifest_findings(&contents, &version, |relative| {
         root.join(relative).is_file()
-    }))
+    });
+    let launcher = std::fs::read_to_string(root.join(LAUNCHER_PATH)).unwrap_or_default();
+    found.extend(launcher_findings(&launcher));
+    Ok(found)
+}
+
+/// The launcher restates Rust-owned tokens in shell syntax; each must match its owner.
+fn launcher_findings(launcher: &str) -> Vec<String> {
+    [
+        format!("*'\"{TOGGLE_CAPABILITY}\":true'*)"),
+        "exec \"$proqi\" herdr toggle".to_owned(),
+        format!("exec \"$proqi\" --resume \"${SESSION_ENVIRONMENT}\""),
+    ]
+    .into_iter()
+    .filter(|token| !launcher.contains(token.as_str()))
+    .map(|token| format!("{LAUNCHER_PATH} must contain `{token}`"))
+    .collect()
 }
 
 fn manifest_findings(contents: &str, version: &str, exists: impl Fn(&str) -> bool) -> Vec<String> {
@@ -174,7 +190,7 @@ fn expect_strings(found: &mut Vec<String>, value: Option<&Value>, key: &str, exp
 
 #[cfg(test)]
 mod tests {
-    use super::manifest_findings;
+    use super::{launcher_findings, manifest_findings};
 
     const REPOSITORY_MANIFEST: &str = include_str!("../../herdr-plugin.toml");
 
@@ -223,6 +239,17 @@ mod tests {
                 "{reason}: {found:?}"
             );
         }
+    }
+
+    #[test]
+    fn launcher_tokens_match_their_rust_owners() {
+        const LAUNCHER: &str = include_str!("../../herdr-plugin/proqi.sh");
+        assert_eq!(launcher_findings(LAUNCHER), Vec::<String>::new());
+        let drifted = LAUNCHER.replace("PROQI_HERDR_SESSION", "PROQI_SESSION");
+        let found = launcher_findings(&drifted);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(found[0].contains("--resume"));
+        assert_eq!(launcher_findings("").len(), 3);
     }
 
     #[test]

@@ -39,6 +39,8 @@ pub const SESSION_ENVIRONMENT: &str = "PROQI_HERDR_SESSION";
 pub const LAUNCHER_PATH: &str = "herdr-plugin/proqi.sh";
 /// Plugin-relative build step that installs Proqi only when it is absent.
 pub const INSTALL_PATH: &str = "herdr-plugin/install.sh";
+/// Capability flag the launcher requires before it runs the toggle.
+pub const TOGGLE_CAPABILITY: &str = "herdr_companion_toggle";
 /// Oldest Herdr release whose protocol Proqi qualifies and whose plugin surface this host uses.
 pub const MIN_HERDR_VERSION: &str = "0.8.0";
 
@@ -134,7 +136,7 @@ impl<R: ProcessRunner> HerdrCompanionHost<R> {
                 stdin: None,
                 timeout,
             })
-            .map_err(|error| HostFailure::Process(format!("{error:?}")))?;
+            .map_err(|error| HostFailure::Process(error.to_string()))?;
         if output.exit_code == Some(0) {
             return Ok(output.stdout);
         }

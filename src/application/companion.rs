@@ -118,14 +118,15 @@ fn record_state(
         session_id: record.session_id,
     };
     match process {
-        Some(PaneProcess::Proqi { session_id }) => match session_id {
-            Some(session_id) if *session_id != record.session_id => RecordState::Reused,
-            _ => live,
-        },
+        // The plugin always launches `--resume <id>`, so an unreadable or
+        // different session identifies a Proqi someone else started here.
+        Some(PaneProcess::Proqi {
+            session_id: Some(session_id),
+        }) if *session_id == record.session_id => live,
         Some(PaneProcess::Launcher) => live,
-        Some(PaneProcess::IdleShell)
-            if !pane.proqi_presence && pane.label.as_deref() == Some(COMPANION_PANE_LABEL) =>
-        {
+        // A verified idle shell runs no Proqi, so a display lease on it is a
+        // stale leftover from a crash and does not keep the pane alive.
+        Some(PaneProcess::IdleShell) if pane.label.as_deref() == Some(COMPANION_PANE_LABEL) => {
             RecordState::Dead {
                 pane_id: record.pane_id.clone(),
                 session_id: record.session_id,
@@ -161,7 +162,12 @@ pub(crate) fn plan_toggle(
             }
         };
     }
-    let present = |pane: &&PaneObservation| pane.proqi_presence;
+    let dead = match &state {
+        RecordState::Dead { pane_id, .. } => Some(pane_id.as_str()),
+        _ => None,
+    };
+    let present =
+        |pane: &&PaneObservation| pane.proqi_presence && Some(pane.pane_id.as_str()) != dead;
     if panes
         .iter()
         .filter(present)

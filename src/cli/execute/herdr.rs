@@ -84,7 +84,7 @@ impl CompanionSessions for CliCompanionSessions<'_> {
     }
 
     fn flush(&mut self, session_id: SessionId) -> Result<(), CliError> {
-        forwarding::sync(self.context, session_id)
+        forwarding::sync_confirmed(self.context, session_id)
     }
 }
 

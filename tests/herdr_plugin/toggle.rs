@@ -192,14 +192,18 @@ fn toggle_opens_once_focuses_repeatedly_closes_and_replaces_a_dead_pane() {
         "repeated toggles never open a second pane"
     );
 
-    let closed = data(&herdr.toggle("w1:p2", true));
-    assert_eq!(closed["action"], "closed");
-    assert_eq!(closed["session_id"], session.as_str());
+    // No Proqi owns the session in this scripted Herdr, so nothing can confirm
+    // that pending edits are durable. The toggle must refuse to close.
+    let refused = herdr.toggle("w1:p2", true);
+    assert_eq!(refused.status.code(), Some(5), "{}", stderr(&refused));
+    let envelope: Value = serde_json::from_slice(&refused.stdout).expect("JSON error");
+    assert_eq!(envelope["error"]["code"], "session_busy");
     assert!(
-        herdr
+        !herdr
             .sandbox
             .calls()
-            .contains(&"herdr pane close w1:p2".to_owned())
+            .iter()
+            .any(|call| call.starts_with("herdr pane close"))
     );
 
     herdr.panes(&[agent()]);
@@ -275,4 +279,21 @@ fn assert_named_session(herdr: &FakeHerdr, session: &str) {
         Path::new(origin),
         fs::canonicalize(&herdr.work).expect("canonical work")
     );
+}
+
+#[test]
+fn toggling_from_a_proqi_the_plugin_did_not_open_returns_to_the_agent_without_closing_it() {
+    let herdr = FakeHerdr::new();
+    herdr.panes(&[agent(), companion("w1:p5", true)]);
+    herdr.process("w1:p5", &["proqi", "--resume", "manual"], true);
+    let returned = data(&herdr.toggle("w1:p5", true));
+    assert_eq!(returned["action"], "returned");
+    assert_eq!(returned["pane_id"], "w1:p1");
+    let calls = herdr.sandbox.calls();
+    assert!(
+        !calls
+            .iter()
+            .any(|call| call.starts_with("herdr pane close"))
+    );
+    assert!(!calls.iter().any(|call| call.contains("pane open")));
 }

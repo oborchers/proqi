@@ -65,7 +65,7 @@ pane.
 | --- | --- |
 | No Proqi pane in the tab | Opens Proqi to the right of the focused pane |
 | A Proqi pane exists but is not focused | Focuses it |
-| The Proqi pane the plugin opened is focused | Saves pending edits, then closes the pane |
+| The Proqi pane the plugin opened is focused | Saves pending edits, then closes the pane once Proqi confirms |
 | A Proqi you started yourself is focused | Returns focus to the tab's agent; it is never closed |
 | The Proqi pane is left over from a Herdr restart | Opens the same session in a new pane and closes the leftover idle shell |
 
@@ -82,6 +82,15 @@ workspaces have tabs with the same label and directory, the toggle shows a
 Herdr notification and does not start a second Proqi. Rename one of the tabs,
 or close the other pane first.
 
+If the tab's name already belongs to a Proqi session from a different
+directory, for example two repositories that both have a tab labeled `main`,
+the toggle reports a name conflict instead of guessing. Rename one of the tabs,
+or rename the other session with `proqi sessions rename`.
+
+If Proqi is still starting when you close it, the toggle keeps the pane and asks
+you to try again, because it closes Proqi only after Proqi confirms that your
+edits are saved.
+
 ## Limitations
 
 - Herdr does not restore plugin panes after a cold restart of its server. The
@@ -90,6 +99,9 @@ or close the other pane first.
   closes a pane that runs anything else.
 - The plugin opens Proqi to the right of the focused pane. Move or resize the
   pane with Herdr's normal pane commands.
+- To focus a Proqi pane the plugin did not open, or to return to the agent,
+  the plugin briefly zooms that pane, because Herdr has no command that focuses
+  an arbitrary pane. A pane you had zoomed is left unzoomed.
 - When the focused pane runs a Proqi you started yourself, the toggle returns
   focus to the tab's only agent. With several agents in the tab it reports that
   instead of guessing.

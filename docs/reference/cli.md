@@ -103,7 +103,7 @@ Read only fields that the installed response actually contains.
 
 <span class="version-scope">Next release</span>
 
-Next-release main also adds three discovery fields:
+Next-release main also adds these discovery fields:
 
 - `options` lists the long options that each `sessions`, `items`, and
   `thoughts` operation accepts, derived from the installed parser. For example,
@@ -505,8 +505,9 @@ It acts only on the tab that had focus:
   of the focused pane.
 - When the tab already shows a Proqi pane, it focuses that pane.
 - When the focused pane is the Proqi pane the plugin opened, it asks that Proqi
-  to make pending edits durable and then closes the pane. The session stays
-  resumable.
+  to make pending edits durable and closes the pane only after Proqi confirms.
+  Without that confirmation, for example while Proqi is still starting, it fails
+  with `session_busy` and keeps the pane. The session stays resumable.
 - When the focused pane runs a Proqi that the plugin did not open, it returns
   focus to the tab's only agent pane and never closes that Proqi.
 - When a recorded Proqi pane survived a Herdr restart as an idle shell, it
@@ -515,7 +516,10 @@ It acts only on the tab that had focus:
 
 When the session is already open in another pane, for example because another
 workspace has a tab with the same label and directory, the toggle fails with
-`companion_session_active` instead of starting a second Proqi. Failures are also
+`companion_session_active` instead of starting a second Proqi. When the tab's
+name already belongs to a session from another directory, for example two
+repositories that both have a tab labeled `main`, it fails with
+`session_name_conflict`; rename the tab or the other session. Failures are also
 shown as a Herdr notification.
 
 A successful JSON response has one of these shapes:
@@ -528,10 +532,13 @@ A successful JSON response has one of these shapes:
 ```
 
 Exit status 0 is success. Other statuses follow [Errors](#errors):
-`unsupported` (6) outside the plugin, `companion_session_active` (5),
-`session_name_conflict` or `invalid_state` (7), `herdr_failed` (1) when Herdr
-rejects or cannot answer a request, and `plugin_state_failed` (1) when the
-plugin's private state or its toggle lock is unavailable.
+`unsupported` (6) outside the plugin, `invalid_input` (2) when the focused
+pane's directory no longer exists, `ambiguous_session` (4) when several live
+sessions share the tab's name and directory, `companion_session_active` or
+`session_busy` (5), `session_name_conflict` or `invalid_state` (7),
+`herdr_failed` (1) when Herdr rejects or cannot answer a request, and
+`plugin_state_failed` (1) when the plugin's private state or its toggle lock is
+unavailable.
 
 ## Check updates
 

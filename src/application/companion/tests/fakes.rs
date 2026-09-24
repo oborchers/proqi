@@ -61,6 +61,7 @@ pub(super) struct FakeHost {
     panes: Vec<PaneObservation>,
     processes: HashMap<String, PaneProcess>,
     next_pane: u32,
+    pub(super) fail_open: bool,
     pub(super) calls: Vec<String>,
     pub(super) notifications: Vec<String>,
 }
@@ -72,6 +73,7 @@ impl FakeHost {
             panes,
             processes: HashMap::new(),
             next_pane: 10,
+            fail_open: false,
             calls: Vec::new(),
             notifications: Vec::new(),
         }
@@ -107,6 +109,9 @@ impl CompanionHost for FakeHost {
             "open {target_pane_id} {} {session_id}",
             cwd.display()
         ));
+        if self.fail_open {
+            return Err(CompanionError::Host("open rejected".to_owned()));
+        }
         let pane = format!("w1:p{}", self.next_pane);
         self.next_pane += 1;
         Ok(pane)
@@ -144,6 +149,23 @@ impl CompanionRecords for FakeRecords {
     fn remove(&mut self, tab_id: &str) -> Result<(), CompanionError> {
         self.0.retain(|existing| existing.tab_id != tab_id);
         Ok(())
+    }
+}
+
+/// Records whose writes always fail, as when the plugin state disk is full.
+pub(super) struct UnwritableRecords(pub(super) Vec<CompanionRecord>);
+
+impl CompanionRecords for UnwritableRecords {
+    fn all(&mut self) -> Result<Vec<CompanionRecord>, CompanionError> {
+        Ok(self.0.clone())
+    }
+
+    fn save(&mut self, _record: &CompanionRecord) -> Result<(), CompanionError> {
+        Err(CompanionError::State("disk full".to_owned()))
+    }
+
+    fn remove(&mut self, _tab_id: &str) -> Result<(), CompanionError> {
+        Err(CompanionError::State("disk full".to_owned()))
     }
 }
 

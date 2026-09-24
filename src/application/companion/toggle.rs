@@ -168,11 +168,17 @@ where
             }
             let session_id = open_session(host, records, sessions, &context, &cwd, session)?;
             let pane_id = host.open_beside(&target_pane_id, &cwd, session_id)?;
-            records.save(&CompanionRecord {
+            let saved = records.save(&CompanionRecord {
                 tab_id: context.tab_id.clone(),
                 pane_id: pane_id.clone(),
                 session_id,
-            })?;
+            });
+            if let Err(error) = saved {
+                // An unrecorded pane could never be closed by a later toggle.
+                // Its Proqi has not been used yet, so closing it loses nothing.
+                let _best_effort = host.close(&pane_id);
+                return Err(error.into());
+            }
             if let Some(dead) = &dead_pane_id {
                 host.close(dead)?;
             }
