@@ -329,9 +329,10 @@ impl BoardApp {
             return Vec::new();
         };
         if !self.clipboard_read_owner_is_current(pending.owner) {
+            self.finish_first_control_focus();
             return Vec::new();
         }
-        match result {
+        let effects = match result {
             Ok(payload) if payload.content.is_empty() => {
                 self.set_warning("clipboard is empty");
                 Vec::new()
@@ -344,7 +345,9 @@ impl BoardApp {
                 self.notify(code);
                 Vec::new()
             }
-        }
+        };
+        self.finish_first_control_focus();
+        effects
     }
 
     fn write_selection(

@@ -12,6 +12,10 @@ mod support;
 mod active_control;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/compose_api_focus.rs"]
+mod compose_api_focus;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/active_board_failure.rs"]
 mod active_board_failure;
 

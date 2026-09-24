@@ -61,7 +61,7 @@ use crate::{
     domain::{BoardItemId, OperationId, OperationSequence, RequestId, SubmissionId, ThoughtId},
     ports::{
         agent::AgentTarget,
-        editor::{CursorMovement, EditCommand, Editor, EditorFactory, TextViewport},
+        editor::{CursorMovement, Editor, EditorFactory, TextViewport},
         environment::{Clock, IdGenerator},
         invocation::InvocationCompletenessAggregate,
     },
@@ -134,6 +134,7 @@ pub struct BoardApp {
     edit_generation: u64,
     edit_owner_generation: u64,
     compose_generation: u64,
+    pending_first_control_focus: Option<control::FirstControlFocus>,
     /// Whether the user requested a clean exit.
     pub quit: bool,
     /// Whether contextual help is visible.
@@ -242,6 +243,7 @@ impl BoardApp {
             edit_generation: 0,
             edit_owner_generation: 0,
             compose_generation: 0,
+            pending_first_control_focus: None,
             quit: false,
             help: false,
             help_scroll: 0,
@@ -448,53 +450,6 @@ impl BoardApp {
             self.accept_update_input(sequence)
         } else {
             self.accept_release_highlights_input(sequence)
-        }
-    }
-
-    /// Rebuild the editor adapter when reducer state changes externally.
-    pub fn sync_editor_from_state(&mut self) {
-        let thought_id = match self.state.mode {
-            InteractionMode::Board => {
-                self.editor = None;
-                return;
-            }
-            InteractionMode::Compose => {
-                if !matches!(self.editor, Some((EditorOwner::Compose, _))) {
-                    let mut editor = self.editor_factory.create("");
-                    editor.set_viewport(self.viewport);
-                    self.editor = Some((EditorOwner::Compose, editor));
-                    self.compose_presentation = ComposePresentation::Prompt;
-                }
-                return;
-            }
-            InteractionMode::Edit { thought_id } => thought_id,
-        };
-        let Some(thought) = self.state.board.thought(thought_id) else {
-            self.editor = None;
-            return;
-        };
-        let content = thought.content.clone();
-        let restored_state = self.state.restored_editor_state(thought_id);
-        if let Some((EditorOwner::Thought(current), editor)) = &mut self.editor
-            && *current == thought_id
-        {
-            if self.pending_edit.is_none() && editor.snapshot().content != content {
-                let (cursor, anchor) = restored_state.unwrap_or_default();
-                let _outcome = editor.replace_state(content, cursor, anchor);
-            }
-        } else {
-            self.edit_owner_generation = self.edit_owner_generation.wrapping_add(1);
-            let mut editor = self.editor_factory.create(&content);
-            editor.set_viewport(self.viewport);
-            if let Some((cursor, anchor)) = restored_state {
-                let _outcome = editor.replace_state(content, cursor, anchor);
-            } else {
-                let _outcome = editor.apply(EditCommand::Move {
-                    movement: CursorMovement::DocumentEnd,
-                    extend_selection: false,
-                });
-            }
-            self.editor = Some((EditorOwner::Thought(thought_id), editor));
         }
     }
 }

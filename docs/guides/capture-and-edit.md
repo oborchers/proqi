@@ -21,6 +21,9 @@ content.
 At a blocked top or bottom boundary, repeat the same vertical navigation
 intention to create beyond the edge. An explicitly created blank thought is
 durable. An untouched empty Compose surface is not.
+An item added through the API to an active empty board becomes the focused Board
+item after it is saved. This does not open its text editor. Further API additions
+leave the current focus in place.
 
 ## Edit exact text
 

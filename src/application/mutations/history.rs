@@ -61,8 +61,12 @@ fn move_board_history(state: &mut AppState, at: Timestamp, undo: bool) -> Applic
     state.keep_focus_valid();
     if let Some((thought_id, _, _)) = compose_handoff {
         if undo {
-            state.mode = super::InteractionMode::Compose;
-            state.focused_item = None;
+            if state.board.live_items().is_empty() {
+                state.mode = super::InteractionMode::Compose;
+                state.focused_item = None;
+            } else {
+                state.mode = super::InteractionMode::Board;
+            }
             state.insertion_index = state.board.live_items().len();
         } else {
             state.mode = super::InteractionMode::Edit { thought_id };

@@ -159,8 +159,8 @@ thoughts. It is visual organization only. Moving or deleting it never moves or
 deletes an adjacent thought.
 
 The Commands action `Insert separator` creates one separator below the focused
-item. On an empty Board it creates the first item and leaves exact-empty Compose
-and durable blank Thought semantics unchanged. Consecutive separators remain
+item. On an empty Board it creates the first item without creating a blank
+Thought. Consecutive separators remain
 distinct selectable items.
 
 ### Board
@@ -601,11 +601,15 @@ submit-and-remove that leaves the board empty enters Compose when it preserves
 the active focus workflow. Accepted submission does so only after the matching
 receipt is durably journaled and source deletion is acknowledged, then shows
 the passive `+ Start typing` prompt rather than a replacement empty thought or
-engaged editor. Background
-capture, owner-control mutation, recovery, discovery, and unrelated asynchronous
-completion never force Compose or steal an active editor. An external addition
-while Compose is active remains ordered beside the untouched transient editor,
-and subsequent typing materializes normally.
+engaged editor. Background capture, recovery, discovery, and unrelated
+asynchronous completion never force Compose or steal an active editor. When an
+active empty Board in untouched Compose receives its first durable item through
+the public API or owner control, it enters Board mode and focuses that item.
+Board focus has a visible gutter but no editor caret; Edit remains explicit. A
+failed, rejected, or replayed request does not trigger this handoff. Accepted
+Compose input or a pending Compose clipboard result keeps its owner until that
+work resolves; a later external addition never steals established Board or Edit
+focus.
 
 ### Copy, cut, and delete
 

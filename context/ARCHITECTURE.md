@@ -1756,10 +1756,15 @@ the same navigation state machine.
 
 Empty-board aftermath is reconciled by one typed policy owned beside
 `InteractionMode`. Deliberate local removals request Compose after the mutation;
-passive and external mutations request Preserve. Owner-control additions retain
-an active Compose editor and its insertion order. Owner-control deletion of the
+passive and external mutations request Preserve. The first accepted owner-control
+item on an active empty Board hands untouched Compose to focused Board only after
+durable acknowledgement. Failed persistence retains the candidate for exact
+retry; rejection, replay, or rollback cannot trigger the handoff. A pending
+Compose clipboard result retains its owner until completion, and accepted
+Compose typing during the save retains its own atomic materialization. Later
+external additions preserve established focus. Owner-control deletion of the
 last durable thought resolves invalid durable focus to Board but never invents
-Compose. Startup is the only automatic snapshot-derived entry, so discovery,
+Compose. Startup remains the only snapshot-derived Compose entry, so discovery,
 update checks, attachment scans, focus reports, and background completion cannot
 steal input state.
 
