@@ -49,8 +49,9 @@ pub const MIN_HERDR_VERSION: &str = "0.8.0";
 const QUERY_SECONDS: u64 = 3;
 const PROBE_SECONDS: u64 = 1;
 const OPEN_SECONDS: u64 = 10;
-/// A timed-out child is terminated and its readers joined within this allowance.
-const CLEANUP_SECONDS: u64 = 1;
+/// A timed-out child is terminated (two 250 ms graces), its readers joined
+/// (250 ms), and a still-unsettled child terminated again on drop, within this.
+const CLEANUP_SECONDS: u64 = 2;
 const QUERY_TIMEOUT: Duration = Duration::from_secs(QUERY_SECONDS);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(PROBE_SECONDS);
 const OPEN_TIMEOUT: Duration = Duration::from_secs(OPEN_SECONDS);

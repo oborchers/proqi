@@ -144,8 +144,9 @@ fn record_state(
         },
         // Any remaining Proqi signal keeps the pane: a lease left by a crash
         // expires within its TTL, and closing is never the conservative choice.
+        // A snapshot probe that timed out is superseded by this fresh one.
         Some(PaneProcess::IdleShell)
-            if pane.presence == ProqiPresence::Absent
+            if pane.presence != ProqiPresence::Present
                 && pane.label.as_deref() == Some(COMPANION_PANE_LABEL) =>
         {
             RecordState::Dead {

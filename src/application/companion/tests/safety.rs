@@ -231,3 +231,18 @@ fn the_companion_label_matches_the_manifest_title() {
     assert_eq!(super::super::COMPANION_PANE_LABEL, "Proqi");
     let _ = own_proqi();
 }
+
+#[test]
+fn a_recorded_pane_unknown_in_the_snapshot_but_idle_on_recheck_is_still_replaced() {
+    let mut slow = dead("w1:p9");
+    slow.presence = crate::ports::companion::ProqiPresence::Unknown;
+    let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true), slow])
+        .with_process("w1:p9", PaneProcess::IdleShell);
+    let mut records = FakeRecords(vec![record(Some("w1:p9"), OWN)]);
+    let outcome =
+        toggle_companion(&mut host, &mut records, &mut FakeSessions::default()).expect("replace");
+    assert!(matches!(
+        outcome,
+        CompanionToggleOutcome::Opened { replaced_pane_id: Some(ref dead), .. } if dead == "w1:p9"
+    ));
+}
