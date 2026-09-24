@@ -291,6 +291,27 @@ fn retries_may_address_a_session_by_the_name_their_request_changed() {
         "old",
         "the session now named old is untouched"
     );
+    for divergent in [
+        vec![
+            "sessions",
+            "rename",
+            "old",
+            "else",
+            "--operation-id",
+            &rename,
+        ],
+        vec!["sessions", "trash", "old", "--operation-id", &rename],
+    ] {
+        let (exit, conflict) = error(root, &divergent);
+        assert_eq!(exit, Some(7), "{divergent:?}");
+        assert_eq!(conflict["code"], "idempotency_conflict", "{divergent:?}");
+    }
+    assert_eq!(
+        name_of(root, &other),
+        "old",
+        "divergent reuse leaves it untouched"
+    );
+    assert_eq!(name_of(root, &session), "new");
     success(root, &["sessions", "rename", &other, "--clear"], None);
 
     let (exit, unknown) = error(root, &["sessions", "rename", "old", "new"]);
