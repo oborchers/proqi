@@ -57,6 +57,9 @@ and delivery. **Edit** is for changing one thought's exact text.
 
 On a genuinely empty board, typing or pasting creates the first thought. Press
 `Escape` first when you want Board commands instead of immediate composition.
+If the public JSON API adds the first item while that empty Compose prompt is
+open, Proqi focuses the item in Board mode. Use `j`, `k`, or the arrows immediately;
+press `Enter` or `e` when you want a text caret.
 
 ## Understand saving
 

@@ -1,14 +1,66 @@
 //! Canonical bridge between UI ownership and reducer-owned application state.
 
 use crate::{
-    application::{Action, DurabilityState, Effect, EmptyBoardTransition, FailureCode, reduce},
+    application::{
+        Action, DurabilityState, Effect, EmptyBoardTransition, FailureCode, InteractionMode, reduce,
+    },
     domain::OperationSequence,
-    ports::environment::{Clock, IdGenerator},
+    ports::{
+        editor::{CursorMovement, EditCommand},
+        environment::{Clock, IdGenerator},
+    },
 };
 
-use super::{BoardApp, ComposePresentation, InsertionFocus, pending_types::EditFlush};
+use super::{BoardApp, ComposePresentation, EditorOwner, InsertionFocus, pending_types::EditFlush};
 
 impl BoardApp {
+    /// Rebuild the editor adapter when reducer state changes externally.
+    pub fn sync_editor_from_state(&mut self) {
+        let thought_id = match self.state.mode {
+            InteractionMode::Board => {
+                self.editor = None;
+                return;
+            }
+            InteractionMode::Compose => {
+                if !matches!(self.editor, Some((EditorOwner::Compose, _))) {
+                    let mut editor = self.editor_factory.create("");
+                    editor.set_viewport(self.viewport);
+                    self.editor = Some((EditorOwner::Compose, editor));
+                    self.compose_presentation = ComposePresentation::Prompt;
+                }
+                return;
+            }
+            InteractionMode::Edit { thought_id } => thought_id,
+        };
+        let Some(thought) = self.state.board.thought(thought_id) else {
+            self.editor = None;
+            return;
+        };
+        let content = thought.content.clone();
+        let restored_state = self.state.restored_editor_state(thought_id);
+        if let Some((EditorOwner::Thought(current), editor)) = &mut self.editor
+            && *current == thought_id
+        {
+            if self.pending_edit.is_none() && editor.snapshot().content != content {
+                let (cursor, anchor) = restored_state.unwrap_or_default();
+                let _outcome = editor.replace_state(content, cursor, anchor);
+            }
+        } else {
+            self.edit_owner_generation = self.edit_owner_generation.wrapping_add(1);
+            let mut editor = self.editor_factory.create(&content);
+            editor.set_viewport(self.viewport);
+            if let Some((cursor, anchor)) = restored_state {
+                let _outcome = editor.replace_state(content, cursor, anchor);
+            } else {
+                let _outcome = editor.apply(EditCommand::Move {
+                    movement: CursorMovement::DocumentEnd,
+                    extend_selection: false,
+                });
+            }
+            self.editor = Some((EditorOwner::Thought(thought_id), editor));
+        }
+    }
+
     pub(super) fn flush_edit_boundary(
         &mut self,
         ids: &mut impl IdGenerator,
@@ -55,6 +107,7 @@ impl BoardApp {
             return Vec::new();
         }
         self.finish_successful_reduce(may_change_attachments);
+        self.acknowledge_first_control_focus(sequence, succeeded);
         if !succeeded {
             self.quit = false;
         } else if self.pending_edit.is_some() {

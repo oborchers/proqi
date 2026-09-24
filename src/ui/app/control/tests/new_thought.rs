@@ -1,4 +1,4 @@
-//! New-thought behavior while owner control preserves transient Compose.
+//! New-thought pointer behavior while an owner addition awaits durability.
 
 use crate::{
     adapters::memory::{FakeClock, FakeIdGenerator},
@@ -11,7 +11,7 @@ use crate::{
 use super::super::BoardApp;
 
 #[test]
-fn prompt_click_after_an_owner_add_only_engages_the_preserved_compose_editor() {
+fn prompt_click_during_an_unacknowledged_owner_add_does_not_create_content() {
     let mut ids = FakeIdGenerator::new(1_725_215_000_000);
     let session = Session::new(
         ids.session_id(),
