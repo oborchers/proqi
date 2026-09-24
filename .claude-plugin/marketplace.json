@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "proqi",
+  "owner": {
+    "name": "Oliver Borchers",
+    "url": "https://github.com/oborchers"
+  },
+  "description": "Agent skills for Proqi, the terminal-native scratchpad for coding agents.",
+  "plugins": [
+    {
+      "name": "proqi",
+      "source": "./skills",
+      "strict": false,
+      "skills": ["./proqi", "./proqi-debug"],
+      "version": "0.13.0",
+      "description": "Operate an explicit Proqi scratchpad session through its JSON CLI, or diagnose a Proqi failure read-only first. Requires the proqi executable.",
+      "author": {
+        "name": "Oliver Borchers"
+      },
+      "homepage": "https://oborchers.github.io/proqi/",
+      "repository": "https://github.com/oborchers/proqi",
+      "license": "MIT",
+      "keywords": ["proqi", "scratchpad", "herdr", "json-cli"]
+    }
+  ]
+}
