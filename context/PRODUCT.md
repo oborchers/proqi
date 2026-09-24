@@ -1823,6 +1823,30 @@ Other multiplexers may implement the same interface later. Unsupported
 terminals expose no submission capability and retain the complete clipboard-first
 workflow.
 
+### Herdr plugin
+
+Proqi also ships as a Herdr plugin, installed with
+`herdr plugin install oborchers/proqi`. It adds one bindable action that keeps
+at most one Proqi pane per tab: it opens Proqi to the right of the focused
+pane, focuses an open Proqi, and closes the Proqi it opened once that Proqi
+confirms its edits are durable. A Proqi started by the user or another tool is
+recognized and focused, never closed; toggling from it returns focus to the
+tab's only agent.
+
+Each tab keeps one recorded session, reopened from any pane in the tab. A
+tab's first session uses the `sessions ensure` rule with the tab label as its
+name, or the stable tab identity when Herdr shows a numeric position label, and
+the workspace root as its origin. The plugin never adopts sessions by other
+naming rules. It refuses to start a second Proqi for a session already open
+elsewhere.
+
+Herdr does not restore plugin panes after a cold restart. The next toggle
+reopens the same session and closes the leftover shell only while it is still
+idle. The plugin never installs over, replaces, or shadows an existing Proqi
+installation; without one, its install step runs the checksum-matched
+standalone installer, whose trust model equals the documented installer
+command. This is Proqi packaged for a host, not a Proqi plugin system.
+
 ### Dedicated Proqi skill
 
 The public project ships a dedicated `proqi` skill for supported coding-agent

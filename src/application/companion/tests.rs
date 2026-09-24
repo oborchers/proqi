@@ -1,48 +1,87 @@
-//! Companion toggle policy and orchestration over fake host, state, and sessions.
+//! Companion toggle naming, session resolution, and open/focus/close policy
+//! over fake host, state, and sessions. Close safety lives in `safety`.
 
 mod fakes;
+mod safety;
 
 use std::path::PathBuf;
 
 use crate::ports::companion::{CompanionRecord, CompanionSessionState, PaneProcess};
 
 use super::{
-    COMPANION_PANE_LABEL, CompanionToggleError, CompanionToggleOutcome, companion_session_name,
+    CompanionToggleError, CompanionToggleOutcome, companion_session_cwd, companion_session_name,
     toggle_companion,
 };
 use fakes::{
-    FakeHost, FakeRecords, FakeSessions, UnwritableRecords, agent, companion, context, session,
-    shell,
+    FakeHost, FakeRecords, FakeSessions, agent, companion, context, record, session, shell,
 };
 
 const OWN: &str = "ses_06g30t7dv5qv55n1ppn3clis3k";
 const OTHER: &str = "ses_06g30t8fudrq55fdkjqr6mpe44";
 
-fn record(pane: &str, session_id: &str) -> CompanionRecord {
-    CompanionRecord {
-        tab_id: "w1:t1".to_owned(),
-        pane_id: pane.to_owned(),
-        session_id: session(session_id),
+fn own_proqi() -> PaneProcess {
+    PaneProcess::Proqi {
+        session_id: Some(session(OWN)),
     }
 }
 
 #[test]
-fn session_name_uses_a_meaningful_tab_label_and_qualifies_numeric_defaults() {
+fn a_meaningful_tab_label_names_the_session() {
     let mut named = context("w1:p1");
     named.tab_label = Some("  herdr-plugin ".to_owned());
     assert_eq!(companion_session_name(&named), "herdr-plugin");
-    let mut numeric = context("w1:p1");
-    numeric.tab_label = Some("2".to_owned());
-    numeric.workspace_label = Some("api".to_owned());
-    assert_eq!(companion_session_name(&numeric), "api-2");
-    let mut unlabeled = context("w1:p1");
-    unlabeled.tab_label = None;
-    unlabeled.workspace_label = Some(" ".to_owned());
-    assert_eq!(companion_session_name(&unlabeled), "w1-w1:t1");
 }
 
 #[test]
-fn first_toggle_ensures_the_tab_session_and_opens_beside_the_focused_agent() {
+fn default_numeric_labels_use_the_stable_tab_identity_not_the_position() {
+    // Herdr labels unnamed tabs by position, so tab w1:t4 shown second and tab
+    // w1:t2 shown second at another time must still get different names.
+    let mut fourth = context("w1:p1");
+    fourth.tab_id = "w1:t4".to_owned();
+    fourth.tab_label = Some("2".to_owned());
+    let mut second = fourth.clone();
+    second.tab_id = "w1:t2".to_owned();
+    assert_eq!(companion_session_name(&fourth), "demo-w1-t4");
+    assert_eq!(companion_session_name(&second), "demo-w1-t2");
+    // Closing or reordering tabs changes the label but not the name.
+    let mut moved = fourth.clone();
+    moved.tab_label = Some("1".to_owned());
+    assert_eq!(
+        companion_session_name(&moved),
+        companion_session_name(&fourth)
+    );
+}
+
+#[test]
+fn duplicate_workspace_labels_still_yield_distinct_default_names() {
+    let mut first = context("w1:p1");
+    first.tab_label = None;
+    let mut second = first.clone();
+    second.workspace_id = "w2".to_owned();
+    second.tab_id = "w2:t1".to_owned();
+    assert_ne!(
+        companion_session_name(&first),
+        companion_session_name(&second)
+    );
+    let mut blank = first.clone();
+    blank.workspace_label = Some(" ".to_owned());
+    assert_eq!(companion_session_name(&blank), "w1-w1-t1");
+}
+
+#[test]
+fn the_session_origin_is_the_workspace_root_not_the_focused_split() {
+    let context = context("w1:p1");
+    assert_eq!(companion_session_cwd(&context), PathBuf::from("/work"));
+    let mut without_root = context;
+    without_root.workspace_cwd = None;
+    assert_eq!(
+        companion_session_cwd(&without_root),
+        PathBuf::from("/work/sub")
+    );
+}
+
+#[test]
+fn first_toggle_ensures_the_tab_session_and_opens_beside_the_focused_pane() {
     let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)]);
     let mut records = FakeRecords::default();
     let mut sessions = FakeSessions::with_named("agent-tab", OWN);
@@ -60,16 +99,16 @@ fn first_toggle_ensures_the_tab_session_and_opens_beside_the_focused_agent() {
         sessions.ensured,
         vec![("agent-tab".to_owned(), PathBuf::from("/work"))]
     );
-    assert_eq!(host.calls, vec![format!("open w1:p1 /work {OWN}")]);
-    assert_eq!(records.0, vec![record("w1:p10", OWN)]);
+    assert_eq!(host.calls, vec![format!("open w1:p1 /work/sub {OWN}")]);
+    assert_eq!(records.0, vec![record(Some("w1:p10"), OWN)]);
 }
 
 #[test]
-fn toggle_focuses_an_unfocused_live_companion_and_closes_a_focused_one_after_flushing() {
+fn toggle_focuses_a_live_companion_and_closes_it_after_a_confirmed_flush() {
     let panes = vec![agent("w1:p1", true), companion("w1:p9", false)];
-    let mut host = FakeHost::new("w1:p1", panes.clone()).with_process("w1:p9", own_proqi());
-    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
+    let mut records = FakeRecords(vec![record(Some("w1:p9"), OWN)]);
     let mut sessions = FakeSessions::default();
+    let mut host = FakeHost::new("w1:p1", panes.clone()).with_process("w1:p9", own_proqi());
     let focused = toggle_companion(&mut host, &mut records, &mut sessions).expect("focus");
     assert_eq!(
         focused,
@@ -89,20 +128,41 @@ fn toggle_focuses_an_unfocused_live_companion_and_closes_a_focused_one_after_flu
     );
     assert_eq!(sessions.flushed, vec![session(OWN)]);
     assert_eq!(host.calls, vec!["close w1:p9".to_owned()]);
-    assert!(records.0.is_empty());
+    assert_eq!(
+        records.0,
+        vec![record(None, OWN)],
+        "the tab keeps its session"
+    );
+}
+
+#[test]
+fn a_closed_companion_reopens_its_session_from_any_pane_in_the_tab() {
+    // The focused split sits in a subdirectory where a name lookup could
+    // conflict; the recorded session is reused without consulting the name.
+    let panes = vec![agent("w1:p1", false), shell("w1:p5")];
+    let mut host = FakeHost::new("w1:p5", panes);
+    let mut records = FakeRecords(vec![record(None, OWN)]);
+    let mut sessions = FakeSessions::default();
+    let outcome = toggle_companion(&mut host, &mut records, &mut sessions).expect("reopen");
+    assert!(matches!(
+        outcome,
+        CompanionToggleOutcome::Opened { session_id, .. } if session_id == session(OWN)
+    ));
+    assert!(sessions.ensured.is_empty());
+    assert_eq!(host.calls, vec![format!("open w1:p5 /work/sub {OWN}")]);
 }
 
 #[test]
 fn failed_flush_keeps_the_companion_open_and_reports_it() {
     let panes = vec![agent("w1:p1", false), companion("w1:p9", true)];
     let mut host = FakeHost::new("w1:p9", panes).with_process("w1:p9", own_proqi());
-    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
+    let mut records = FakeRecords(vec![record(Some("w1:p9"), OWN)]);
     let mut sessions = FakeSessions::default();
     sessions.fail_flush = true;
     let error = toggle_companion(&mut host, &mut records, &mut sessions).expect_err("flush");
     assert!(matches!(error, CompanionToggleError::Session(_)));
     assert!(host.calls.is_empty());
-    assert_eq!(records.0.len(), 1);
+    assert_eq!(records.0, vec![record(Some("w1:p9"), OWN)]);
     assert_eq!(
         host.notifications,
         vec!["owner did not confirm the flush".to_owned()]
@@ -111,9 +171,11 @@ fn failed_flush_keeps_the_companion_open_and_reports_it() {
 
 #[test]
 fn a_starting_launcher_counts_as_the_live_companion() {
-    let panes = vec![agent("w1:p1", true), companion_without_presence("w1:p9")];
-    let mut host = FakeHost::new("w1:p1", panes).with_process("w1:p9", PaneProcess::Launcher);
-    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
+    let mut launching = companion("w1:p9", false);
+    launching.proqi_presence = false;
+    let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true), launching])
+        .with_process("w1:p9", PaneProcess::Launcher);
+    let mut records = FakeRecords(vec![record(Some("w1:p9"), OWN)]);
     let outcome =
         toggle_companion(&mut host, &mut records, &mut FakeSessions::default()).expect("focus");
     assert_eq!(
@@ -125,85 +187,25 @@ fn a_starting_launcher_counts_as_the_live_companion() {
 }
 
 #[test]
-fn a_dead_companion_after_restart_is_replaced_with_the_same_session_without_duplicates() {
-    let panes = vec![agent("w1:p1", true), companion_without_presence("w1:p9")];
-    let mut host = FakeHost::new("w1:p1", panes).with_process("w1:p9", PaneProcess::IdleShell);
-    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
-    let mut sessions = FakeSessions::default().with_state(OWN, CompanionSessionState::Resumable);
-    let outcome = toggle_companion(&mut host, &mut records, &mut sessions).expect("replace");
-    assert_eq!(
+fn a_trashed_recorded_session_falls_back_to_the_named_session() {
+    let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)]);
+    let mut records = FakeRecords(vec![record(None, OTHER)]);
+    let mut sessions = FakeSessions::with_named("agent-tab", OWN)
+        .with_state(OTHER, CompanionSessionState::Unavailable);
+    let outcome = toggle_companion(&mut host, &mut records, &mut sessions).expect("open");
+    assert!(matches!(
         outcome,
-        CompanionToggleOutcome::Opened {
-            tab_id: "w1:t1".to_owned(),
-            pane_id: "w1:p10".to_owned(),
-            session_id: session(OWN),
-            replaced_pane_id: Some("w1:p9".to_owned()),
-        }
-    );
-    assert!(
-        sessions.ensured.is_empty(),
-        "the recorded session is reopened"
-    );
-    assert_eq!(
-        host.calls,
-        vec![format!("open w1:p1 /work {OWN}"), "close w1:p9".to_owned()]
-    );
-    assert_eq!(records.0, vec![record("w1:p10", OWN)]);
-}
-
-#[test]
-fn focusing_the_dead_pane_itself_splits_beside_the_agent_before_closing_it() {
-    let panes = vec![agent("w1:p1", false), companion_without_presence("w1:p9")];
-    let mut host = FakeHost::new("w1:p9", panes).with_process("w1:p9", PaneProcess::IdleShell);
-    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
-    let mut sessions = FakeSessions::default().with_state(OWN, CompanionSessionState::Resumable);
-    toggle_companion(&mut host, &mut records, &mut sessions).expect("replace");
-    assert_eq!(
-        host.calls,
-        vec![format!("open w1:p1 /work {OWN}"), "close w1:p9".to_owned()]
-    );
-}
-
-#[test]
-fn a_recorded_pane_that_now_runs_anything_else_is_never_closed() {
-    for process in [
-        PaneProcess::Other,
-        PaneProcess::Proqi {
-            session_id: Some(session(OTHER)),
-        },
-    ] {
-        let panes = vec![agent("w1:p1", true), companion_without_presence("w1:p9")];
-        let mut host = FakeHost::new("w1:p1", panes).with_process("w1:p9", process);
-        let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
-        let mut sessions = FakeSessions::with_named("agent-tab", OWN);
-        toggle_companion(&mut host, &mut records, &mut sessions).expect("open");
-        assert_eq!(host.calls, vec![format!("open w1:p1 /work {OWN}")]);
-        assert_eq!(records.0, vec![record("w1:p10", OWN)]);
-    }
-}
-
-#[test]
-fn an_idle_shell_that_lost_the_companion_label_is_left_alone() {
-    let mut renamed = companion_without_presence("w1:p9");
-    renamed.label = Some("scratch".to_owned());
-    let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true), renamed])
-        .with_process("w1:p9", PaneProcess::IdleShell);
-    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
-    toggle_companion(
-        &mut host,
-        &mut records,
-        &mut FakeSessions::with_named("agent-tab", OWN),
-    )
-    .expect("open");
-    assert!(!host.calls.iter().any(|call| call.starts_with("close")));
+        CompanionToggleOutcome::Opened { session_id, .. } if session_id == session(OWN)
+    ));
+    assert_eq!(records.0, vec![record(Some("w1:p10"), OWN)]);
 }
 
 #[test]
 fn a_companion_opened_elsewhere_is_focused_and_toggling_from_it_returns_to_the_agent() {
     let panes = vec![agent("w1:p1", true), companion("w1:p5", false)];
-    let mut host = FakeHost::new("w1:p1", panes.clone());
     let mut records = FakeRecords::default();
     let mut sessions = FakeSessions::default();
+    let mut host = FakeHost::new("w1:p1", panes.clone());
     let focused = toggle_companion(&mut host, &mut records, &mut sessions).expect("focus");
     assert_eq!(
         focused,
@@ -211,7 +213,6 @@ fn a_companion_opened_elsewhere_is_focused_and_toggling_from_it_returns_to_the_a
             pane_id: "w1:p5".to_owned()
         }
     );
-
     let mut host = FakeHost::new("w1:p5", panes);
     let returned = toggle_companion(&mut host, &mut records, &mut sessions).expect("return");
     assert_eq!(
@@ -261,171 +262,62 @@ fn a_session_already_open_in_another_workspace_is_reported_and_never_launched() 
     );
 }
 
-#[test]
-fn a_companion_another_tab_is_still_launching_blocks_a_racing_open() {
-    let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)])
-        .with_process("w2:p4", PaneProcess::Launcher);
-    let mut records = FakeRecords(vec![CompanionRecord {
+fn other_tab(pane: Option<&str>) -> CompanionRecord {
+    CompanionRecord {
         tab_id: "w2:t3".to_owned(),
-        pane_id: "w2:p4".to_owned(),
+        pane_id: pane.map(str::to_owned),
         session_id: session(OWN),
-    }]);
-    let mut sessions = FakeSessions::with_named("agent-tab", OWN);
-    let error = toggle_companion(&mut host, &mut records, &mut sessions).expect_err("racing");
-    assert!(matches!(error, CompanionToggleError::SessionActive { .. }));
-    assert!(host.calls.is_empty());
-}
-
-#[test]
-fn a_vanished_record_is_forgotten_and_the_named_session_reopens() {
-    let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)]);
-    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
-    let mut sessions = FakeSessions::with_named("agent-tab", OWN);
-    toggle_companion(&mut host, &mut records, &mut sessions).expect("open");
-    assert_eq!(records.0, vec![record("w1:p10", OWN)]);
-    assert_eq!(sessions.ensured.len(), 1);
-}
-
-#[test]
-fn a_trashed_recorded_session_falls_back_to_the_named_session() {
-    let panes = vec![agent("w1:p1", true), companion_without_presence("w1:p9")];
-    let mut host = FakeHost::new("w1:p1", panes).with_process("w1:p9", PaneProcess::IdleShell);
-    let mut records = FakeRecords(vec![record("w1:p9", OTHER)]);
-    let mut sessions = FakeSessions::with_named("agent-tab", OWN)
-        .with_state(OTHER, CompanionSessionState::Unavailable);
-    let outcome = toggle_companion(&mut host, &mut records, &mut sessions).expect("open");
-    assert!(matches!(
-        outcome,
-        CompanionToggleOutcome::Opened { session_id, .. } if session_id == session(OWN)
-    ));
-}
-
-#[test]
-fn the_companion_label_matches_the_manifest_title() {
-    assert_eq!(COMPANION_PANE_LABEL, "Proqi");
-    assert_eq!(shell("w1:p2").label, None);
-}
-
-fn own_proqi() -> PaneProcess {
-    PaneProcess::Proqi {
-        session_id: Some(session(OWN)),
     }
 }
 
-fn companion_without_presence(pane: &str) -> crate::ports::companion::PaneObservation {
-    let mut pane = companion(pane, false);
-    pane.proqi_presence = false;
-    pane
+#[test]
+fn a_companion_another_tab_is_launching_or_running_blocks_a_racing_open() {
+    for process in [PaneProcess::Launcher, own_proqi()] {
+        let mut host =
+            FakeHost::new("w1:p1", vec![agent("w1:p1", true)]).with_process("w2:p4", process);
+        let mut records = FakeRecords(vec![other_tab(Some("w2:p4"))]);
+        let mut sessions = FakeSessions::with_named("agent-tab", OWN);
+        let error = toggle_companion(&mut host, &mut records, &mut sessions).expect_err("racing");
+        assert!(matches!(error, CompanionToggleError::SessionActive { .. }));
+        assert!(host.calls.is_empty());
+    }
 }
 
 #[test]
-fn a_focused_recorded_pane_running_an_unidentified_proqi_is_never_closed() {
-    let panes = vec![agent("w1:p1", false), companion("w1:p9", true)];
-    let mut host = FakeHost::new("w1:p9", panes)
-        .with_process("w1:p9", PaneProcess::Proqi { session_id: None });
-    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
-    let mut sessions = FakeSessions::default();
-    let outcome = toggle_companion(&mut host, &mut records, &mut sessions).expect("return");
-    assert_eq!(
-        outcome,
-        CompanionToggleOutcome::Returned {
-            pane_id: "w1:p1".to_owned()
-        }
-    );
-    assert!(sessions.flushed.is_empty());
-    assert!(!host.calls.iter().any(|call| call.starts_with("close")));
-}
-
-#[test]
-fn a_display_lease_on_a_recorded_idle_shell_keeps_it_from_being_closed() {
-    let panes = vec![agent("w1:p1", true), companion("w1:p9", false)];
-    let mut host = FakeHost::new("w1:p1", panes).with_process("w1:p9", PaneProcess::IdleShell);
-    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
-    let outcome =
-        toggle_companion(&mut host, &mut records, &mut FakeSessions::default()).expect("focus");
-    assert_eq!(
-        outcome,
-        CompanionToggleOutcome::Focused {
-            pane_id: "w1:p9".to_owned()
-        }
-    );
-    assert!(!host.calls.iter().any(|call| call.starts_with("close")));
-}
-
-#[test]
-fn a_failed_open_keeps_the_dead_pane_and_its_record() {
-    let panes = vec![agent("w1:p1", true), companion_without_presence("w1:p9")];
-    let mut host = FakeHost::new("w1:p1", panes).with_process("w1:p9", PaneProcess::IdleShell);
-    host.fail_open = true;
-    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
-    let error = toggle_companion(&mut host, &mut records, &mut FakeSessions::default())
-        .expect_err("open fails");
-    assert!(matches!(error, CompanionToggleError::Host(_)));
-    assert_eq!(host.calls, vec![format!("open w1:p1 /work {OWN}")]);
-    assert_eq!(records.0, vec![record("w1:p9", OWN)]);
-}
-
-#[test]
-fn an_unrecordable_open_keeps_the_new_pane_and_the_dead_pane() {
-    let panes = vec![agent("w1:p1", true), companion_without_presence("w1:p9")];
-    let mut host = FakeHost::new("w1:p1", panes).with_process("w1:p9", PaneProcess::IdleShell);
-    let mut records = UnwritableRecords(vec![record("w1:p9", OWN)]);
-    let error = toggle_companion(&mut host, &mut records, &mut FakeSessions::default())
-        .expect_err("save fails");
-    assert!(matches!(error, CompanionToggleError::Host(_)));
-    assert_eq!(host.calls, vec![format!("open w1:p1 /work {OWN}")]);
-    assert_eq!(host.notifications.len(), 1);
-}
-
-#[test]
-fn an_unidentified_proqi_in_another_tabs_record_does_not_block_this_tab() {
-    let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)])
-        .with_process("w2:p4", PaneProcess::Proqi { session_id: None });
-    let mut records = FakeRecords(vec![CompanionRecord {
-        tab_id: "w2:t3".to_owned(),
-        pane_id: "w2:p4".to_owned(),
-        session_id: session(OWN),
-    }]);
-    let mut sessions = FakeSessions::with_named("agent-tab", OWN);
-    let outcome = toggle_companion(&mut host, &mut records, &mut sessions).expect("open");
-    assert!(matches!(outcome, CompanionToggleOutcome::Opened { .. }));
-}
-
-#[test]
-fn after_a_failed_save_the_unrecorded_proqi_is_focused_and_nothing_is_closed() {
-    let panes = vec![
-        agent("w1:p1", true),
-        companion_without_presence("w1:p9"),
-        companion("w1:p10", false),
+fn unidentified_unknown_or_vanished_panes_in_other_tabs_do_not_block_this_tab() {
+    let cases = [
+        Some(PaneProcess::Proqi { session_id: None }),
+        Some(PaneProcess::Unknown),
+        None,
     ];
-    let mut host = FakeHost::new("w1:p1", panes).with_process("w1:p9", PaneProcess::IdleShell);
-    let mut records = FakeRecords(vec![record("w1:p9", OWN)]);
-    let outcome =
-        toggle_companion(&mut host, &mut records, &mut FakeSessions::default()).expect("focus");
-    assert_eq!(
-        outcome,
-        CompanionToggleOutcome::Focused {
-            pane_id: "w1:p10".to_owned()
+    for process in cases {
+        let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)]);
+        if let Some(process) = process.clone() {
+            host = host.with_process("w2:p4", process);
         }
-    );
-    assert_eq!(host.calls, vec!["focus w1:p10".to_owned()]);
+        let mut records = FakeRecords(vec![other_tab(Some("w2:p4"))]);
+        let mut sessions = FakeSessions::with_named("agent-tab", OWN);
+        let outcome = toggle_companion(&mut host, &mut records, &mut sessions).expect("open");
+        assert!(matches!(outcome, CompanionToggleOutcome::Opened { .. }));
+        let expected_other = if process.is_none() {
+            other_tab(None)
+        } else {
+            other_tab(Some("w2:p4"))
+        };
+        assert!(records.0.contains(&expected_other), "{process:?}");
+    }
 }
 
 #[test]
-fn a_companion_another_tab_runs_for_the_same_session_blocks_this_tab() {
-    let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)]).with_process(
-        "w2:p4",
-        PaneProcess::Proqi {
-            session_id: Some(session(OWN)),
-        },
+fn records_are_scoped_to_their_own_tab() {
+    let mut other = context("w2:p1");
+    other.tab_id = "w2:t3".to_owned();
+    let mut host = FakeHost::new("w2:p1", vec![agent("w2:p1", true)]).with_context(other);
+    let mut records = FakeRecords(vec![record(None, OWN)]);
+    let mut sessions = FakeSessions::with_named("agent-tab", OTHER);
+    toggle_companion(&mut host, &mut records, &mut sessions).expect("open");
+    assert_eq!(
+        sessions.ensured,
+        vec![("agent-tab".to_owned(), PathBuf::from("/work"))]
     );
-    let mut records = FakeRecords(vec![CompanionRecord {
-        tab_id: "w2:t3".to_owned(),
-        pane_id: "w2:p4".to_owned(),
-        session_id: session(OWN),
-    }]);
-    let mut sessions = FakeSessions::with_named("agent-tab", OWN);
-    let error = toggle_companion(&mut host, &mut records, &mut sessions).expect_err("running");
-    assert!(matches!(error, CompanionToggleError::SessionActive { .. }));
-    assert!(host.calls.is_empty());
 }

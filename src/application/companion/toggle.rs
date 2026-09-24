@@ -10,7 +10,9 @@ use crate::{
     },
 };
 
-use super::{SessionChoice, TogglePlan, companion_session_name, plan_toggle};
+use super::{
+    SessionChoice, TogglePlan, companion_session_cwd, companion_session_name, plan_toggle,
+};
 
 /// Completed toggle effect.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -23,7 +25,7 @@ pub enum CompanionToggleOutcome {
         pane_id: String,
         /// Session it resumes.
         session_id: SessionId,
-        /// Dead pane closed after the replacement opened.
+        /// Dead pane closed after the replacement opened, when it was still idle.
         replaced_pane_id: Option<String>,
     },
     /// An existing companion received focus.
@@ -126,11 +128,13 @@ where
     let context = host.context()?;
     let panes = host.tab_panes(&context.tab_id)?;
     let record = records.load(&context.tab_id)?;
-    let process = match &record {
-        Some(record) if panes.iter().any(|pane| pane.pane_id == record.pane_id) => {
-            host.process(&record.pane_id)?
-        }
-        _ => None,
+    let recorded_pane = record
+        .as_ref()
+        .and_then(|record| record.pane_id.as_deref())
+        .filter(|recorded| panes.iter().any(|pane| pane.pane_id == *recorded));
+    let process = match recorded_pane {
+        Some(pane_id) => host.process(pane_id)?,
+        None => None,
     };
     match plan_toggle(&context, &panes, record.as_ref(), process.as_ref()) {
         TogglePlan::Close {
@@ -141,7 +145,12 @@ where
                 .flush(session_id)
                 .map_err(CompanionToggleError::Session)?;
             host.close(&pane_id)?;
-            records.remove(&context.tab_id)?;
+            // The tab keeps its session, so the next toggle reopens it from any pane.
+            records.save(&CompanionRecord {
+                tab_id: context.tab_id.clone(),
+                pane_id: None,
+                session_id,
+            })?;
             Ok(CompanionToggleOutcome::Closed {
                 pane_id,
                 session_id,
@@ -158,35 +167,41 @@ where
         TogglePlan::NoReturnTarget => Err(CompanionToggleError::NoReturnTarget),
         TogglePlan::Open {
             target_pane_id,
-            cwd,
             session,
-            forget_record,
             dead_pane_id,
         } => {
-            if forget_record {
-                records.remove(&context.tab_id)?;
-            }
-            let session_id = open_session(host, records, sessions, &context, &cwd, session)?;
-            let pane_id = host.open_beside(&target_pane_id, &cwd, session_id)?;
+            let session_id = open_session(host, records, sessions, &context, session)?;
+            let pane_id =
+                host.open_beside(&target_pane_id, &context.focused_pane_cwd, session_id)?;
             // On failure the new Proqi stays open and usable. Closing it could
             // discard edits, and later toggles still recognize and focus it.
             // The dead pane is kept because nothing recorded its replacement.
             records.save(&CompanionRecord {
                 tab_id: context.tab_id.clone(),
-                pane_id: pane_id.clone(),
+                pane_id: Some(pane_id.clone()),
                 session_id,
             })?;
-            if let Some(dead) = &dead_pane_id {
-                host.close(dead)?;
-            }
+            let replaced_pane_id = match dead_pane_id {
+                Some(dead) if still_idle(host, &dead) => {
+                    host.close(&dead)?;
+                    Some(dead)
+                }
+                _ => None,
+            };
             Ok(CompanionToggleOutcome::Opened {
                 tab_id: context.tab_id,
                 pane_id,
                 session_id,
-                replaced_pane_id: dead_pane_id,
+                replaced_pane_id,
             })
         }
     }
+}
+
+/// Opening can take seconds; the user may have started a command in the dead
+/// shell meanwhile. Only a pane that is still an idle shell right now is closed.
+fn still_idle<H: CompanionHost>(host: &mut H, pane_id: &str) -> bool {
+    matches!(host.process(pane_id), Ok(Some(PaneProcess::IdleShell)))
 }
 
 /// Resolve the session to open and prove that no other pane already runs it.
@@ -195,7 +210,6 @@ fn open_session<H, R, S>(
     records: &mut R,
     sessions: &mut S,
     context: &CompanionContext,
-    cwd: &std::path::Path,
     choice: SessionChoice,
 ) -> Result<SessionId, CompanionToggleError<S::Error>>
 where
@@ -222,7 +236,7 @@ where
     } else {
         let name = companion_session_name(context);
         let session_id = sessions
-            .ensure(&name, cwd)
+            .ensure(&name, &companion_session_cwd(context))
             .map_err(CompanionToggleError::Session)?;
         (session_id, Some(name))
     };
@@ -255,7 +269,12 @@ where
         if record.tab_id == tab_id || record.session_id != session_id {
             continue;
         }
-        match host.process(&record.pane_id)? {
+        let Some(pane_id) = record.pane_id.as_deref() else {
+            continue;
+        };
+        // An unclassifiable pane is not proof of an opening companion; the
+        // session lease checked before remains the authority.
+        match host.process(pane_id).unwrap_or(Some(PaneProcess::Unknown)) {
             Some(PaneProcess::Launcher) => return Ok(true),
             // The same predicate as the tab's own record: only the exact
             // session is the plugin's. A Proqi resuming it by name holds the
@@ -264,7 +283,10 @@ where
                 session_id: Some(running),
             }) if running == session_id => return Ok(true),
             Some(_) => {}
-            None => records.remove(&record.tab_id)?,
+            None => records.save(&CompanionRecord {
+                pane_id: None,
+                ..record
+            })?,
         }
     }
     Ok(false)

@@ -1,7 +1,7 @@
 //! Deterministic host, plugin-state, and session fakes for the companion toggle.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     path::{Path, PathBuf},
 };
 
@@ -24,7 +24,16 @@ pub(super) fn context(focused: &str) -> CompanionContext {
         tab_id: "w1:t1".to_owned(),
         tab_label: Some("agent-tab".to_owned()),
         focused_pane_id: focused.to_owned(),
-        focused_pane_cwd: PathBuf::from("/work"),
+        focused_pane_cwd: PathBuf::from("/work/sub"),
+        workspace_cwd: Some(PathBuf::from("/work")),
+    }
+}
+
+pub(super) fn record(pane: Option<&str>, session_id: &str) -> CompanionRecord {
+    CompanionRecord {
+        tab_id: "w1:t1".to_owned(),
+        pane_id: pane.map(str::to_owned),
+        session_id: session(session_id),
     }
 }
 
@@ -51,7 +60,7 @@ pub(super) fn companion(pane: &str, focused: bool) -> PaneObservation {
     PaneObservation {
         focused,
         proqi_presence: true,
-        label: Some(super::COMPANION_PANE_LABEL.to_owned()),
+        label: Some(crate::application::COMPANION_PANE_LABEL.to_owned()),
         ..shell(pane)
     }
 }
@@ -59,7 +68,8 @@ pub(super) fn companion(pane: &str, focused: bool) -> PaneObservation {
 pub(super) struct FakeHost {
     context: CompanionContext,
     panes: Vec<PaneObservation>,
-    processes: HashMap<String, PaneProcess>,
+    /// Successive observations per pane; the last one repeats.
+    processes: HashMap<String, VecDeque<PaneProcess>>,
     next_pane: u32,
     pub(super) fail_open: bool,
     pub(super) calls: Vec<String>,
@@ -79,8 +89,18 @@ impl FakeHost {
         }
     }
 
-    pub(super) fn with_process(mut self, pane: &str, process: PaneProcess) -> Self {
-        self.processes.insert(pane.to_owned(), process);
+    pub(super) fn with_process(self, pane: &str, process: PaneProcess) -> Self {
+        self.with_processes(pane, vec![process])
+    }
+
+    /// Observations returned in order, as when a pane changes between probes.
+    pub(super) fn with_processes(mut self, pane: &str, processes: Vec<PaneProcess>) -> Self {
+        self.processes.insert(pane.to_owned(), processes.into());
+        self
+    }
+
+    pub(super) fn with_context(mut self, context: CompanionContext) -> Self {
+        self.context = context;
         self
     }
 }
@@ -91,12 +111,19 @@ impl CompanionHost for FakeHost {
     }
 
     fn tab_panes(&mut self, tab_id: &str) -> Result<Vec<PaneObservation>, CompanionError> {
-        assert_eq!(tab_id, "w1:t1");
+        assert_eq!(tab_id, self.context.tab_id);
         Ok(self.panes.clone())
     }
 
     fn process(&mut self, pane_id: &str) -> Result<Option<PaneProcess>, CompanionError> {
-        Ok(self.processes.get(pane_id).cloned())
+        let Some(queue) = self.processes.get_mut(pane_id) else {
+            return Ok(None);
+        };
+        Ok(if queue.len() > 1 {
+            queue.pop_front()
+        } else {
+            queue.front().cloned()
+        })
     }
 
     fn open_beside(
@@ -145,11 +172,6 @@ impl CompanionRecords for FakeRecords {
         self.0.push(record.clone());
         Ok(())
     }
-
-    fn remove(&mut self, tab_id: &str) -> Result<(), CompanionError> {
-        self.0.retain(|existing| existing.tab_id != tab_id);
-        Ok(())
-    }
 }
 
 /// Records whose writes always fail, as when the plugin state disk is full.
@@ -161,10 +183,6 @@ impl CompanionRecords for UnwritableRecords {
     }
 
     fn save(&mut self, _record: &CompanionRecord) -> Result<(), CompanionError> {
-        Err(CompanionError::State("disk full".to_owned()))
-    }
-
-    fn remove(&mut self, _tab_id: &str) -> Result<(), CompanionError> {
         Err(CompanionError::State("disk full".to_owned()))
     }
 }

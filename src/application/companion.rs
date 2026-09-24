@@ -1,10 +1,10 @@
 //! Tab-scoped companion policy for the multiplexer plugin toggle.
 //!
-//! One tab owns at most one Proqi companion. The policy decides from one host
-//! snapshot whether the toggle closes, focuses, returns focus, or opens a pane.
-//! It never adopts a process: only a pane this plugin recorded, still running
-//! its own session, may be closed, and only an idle shell left in that exact
-//! pane after a host restart may be replaced.
+//! One tab owns at most one Proqi companion and one recorded session. The
+//! policy decides from one host snapshot whether the toggle closes, focuses,
+//! returns focus, or opens a pane. It never adopts a process: only a pane this
+//! plugin recorded, still running its own session, may be closed, and only an
+//! idle shell left in that exact pane after a host restart may be replaced.
 
 mod toggle;
 
@@ -20,12 +20,13 @@ pub use toggle::{CompanionToggleError, CompanionToggleOutcome, toggle_companion}
 /// Persisted pane label the plugin manifest gives every companion pane.
 pub const COMPANION_PANE_LABEL: &str = "Proqi";
 
-/// Derive the Proqi session name for one tab.
+/// Derive the Proqi session name for a tab's first companion.
 ///
-/// A meaningful tab label names the session directly, which matches the name a
-/// user or reconciler gives a tab's companion by hand. Herdr's default labels
-/// are tab numbers, so a missing or numeric-only label is qualified by the
-/// workspace label, or by the workspace identity when that label is blank.
+/// A meaningful tab label names the session directly. Herdr's default labels
+/// are tab positions, which change when tabs close or move, so a missing or
+/// numeric-only label uses the stable public tab identity instead, prefixed by
+/// the workspace label for readability. The plugin reuses an existing session
+/// only when this rule produces its exact name and origin directory.
 #[must_use]
 pub fn companion_session_name(context: &CompanionContext) -> String {
     let label = context
@@ -38,22 +39,28 @@ pub fn companion_session_name(context: &CompanionContext) -> String {
     {
         return label.to_owned();
     }
-    let tab = label.unwrap_or(&context.tab_id);
-    let workspace = label_or_id(context.workspace_label.as_deref(), &context.workspace_id);
-    format!("{workspace}-{tab}")
-}
-
-fn label_or_id<'a>(label: Option<&'a str>, id: &'a str) -> &'a str {
-    label
+    let workspace = context
+        .workspace_label
+        .as_deref()
         .map(str::trim)
         .filter(|label| !label.is_empty())
-        .unwrap_or(id)
+        .unwrap_or(&context.workspace_id);
+    format!("{workspace}-{}", context.tab_id.replace(':', "-"))
+}
+
+/// Origin directory for a tab's first session, independent of the focused split.
+#[must_use]
+pub fn companion_session_cwd(context: &CompanionContext) -> PathBuf {
+    context
+        .workspace_cwd
+        .clone()
+        .unwrap_or_else(|| context.focused_pane_cwd.clone())
 }
 
 /// Which session an opened companion resumes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SessionChoice {
-    /// Reopen the session of a recorded companion that died with its host.
+    /// Reopen the session the tab already recorded.
     Recorded(SessionId),
     /// Get or create the tab's named session.
     Named,
@@ -67,27 +74,27 @@ pub(crate) enum TogglePlan {
         pane_id: String,
         session_id: SessionId,
     },
-    /// A live companion exists elsewhere in the tab.
+    /// A companion exists elsewhere in the tab.
     Focus { pane_id: String },
-    /// A companion this plugin did not open is focused; return to the tab's agent.
+    /// A companion the plugin cannot close is focused; return to the tab's agent.
     ReturnFocus { pane_id: String },
     /// No live companion exists.
     Open {
         target_pane_id: String,
-        cwd: PathBuf,
         session: SessionChoice,
-        forget_record: bool,
         dead_pane_id: Option<String>,
     },
-    /// A foreign companion is focused and the tab has no single agent to return to.
+    /// A companion the plugin cannot close is focused and no single agent exists.
     NoReturnTarget,
 }
 
-/// What the recorded pane of this tab currently is.
+/// What the tab's record currently describes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum RecordState {
-    /// No record, or a record for a pane that no longer exists.
-    Absent { stale: bool },
+    /// The tab has never recorded a session.
+    None,
+    /// The tab has a session but no open companion pane.
+    Closed { session_id: SessionId },
     /// The recorded pane still runs this plugin's companion.
     Live {
         pane_id: String,
@@ -98,8 +105,8 @@ enum RecordState {
         pane_id: String,
         session_id: SessionId,
     },
-    /// The recorded pane now belongs to something else and is never touched.
-    Reused,
+    /// The recorded pane could not be classified; it is never closed or replaced.
+    Unknown { pane_id: String },
 }
 
 fn record_state(
@@ -108,34 +115,42 @@ fn record_state(
     process: Option<&PaneProcess>,
 ) -> RecordState {
     let Some(record) = record else {
-        return RecordState::Absent { stale: false };
+        return RecordState::None;
     };
-    let Some(pane) = panes.iter().find(|pane| pane.pane_id == record.pane_id) else {
-        return RecordState::Absent { stale: true };
+    let session_id = record.session_id;
+    let closed = RecordState::Closed { session_id };
+    let Some(pane_id) = record.pane_id.clone() else {
+        return closed;
     };
-    let live = RecordState::Live {
-        pane_id: record.pane_id.clone(),
-        session_id: record.session_id,
+    let Some(pane) = panes.iter().find(|pane| pane.pane_id == pane_id) else {
+        return closed;
     };
     match process {
         // The plugin always launches `--resume <id>`, so an unreadable or
         // different session identifies a Proqi someone else started here.
         Some(PaneProcess::Proqi {
-            session_id: Some(session_id),
-        }) if *session_id == record.session_id => live,
-        Some(PaneProcess::Launcher) => live,
+            session_id: Some(running),
+        }) if *running == session_id => RecordState::Live {
+            pane_id,
+            session_id,
+        },
+        Some(PaneProcess::Launcher) => RecordState::Live {
+            pane_id,
+            session_id,
+        },
         // Any remaining Proqi signal keeps the pane: a lease left by a crash
         // expires within its TTL, and closing is never the conservative choice.
         Some(PaneProcess::IdleShell)
             if !pane.proqi_presence && pane.label.as_deref() == Some(COMPANION_PANE_LABEL) =>
         {
             RecordState::Dead {
-                pane_id: record.pane_id.clone(),
-                session_id: record.session_id,
+                pane_id,
+                session_id,
             }
         }
-        None => RecordState::Absent { stale: true },
-        Some(_) => RecordState::Reused,
+        Some(PaneProcess::Unknown) => RecordState::Unknown { pane_id },
+        // The pane now belongs to something else; the tab keeps its session.
+        None | Some(_) => closed,
     }
 }
 
@@ -148,21 +163,26 @@ pub(crate) fn plan_toggle(
 ) -> TogglePlan {
     let state = record_state(panes, record, process);
     let focused = context.focused_pane_id.as_str();
-    if let RecordState::Live {
-        pane_id,
-        session_id,
-    } = &state
-    {
-        return if pane_id == focused {
-            TogglePlan::Close {
+    match &state {
+        RecordState::Live {
+            pane_id,
+            session_id,
+        } if pane_id == focused => {
+            return TogglePlan::Close {
                 pane_id: pane_id.clone(),
                 session_id: *session_id,
-            }
-        } else {
-            TogglePlan::Focus {
-                pane_id: pane_id.clone(),
-            }
-        };
+            };
+        }
+        RecordState::Live { pane_id, .. } | RecordState::Unknown { pane_id } => {
+            return if pane_id == focused {
+                return_focus(panes)
+            } else {
+                TogglePlan::Focus {
+                    pane_id: pane_id.clone(),
+                }
+            };
+        }
+        RecordState::None | RecordState::Closed { .. } | RecordState::Dead { .. } => {}
     }
     let present = |pane: &&PaneObservation| pane.proqi_presence;
     if panes
@@ -197,18 +217,15 @@ fn open_plan(
     panes: &[PaneObservation],
     state: &RecordState,
 ) -> TogglePlan {
-    let (session, dead_pane_id, forget_record) = match state {
+    let (session, dead_pane_id) = match state {
         RecordState::Dead {
             pane_id,
             session_id,
-        } => (
-            SessionChoice::Recorded(*session_id),
-            Some(pane_id.clone()),
-            false,
-        ),
-        RecordState::Absent { stale } => (SessionChoice::Named, None, *stale),
-        RecordState::Reused => (SessionChoice::Named, None, true),
-        RecordState::Live { .. } => (SessionChoice::Named, None, false),
+        } => (SessionChoice::Recorded(*session_id), Some(pane_id.clone())),
+        RecordState::Closed { session_id } | RecordState::Live { session_id, .. } => {
+            (SessionChoice::Recorded(*session_id), None)
+        }
+        RecordState::None | RecordState::Unknown { .. } => (SessionChoice::Named, None),
     };
     let focused = context.focused_pane_id.as_str();
     let target_pane_id = if dead_pane_id.as_deref() == Some(focused) {
@@ -218,9 +235,7 @@ fn open_plan(
     };
     TogglePlan::Open {
         target_pane_id,
-        cwd: context.focused_pane_cwd.clone(),
         session,
-        forget_record,
         dead_pane_id,
     }
 }

@@ -164,3 +164,30 @@ fn run<const N: usize>(root: &Path, arguments: [&str; N]) {
             .success()
     );
 }
+
+#[test]
+fn herdr_plugin_files_are_packaging_and_run_the_full_plan() {
+    for path in [
+        "herdr-plugin.toml",
+        "herdr-plugin/proqi.sh",
+        "herdr-plugin/install.sh",
+    ] {
+        let result = paths(&[path]);
+        assert!(result.classes.contains(&ChangeClass::Packaging), "{path}");
+        assert!(!result.classes.contains(&ChangeClass::Unknown), "{path}");
+        assert_eq!(result.local_plan, LocalPlan::Full, "{path}");
+    }
+}
+
+#[test]
+fn lookalike_herdr_plugin_paths_remain_unknown() {
+    for path in [
+        "herdr-plugin.json",
+        "herdr-plugins/proqi.sh",
+        "herdr-plugin.toml.bak",
+    ] {
+        let result = paths(&[path]);
+        assert!(result.classes.contains(&ChangeClass::Unknown), "{path}");
+        assert!(!result.classes.contains(&ChangeClass::Packaging), "{path}");
+    }
+}

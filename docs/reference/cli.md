@@ -498,24 +498,29 @@ fails with `unsupported` and changes nothing.
 
 It acts only on the tab that had focus:
 
-- With no Proqi pane in the tab, it runs the same get-or-create as
-  `sessions ensure`, using the tab label as the name and the focused pane's
-  directory as the origin. A numeric default label such as `2` becomes
-  `<workspace label>-2`. It then opens that session in a new pane to the right
-  of the focused pane.
+- The plugin records one session per tab in its private state. When the tab
+  has a recorded session, the toggle reopens it in a new pane to the right of
+  the focused pane, whichever pane is focused.
+- For a tab's first companion, it runs the same get-or-create as
+  `sessions ensure`. The name is the tab label; a numeric default label, which
+  Herdr derives from the tab's position, is replaced by the stable tab identity,
+  so tab `w1:t4` in workspace `demo` uses `demo-w1-t4`. The origin is the
+  workspace's root directory.
 - When the tab already shows a Proqi pane, it focuses that pane.
 - When the focused pane is the Proqi pane the plugin opened, it asks that Proqi
   to make pending edits durable and closes the pane only after Proqi confirms.
   Without that confirmation, for example while Proqi is still starting, it fails
-  with `session_busy` and keeps the pane. The session stays resumable.
-- When the focused pane runs a Proqi that the plugin did not open, it returns
-  focus to the tab's only agent pane and never closes that Proqi.
+  with `session_busy` and keeps the pane. The session stays recorded.
+- When the focused pane runs a Proqi that the plugin did not open, or a recorded
+  pane that Herdr cannot classify in time, it returns focus to the tab's only
+  agent pane and never closes that pane.
 - When a recorded Proqi pane survived a Herdr restart as an idle shell, it
-  opens the same session in a new pane and then closes the idle one. A recorded
-  pane that now runs anything else is never touched.
+  opens the same session in a new pane and then closes the old pane only if it
+  is still an idle shell. A recorded pane that now runs anything else is never
+  touched.
 
 When the session is already open in another pane, for example because another
-workspace has a tab with the same label and directory, the toggle fails with
+workspace has a tab with the same label and root directory, the toggle fails with
 `companion_session_active` instead of starting a second Proqi. When the tab's
 name already belongs to a session from another directory, for example two
 repositories that both have a tab labeled `main`, it fails with

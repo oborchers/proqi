@@ -169,3 +169,31 @@ fn an_unusable_standalone_entry_fails_with_repair_guidance_and_downloads_nothing
     assert!(!output.status.success());
     assert!(plain.calls().is_empty());
 }
+
+#[test]
+fn an_interrupted_install_exits_and_removes_its_download_directory() {
+    // The installer signals the build step, as a terminal interrupt signals the
+    // whole process group, and then returns so the deferred trap can run.
+    let sandbox = Sandbox::new();
+    let installer = format!(
+        "printf 'installer %s\\n' \"$*\" >> '{}'\nkill -TERM $PPID\nexit 0\n",
+        sandbox.log().display()
+    );
+    release(&sandbox, &installer, None);
+    let output = sandbox.run_script(SCRIPT, &[], &[]);
+    assert_eq!(output.status.code(), Some(143), "{}", stderr(&output));
+    let leftovers = fs::read_dir(sandbox.path())
+        .expect("sandbox")
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("proqi-herdr-plugin.")
+        })
+        .count();
+    assert_eq!(
+        leftovers, 0,
+        "the EXIT trap still removes the download directory"
+    );
+}

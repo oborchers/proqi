@@ -5,7 +5,9 @@ authority by itself.
 
 ## Release invariants
 
-- `Cargo.toml` is the only version source.
+- `Cargo.toml` is the only version source. The Herdr plugin manifest
+  `herdr-plugin.toml` restates it as its `version`; `cargo xtask quality` and
+  `release-plan` fail when they diverge. See [Herdr plugin](#herdr-plugin).
 - Stable tags use exact `vX.Y.Z` syntax and must equal the Cargo version.
 - Every `.github/release-notes/vX.Y.Z.md` has one exact matching version in
   `release-highlights.json`, with three to six jointly reviewed user-facing
@@ -134,6 +136,20 @@ The verifier inspects metadata, members, modes, absence of maintainer scripts,
 dependency derivation, binary identity, and install, remove, state-preservation,
 and reinstall behavior in pinned Ubuntu 22.04, Ubuntu 24.04, and Debian
 bookworm containers.
+
+## Herdr plugin
+
+`herdr-plugin.toml` at the repository root publishes Proqi as a Herdr plugin,
+installed from the default branch with `herdr plugin install oborchers/proqi`.
+Release preparation sets its `version` to the new Cargo version in the same
+commit. The Herdr marketplace shows that version, and `cargo xtask quality` and
+`release-plan` reject any other value.
+
+The plugin runs the installed `proqi herdr toggle`, so it needs the first
+release that includes that command. When a release changes the command's
+contract, confirm that the default-branch launcher and the released binary
+still agree before tagging; the launcher checks the `herdr_companion_toggle`
+capability and reports an older binary instead of running it.
 
 ## Public Linux QA tools image
 

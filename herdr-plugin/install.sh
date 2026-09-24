@@ -50,7 +50,10 @@ fi
 
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/proqi-herdr-plugin.XXXXXX") \
   || fail 'could not create a temporary directory'
-trap 'rm -rf "$temporary"' EXIT HUP INT TERM
+trap 'rm -rf "$temporary"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 download() {
   curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \

@@ -2026,6 +2026,49 @@ Focus-gained events refresh target discovery immediately, while resize bursts
 trigger one debounced refresh after geometry settles. Metadata failure never
 weakens the standalone board or changes submission verification.
 
+### Herdr plugin companion
+
+The repository root carries `herdr-plugin.toml`, which makes Proqi installable
+with `herdr plugin install oborchers/proqi`. Its build step
+`herdr-plugin/install.sh` installs nothing when a Proqi exists on `PATH` or in
+the standalone directory; otherwise it runs the checksum-matched standalone
+installer from the latest release. Its one action and its pane entrypoint run
+`herdr-plugin/proqi.sh`, which only resolves the installed executable, checks
+the `herdr_companion_toggle` capability, and replaces itself with
+`proqi herdr toggle` or `proqi --resume <id>`. It contains no decision logic.
+
+`proqi herdr toggle` is the plugin action. The CLI composes three parts:
+
+- The terminal-independent `CompanionHost`, `CompanionRecords`, and
+  `CompanionSessions` ports in `ports::companion`. They speak in panes, tabs,
+  classified foreground processes (`Proqi`, `Launcher`, `IdleShell`, `Other`,
+  `Unknown`), and Proqi sessions.
+- The application policy `application::companion`, a pure planner plus one
+  orchestrating use case. It owns session naming (meaningful tab label, else
+  the stable public tab identity), the session origin (workspace root), and the
+  close rules. A pane closes only when it is the tab's recorded pane, its
+  foreground Proqi resumes exactly the recorded session, and the owner confirms
+  a durable flush. A recorded idle shell labeled `Proqi`, with no Proqi signal,
+  is replaced after a restart, and it is rechecked immediately before it
+  closes. `Unknown`, foreign, and lease-carrying panes are only focused.
+- The Herdr adapter `adapters::herdr::companion`. It reads the plugin
+  environment, runs direct bounded Herdr CLI calls without a shell, recognizes
+  Proqi by its display lease or foreground process, spends at most twelve
+  one-second process probes per toggle and reports `Unknown` beyond that or on
+  failure, preserves the tab's zoom state when it must focus by zooming, and
+  keeps one record per tab in `HERDR_PLUGIN_STATE_DIR`. Records are strict,
+  bounded JSON written by atomic rename under an exclusive `fs4` lock that
+  serializes toggles; the lock wait exceeds the slowest complete toggle. A
+  record keeps the tab's session after its pane closes, so later toggles
+  reopen it from any pane. Unreadable state is treated as no record.
+
+The owner flush reuses owner control's `Sync` request through a strict variant
+that fails when no owner confirms. Herdr owns plugin-pane ownership only in
+memory and does not restore plugin panes after a cold restart; the recorded
+pane identity, which Herdr persists and never reuses, carries the companion
+across that boundary. The manifest, launcher tokens, and version are pinned to
+their Rust and Cargo owners by `cargo xtask quality` and `release-plan`.
+
 ## CLI and agent-facing contract
 
 The interactive TUI and scriptable CLI call the same `SessionService`. This

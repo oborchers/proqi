@@ -32,7 +32,9 @@ pub(super) struct PluginContext {
 
 impl PluginContext {
     pub(super) fn into_context(self) -> Option<CompanionContext> {
-        let cwd = self.focused_pane_cwd.or(self.workspace_cwd)?;
+        let cwd = self
+            .focused_pane_cwd
+            .or_else(|| self.workspace_cwd.clone())?;
         Some(CompanionContext {
             workspace_id: self.workspace_id,
             workspace_label: self.workspace_label,
@@ -40,6 +42,7 @@ impl PluginContext {
             tab_label: self.tab_label,
             focused_pane_id: self.focused_pane_id,
             focused_pane_cwd: cwd,
+            workspace_cwd: self.workspace_cwd,
         })
     }
 }

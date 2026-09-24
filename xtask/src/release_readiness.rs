@@ -75,6 +75,8 @@ fn readiness_findings(
     collect(validate_tag(tag, &version), &mut findings);
     collect(validate_note(root, tag, &version), &mut findings);
     collect(validate_highlights(root, &version), &mut findings);
+    // The Herdr plugin manifest restates the Cargo version for the marketplace.
+    findings.extend(super::herdr_plugin::findings(root)?);
     collect(validate_source_sha(root, source_sha), &mut findings);
     if matches!(phase, ReleasePhase::Preparation) {
         collect(validate_main_identity(root, source_sha), &mut findings);
@@ -266,12 +268,34 @@ mod tests {
             r#"{"schema_version":1,"releases":[{"version":"1.2.3","highlights":["One","Two","Three"]}]}"#,
         )
         .expect("highlights");
+        write_herdr_plugin(root.path(), "1.2.3");
         git(root.path(), &["init", "-q", "-b", "main"]);
         git(root.path(), &["config", "user.name", "Proqi Test"]);
         git(root.path(), &["config", "user.email", "test@proqi.invalid"]);
         git(root.path(), &["add", "--all"]);
         git(root.path(), &["commit", "-qm", "fixture"]);
         root
+    }
+
+    /// The repository's Herdr plugin files with the manifest set to `version`.
+    fn write_herdr_plugin(root: &Path, version: &str) {
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let manifest =
+            fs::read_to_string(repository.join("herdr-plugin.toml")).expect("repository manifest");
+        let line = manifest
+            .lines()
+            .find(|line| line.starts_with("version = "))
+            .expect("manifest version");
+        let manifest = manifest.replacen(line, &format!("version = \"{version}\""), 1);
+        fs::write(root.join("herdr-plugin.toml"), manifest).expect("fixture manifest");
+        fs::create_dir_all(root.join("herdr-plugin")).expect("plugin directory");
+        for script in ["proqi.sh", "install.sh"] {
+            fs::copy(
+                repository.join("herdr-plugin").join(script),
+                root.join("herdr-plugin").join(script),
+            )
+            .expect("plugin script");
+        }
     }
 
     fn git(root: &Path, arguments: &[&str]) -> String {
@@ -289,6 +313,22 @@ mod tests {
             .expect("UTF-8")
             .trim()
             .to_owned()
+    }
+
+    #[test]
+    fn preparation_rejects_a_herdr_plugin_version_that_lags_cargo() {
+        let root = fixture();
+        write_herdr_plugin(root.path(), "1.2.2");
+        git(root.path(), &["commit", "-qam", "stale plugin version"]);
+        let sha = git(root.path(), &["rev-parse", "HEAD"]);
+        let findings = readiness_findings(root.path(), "v1.2.3", &sha, ReleasePhase::Preparation)
+            .expect("findings");
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("herdr-plugin.toml version must be `1.2.3`")),
+            "{findings:?}"
+        );
     }
 
     #[test]

@@ -5,29 +5,33 @@ use std::{cell::RefCell, collections::VecDeque, ffi::OsString, path::PathBuf, rc
 use serde_json::{Value, json};
 
 use crate::ports::{
-    companion::{CompanionError, CompanionHost, CompanionRecord, CompanionRecords, PaneProcess},
+    companion::{CompanionError, CompanionHost, PaneProcess},
     environment::{ProcessError, ProcessOutput, ProcessRequest, ProcessRunner},
 };
 
-use super::{FileCompanionRecords, HerdrCompanionHost, HerdrPluginEnvironment};
+use super::{HerdrCompanionHost, HerdrPluginEnvironment};
 
-const SESSION: &str = "ses_06g30t7dv5qv55n1ppn3clis3k";
+mod focus;
+mod probes;
+mod state;
+
+pub(super) const SESSION: &str = "ses_06g30t7dv5qv55n1ppn3clis3k";
 
 #[derive(Clone, Default)]
-struct ScriptedRunner {
+pub(super) struct ScriptedRunner {
     responses: Rc<RefCell<VecDeque<ProcessOutput>>>,
     requests: Rc<RefCell<Vec<Vec<String>>>>,
 }
 
 impl ScriptedRunner {
-    fn with(responses: Vec<ProcessOutput>) -> Self {
+    pub(super) fn with(responses: Vec<ProcessOutput>) -> Self {
         Self {
             responses: Rc::new(RefCell::new(responses.into())),
             requests: Rc::default(),
         }
     }
 
-    fn requests(&self) -> Vec<Vec<String>> {
+    pub(super) fn requests(&self) -> Vec<Vec<String>> {
         self.requests.borrow().clone()
     }
 }
@@ -50,7 +54,7 @@ impl ProcessRunner for ScriptedRunner {
     }
 }
 
-fn ok(result: &Value) -> ProcessOutput {
+pub(super) fn ok(result: &Value) -> ProcessOutput {
     ProcessOutput {
         exit_code: Some(0),
         stdout: serde_json::to_vec(&json!({ "id": "cli", "result": result })).expect("json"),
@@ -58,7 +62,7 @@ fn ok(result: &Value) -> ProcessOutput {
     }
 }
 
-fn rejected(code: &str) -> ProcessOutput {
+pub(super) fn rejected(code: &str) -> ProcessOutput {
     ProcessOutput {
         exit_code: Some(1),
         stdout: Vec::new(),
@@ -67,7 +71,7 @@ fn rejected(code: &str) -> ProcessOutput {
     }
 }
 
-fn plugin_context() -> Value {
+pub(super) fn plugin_context() -> Value {
     json!({
         "workspace_id": "w1", "workspace_label": "demo", "workspace_cwd": "/workspace",
         "tab_id": "w1:t1", "tab_label": "1", "focused_pane_id": "w1:p1",
@@ -75,7 +79,7 @@ fn plugin_context() -> Value {
     })
 }
 
-fn host(runner: &ScriptedRunner, context: &Value) -> HerdrCompanionHost<ScriptedRunner> {
+pub(super) fn host(runner: &ScriptedRunner, context: &Value) -> HerdrCompanionHost<ScriptedRunner> {
     HerdrCompanionHost::new(
         HerdrPluginEnvironment::new(
             OsString::from("/bin/herdr"),
@@ -155,7 +159,7 @@ fn a_proqi_or_launcher_without_a_display_lease_is_recognized_by_its_process() {
     );
 }
 
-fn info(shell: u32, group: u32, processes: &[(u32, &[&str])]) -> ProcessOutput {
+pub(super) fn info(shell: u32, group: u32, processes: &[(u32, &[&str])]) -> ProcessOutput {
     let processes: Vec<_> = processes
         .iter()
         .map(|(pid, argv)| json!({ "pid": pid, "argv": argv }))
@@ -291,32 +295,6 @@ fn open_beside_uses_the_manifest_entrypoint_without_a_shell_command() {
 }
 
 #[test]
-fn focus_falls_back_from_plugin_ownership_to_agent_focus_to_a_zoom_cycle() {
-    let runner = ScriptedRunner::with(vec![rejected("plugin_pane_not_found"), ok(&json!({}))]);
-    host(&runner, &plugin_context())
-        .focus("w1:p1")
-        .expect("agent focus");
-    assert_eq!(runner.requests()[1], vec!["agent", "focus", "w1:p1"]);
-
-    let runner = ScriptedRunner::with(vec![
-        rejected("plugin_pane_not_found"),
-        rejected("agent_not_found"),
-        ok(&json!({})),
-        ok(&json!({})),
-    ]);
-    host(&runner, &plugin_context())
-        .focus("w1:p5")
-        .expect("zoom focus");
-    assert_eq!(
-        runner.requests()[2..],
-        [
-            vec!["pane", "zoom", "w1:p5", "--on"],
-            vec!["pane", "zoom", "w1:p5", "--off"]
-        ]
-    );
-}
-
-#[test]
 fn close_tolerates_an_already_closed_pane_and_reports_other_rejections() {
     let runner = ScriptedRunner::with(vec![rejected("pane_not_found"), rejected("busy")]);
     let mut host = host(&runner, &plugin_context());
@@ -338,62 +316,4 @@ fn notification_is_best_effort_and_carries_only_the_message() {
             "Proqi is busy"
         ]]
     );
-}
-
-fn record(tab: &str, pane: &str) -> CompanionRecord {
-    CompanionRecord {
-        tab_id: tab.to_owned(),
-        pane_id: pane.to_owned(),
-        session_id: SESSION.parse().expect("session"),
-    }
-}
-
-#[test]
-fn records_round_trip_replace_per_tab_and_survive_reopening() {
-    let directory = tempfile::tempdir().expect("state");
-    {
-        let mut records = FileCompanionRecords::acquire(directory.path()).expect("lock");
-        assert!(records.all().expect("empty").is_empty());
-        records.save(&record("w1:t1", "w1:p2")).expect("save");
-        records.save(&record("w2:t1", "w2:p2")).expect("save");
-        records.save(&record("w1:t1", "w1:p9")).expect("replace");
-        records.remove("w2:t1").expect("remove");
-        records.remove("missing").expect("idempotent remove");
-    }
-    let mut records = FileCompanionRecords::acquire(directory.path()).expect("relock");
-    assert_eq!(
-        records.all().expect("records"),
-        vec![record("w1:t1", "w1:p9")]
-    );
-    assert_eq!(
-        records.load("w1:t1").expect("load"),
-        Some(record("w1:t1", "w1:p9"))
-    );
-}
-
-#[test]
-fn unreadable_or_foreign_state_is_treated_as_no_record() {
-    for contents in [
-        "{",
-        "{\"version\":2,\"companions\":[]}",
-        "{\"version\":1,\"companions\":[],\"x\":1}",
-    ] {
-        let directory = tempfile::tempdir().expect("state");
-        std::fs::write(directory.path().join("companions.json"), contents).expect("seed");
-        let mut records = FileCompanionRecords::acquire(directory.path()).expect("lock");
-        assert!(records.all().expect("records").is_empty(), "{contents}");
-        records.save(&record("w1:t1", "w1:p2")).expect("overwrite");
-        assert_eq!(records.all().expect("records").len(), 1);
-    }
-}
-
-#[test]
-fn a_second_toggle_waits_for_the_lock_and_then_reports_contention() {
-    let directory = tempfile::tempdir().expect("state");
-    let _held = FileCompanionRecords::acquire(directory.path()).expect("first");
-    let contended = FileCompanionRecords::acquire_within(
-        directory.path(),
-        std::time::Duration::from_millis(60),
-    );
-    assert!(matches!(contended, Err(CompanionError::State(_))));
 }

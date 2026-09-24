@@ -1,13 +1,12 @@
 //! Repository-owned CI and local-gate change classification.
 
-use std::{
-    collections::BTreeSet,
-    ffi::OsStr,
-    path::Path,
-    process::{Command, Output},
-};
+use std::{collections::BTreeSet, ffi::OsStr, path::Path};
 
 use serde_json::json;
+
+use git::{changed_paths, command_text, resolve_commit, untracked_paths};
+
+mod git;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(super) enum ChangeClass {
@@ -154,120 +153,6 @@ fn advisory(required: bool) -> &'static str {
     }
 }
 
-fn changed_paths(
-    root: &Path,
-    base_sha: &str,
-    head_sha: Option<&str>,
-) -> Result<Vec<String>, String> {
-    let mut arguments = vec![
-        "diff",
-        "--name-status",
-        "-z",
-        "--find-renames",
-        "--diff-filter=ACDMRTUXB",
-        base_sha,
-    ];
-    if let Some(head_sha) = head_sha {
-        arguments.push(head_sha);
-    }
-    arguments.push("--");
-    parse_name_status(command(root, arguments)?, "git diff")
-}
-
-fn untracked_paths(root: &Path) -> Result<Vec<String>, String> {
-    parse_nul_paths(
-        &checked_stdout(
-            command(root, ["ls-files", "-z", "--others", "--exclude-standard"])?,
-            "git ls-files",
-        )?,
-        "git ls-files",
-    )
-}
-
-fn checked_stdout(output: Output, operation: &str) -> Result<Vec<u8>, String> {
-    if !output.status.success() {
-        return Err(format!(
-            "{operation} exited with {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-    Ok(output.stdout)
-}
-
-fn parse_name_status(output: Output, operation: &str) -> Result<Vec<String>, String> {
-    let output = checked_stdout(output, operation)?;
-    let mut fields = output
-        .split(|byte| *byte == 0)
-        .filter(|field| !field.is_empty());
-    let mut paths = Vec::new();
-    while let Some(status) = fields.next() {
-        let status = std::str::from_utf8(status)
-            .map_err(|error| format!("{operation} status is not UTF-8: {error}"))?;
-        let path_count = if status.starts_with('R') || status.starts_with('C') {
-            2
-        } else {
-            1
-        };
-        for _ in 0..path_count {
-            let path = fields
-                .next()
-                .ok_or_else(|| format!("{operation} returned incomplete status `{status}`"))?;
-            paths.push(
-                std::str::from_utf8(path)
-                    .map_err(|error| format!("{operation} path is not UTF-8: {error}"))?
-                    .to_owned(),
-            );
-        }
-    }
-    Ok(paths)
-}
-
-fn parse_nul_paths(output: &[u8], operation: &str) -> Result<Vec<String>, String> {
-    output
-        .split(|byte| *byte == 0)
-        .filter(|field| !field.is_empty())
-        .map(|path| {
-            std::str::from_utf8(path)
-                .map(str::to_owned)
-                .map_err(|error| format!("{operation} path is not UTF-8: {error}"))
-        })
-        .collect()
-}
-
-fn resolve_commit(root: &Path, revision: &str) -> Result<String, String> {
-    command_text(
-        root,
-        ["rev-parse", "--verify", &format!("{revision}^{{commit}}")],
-    )
-    .map(|value| value.trim().to_owned())
-}
-
-fn command_text<const N: usize>(root: &Path, arguments: [&str; N]) -> Result<String, String> {
-    let output = command(root, arguments)?;
-    if !output.status.success() {
-        return Err(format!(
-            "git {} exited with {}: {}",
-            arguments.join(" "),
-            output.status,
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-    String::from_utf8(output.stdout).map_err(|error| format!("git output is not UTF-8: {error}"))
-}
-
-fn command<I, S>(root: &Path, arguments: I) -> Result<Output, String>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-{
-    Command::new("git")
-        .args(arguments)
-        .current_dir(root)
-        .output()
-        .map_err(|error| format!("start git: {error}"))
-}
-
 fn classify<'a>(paths: impl Iterator<Item = &'a str>) -> Classification {
     let paths = paths.collect::<Vec<_>>();
     let mut classes = BTreeSet::new();
@@ -333,6 +218,7 @@ fn insert_if(classes: &mut BTreeSet<ChangeClass>, class: ChangeClass, condition:
 
 fn is_known(path: &str) -> bool {
     has_extension(path, "md")
+        || is_herdr_plugin(path)
         || path.starts_with("src/")
         || path.starts_with("tests/")
         || path.starts_with("xtask/")
@@ -419,8 +305,14 @@ fn is_dependency(path: &str) -> bool {
         || path.starts_with(".config/nextest")
 }
 
+/// The Herdr plugin manifest and its runtime scripts ship from the repository root.
+fn is_herdr_plugin(path: &str) -> bool {
+    path == "herdr-plugin.toml" || path.starts_with("herdr-plugin/")
+}
+
 fn is_packaging(path: &str) -> bool {
-    path.starts_with("tools/ci-linux/")
+    is_herdr_plugin(path)
+        || path.starts_with("tools/ci-linux/")
         || path.starts_with("tests/package_contract")
         || matches!(path, "about.toml" | "about.hbs" | "dist-workspace.toml")
         || path.strip_prefix("xtask/src/").is_some_and(|name| {

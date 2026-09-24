@@ -57,7 +57,7 @@ fn a_missing_or_too_old_proqi_is_reported_through_herdr_and_not_run() {
     assert_eq!(
         missing.calls(),
         vec![
-            "herdr notification show Proqi --body Proqi is not installed. Reinstall the plugin with: herdr plugin install oborchers/proqi"
+            "herdr notification show Proqi --body Proqi is not on the Herdr server's PATH. If proqi works in your shell (Homebrew or Cargo), restart the Herdr server from that shell. Otherwise run: herdr plugin install oborchers/proqi"
         ]
     );
 

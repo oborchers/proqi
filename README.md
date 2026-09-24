@@ -151,21 +151,32 @@ an explanation. Uninstalling preserves data.
 
 ### As a Herdr plugin
 
-Keep a scratchpad for your next prompts beside the agent you are already
-running, with verified delivery, one key away:
+<span class="version-scope">Next release</span>
+
+Proqi is an agent-optimized terminal scratchpad for follow-up prompts next to
+coding-agent sessions. The Herdr plugin opens it beside the focused pane with
+one action:
 
 ```shell
 herdr plugin install oborchers/proqi
 ```
 
-The plugin needs Proqi 0.13.0 or newer and Herdr 0.8.0 or newer on macOS or
-Linux. Herdr previews the plugin before it runs anything. When `proqi` is
-already installed, the plugin uses it and installs nothing, so Homebrew, Cargo,
-Debian, and standalone installations keep their own update channel. Otherwise
-the install step runs the standalone installer from the latest release after
-checking it against the SHA-256 record published beside it. Both files come
-from the same release, so that check proves integrity, not authenticity; the
-trust model equals `curl ... | sh` above.
+The plugin needs the first Proqi release that includes `proqi herdr toggle`,
+plus Herdr 0.8.0 or newer on macOS or Linux. Until that release is published, a
+fresh install receives the latest published Proqi, and the toggle reports it as
+too old instead of running.
+
+Herdr previews the plugin before it runs anything. When `proqi` is already
+installed, the plugin uses it and installs nothing, so Homebrew, Cargo, Debian,
+and standalone installations keep their own update channel. Otherwise the
+install step uses `curl` to fetch the standalone installer from the latest
+release and checks it against the SHA-256 record published beside it. Both
+files come from the same release, so that check proves integrity, not
+authenticity; the trust model equals `curl ... | sh` above. Herdr hides the
+output of a successful install: a fresh Proqi lands in `$HOME/.local/bin`,
+which the plugin finds even when your shell's `PATH` lacks it. If Proqi comes
+from Homebrew or Cargo, start the Herdr server from a shell where
+`command -v proqi` works.
 
 Bind the toggle in Herdr's `config.toml`:
 
@@ -177,12 +188,12 @@ command = "proqi.toggle"
 description = "toggle Proqi"
 ```
 
-The toggle opens one Proqi pane to the right of the focused agent, focuses it
-when it is already open, and closes it after saving when it is focused. Each
-tab keeps one named session, named after the tab. Herdr does not restore
-plugin panes after a cold server restart; the next toggle reopens the same
-session and removes the leftover empty shell. See the
-[Herdr plugin guide](docs/guides/herdr-plugin.md).
+The toggle opens one Proqi pane to the right of the focused pane, focuses it
+when it is already open, and closes it once Proqi confirms its edits are saved
+when it is focused. Each tab keeps one Proqi session, whichever pane is
+focused. Herdr does not restore plugin panes after a cold server restart; the
+next toggle reopens the same session and closes the leftover shell if it is
+still idle. See the [Herdr plugin guide](docs/guides/herdr-plugin.md).
 
 ## Start and resume
 

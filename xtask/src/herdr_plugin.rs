@@ -154,6 +154,14 @@ fn entrypoint_findings(found: &mut Vec<String>, table: &Table) {
     }
 }
 
+/// Reviewed keys per entry kind. Anything else, such as per-entry
+/// `platforms`, `contexts`, or popup sizes, needs an explicit policy change.
+const ENTRY_KEYS: &[(&str, &[&str])] = &[
+    ("build", &["command"]),
+    ("actions", &["id", "title", "description", "command"]),
+    ("panes", &["id", "title", "placement", "command"]),
+];
+
 fn entries<'a>(
     found: &mut Vec<String>,
     table: &'a Table,
@@ -169,6 +177,20 @@ fn entries<'a>(
         found.push(format!(
             "{MANIFEST} must declare exactly {count} [[{key}]] entry"
         ));
+    }
+    let allowed = ENTRY_KEYS
+        .iter()
+        .find(|(kind, _)| *kind == key)
+        .map_or(&[][..], |(_, keys)| *keys);
+    for entry in &entries {
+        for unreviewed in entry
+            .keys()
+            .filter(|name| !allowed.contains(&name.as_str()))
+        {
+            found.push(format!(
+                "{MANIFEST} [[{key}]] declares unreviewed key `{unreviewed}`"
+            ));
+        }
     }
     entries
 }
@@ -250,6 +272,35 @@ mod tests {
         assert_eq!(found.len(), 1, "{found:?}");
         assert!(found[0].contains("--resume"));
         assert_eq!(launcher_findings("").len(), 3);
+    }
+
+    #[test]
+    fn unreviewed_keys_inside_entries_are_rejected() {
+        for (anchor, addition, reason) in [
+            (
+                "[[build]]\n",
+                "platforms = [\"linux\"]\n",
+                "[[build]] declares unreviewed key `platforms`",
+            ),
+            (
+                "[[actions]]\n",
+                "contexts = [\"workspace\"]\n",
+                "[[actions]] declares unreviewed key `contexts`",
+            ),
+            (
+                "[[panes]]\n",
+                "width = \"80%\"\n",
+                "[[panes]] declares unreviewed key `width`",
+            ),
+        ] {
+            let changed = REPOSITORY_MANIFEST.replacen(anchor, &format!("{anchor}{addition}"), 1);
+            assert_ne!(changed, REPOSITORY_MANIFEST, "{anchor}");
+            let found = manifest_findings(&changed, &version(), |_| true);
+            assert!(
+                found.iter().any(|finding| finding.contains(reason)),
+                "{reason}: {found:?}"
+            );
+        }
     }
 
     #[test]

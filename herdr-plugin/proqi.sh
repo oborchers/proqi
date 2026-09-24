@@ -11,8 +11,9 @@ notify() {
   "${HERDR_BIN_PATH:-herdr}" notification show Proqi --body "$1" >/dev/null 2>&1 || true
 }
 
-# An existing installation on PATH always wins. The standalone installer's
-# default directory is the only fallback because it may be missing from PATH.
+# An existing installation on the Herdr server's PATH always wins. The
+# standalone installer's default directory is the only fallback because it may
+# be missing from PATH. Other installations are reported with their remedy.
 resolve_proqi() {
   if found=$(command -v proqi 2>/dev/null) && [ -n "$found" ]; then
     printf '%s\n' "$found"
@@ -27,7 +28,7 @@ resolve_proqi() {
 }
 
 if ! proqi=$(resolve_proqi); then
-  notify 'Proqi is not installed. Reinstall the plugin with: herdr plugin install oborchers/proqi'
+  notify "Proqi is not on the Herdr server's PATH. If proqi works in your shell (Homebrew or Cargo), restart the Herdr server from that shell. Otherwise run: herdr plugin install oborchers/proqi"
   exit 1
 fi
 

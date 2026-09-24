@@ -8,7 +8,7 @@ id = "proqi"
 name = "Proqi"
 version = "0.13.0"
 min_herdr_version = "0.8.0"
-description = "A scratchpad for your next prompts to the agent you are already running, with verified delivery. Toggle one Proqi pane per tab."
+description = "An agent-optimized terminal scratchpad for follow-up prompts next to coding-agent sessions. One action opens, focuses, or closes one Proqi pane per tab."
 platforms = ["linux", "macos"]
 
 # Runs only during `herdr plugin install`, after the preview. It installs Proqi

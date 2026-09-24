@@ -16,7 +16,7 @@ impl FakeHerdr {
     fn new() -> Self {
         let sandbox = Sandbox::new();
         let work = sandbox.path().join("agent work");
-        fs::create_dir_all(&work).expect("work");
+        fs::create_dir_all(work.join("sub dir")).expect("work");
         fs::create_dir_all(sandbox.path().join("herdr")).expect("herdr state");
         let dir = sandbox.path().join("herdr");
         write_tool(
@@ -87,7 +87,8 @@ esac
     fn toggle(&self, focused: &str, plugin: bool) -> Output {
         let context = json!({
             "workspace_id": "w1", "workspace_label": "demo", "tab_id": "w1:t1", "tab_label": "1",
-            "focused_pane_id": focused, "focused_pane_cwd": self.work,
+            "focused_pane_id": focused, "focused_pane_cwd": self.work.join("sub dir"),
+            "workspace_cwd": self.work,
             "invocation_source": "keybinding"
         });
         let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_proqi"));
@@ -273,7 +274,7 @@ fn assert_named_session(herdr: &FakeHerdr, session: &str) {
         .expect("sessions array");
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0]["id"], session);
-    assert_eq!(sessions[0]["name"], "demo-1");
+    assert_eq!(sessions[0]["name"], "demo-w1-t1");
     let origin = sessions[0]["origin_cwd"].as_str().expect("origin");
     assert_eq!(
         Path::new(origin),

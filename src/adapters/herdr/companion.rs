@@ -4,6 +4,7 @@
 //! manifest entrypoint receives the session identity through one environment
 //! variable and replaces its launcher with `proqi --resume`.
 
+mod focus;
 mod state;
 #[cfg(test)]
 mod tests;
@@ -44,8 +45,28 @@ pub const TOGGLE_CAPABILITY: &str = "herdr_companion_toggle";
 /// Oldest Herdr release whose protocol Proqi qualifies and whose plugin surface this host uses.
 pub const MIN_HERDR_VERSION: &str = "0.8.0";
 
-const QUERY_TIMEOUT: Duration = Duration::from_secs(3);
-const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
+const QUERY_SECONDS: u64 = 3;
+const PROBE_SECONDS: u64 = 1;
+const OPEN_SECONDS: u64 = 10;
+const QUERY_TIMEOUT: Duration = Duration::from_secs(QUERY_SECONDS);
+const PROBE_TIMEOUT: Duration = Duration::from_secs(PROBE_SECONDS);
+const OPEN_TIMEOUT: Duration = Duration::from_secs(OPEN_SECONDS);
+/// Process probes one toggle may spend; later probes report `Unknown`.
+const PROBE_BUDGET: u64 = 12;
+/// Presence probes of unlabeled panes, leaving budget for the recorded pane.
+const PRESENCE_PROBES: usize = 8;
+/// Sequential Herdr calls that focus, close, or notify in one toggle.
+const CONTROL_CALLS: u64 = 6;
+/// Owner flush plus store and schema admission, bounded by their own adapters.
+const SESSION_SECONDS: u64 = 10;
+/// Slowest complete toggle; the plugin lock waits longer than this.
+pub(crate) const TOGGLE_WORST_CASE: Duration = Duration::from_secs(
+    QUERY_SECONDS
+        + PROBE_BUDGET * PROBE_SECONDS
+        + OPEN_SECONDS
+        + CONTROL_CALLS * QUERY_SECONDS
+        + SESSION_SECONDS,
+);
 const NOTIFICATION_TITLE: &str = "Proqi";
 
 /// Herdr plugin action environment, read once at composition.
@@ -113,6 +134,7 @@ impl HerdrPluginEnvironment {
 pub struct HerdrCompanionHost<R> {
     runner: R,
     environment: HerdrPluginEnvironment,
+    probes_left: u64,
 }
 
 impl<R> HerdrCompanionHost<R> {
@@ -122,6 +144,7 @@ impl<R> HerdrCompanionHost<R> {
         Self {
             runner,
             environment,
+            probes_left: PROBE_BUDGET,
         }
     }
 }
@@ -163,25 +186,6 @@ impl<R: ProcessRunner> HerdrCompanionHost<R> {
             .map(|envelope| envelope.result)
             .map_err(|error| HostFailure::Process(format!("malformed Herdr response: {error}")))
     }
-
-    fn focus_any(&mut self, pane_id: &str) -> Result<(), HostFailure> {
-        match self.run(&["plugin", "pane", "focus", pane_id], QUERY_TIMEOUT) {
-            Ok(_) => return Ok(()),
-            Err(HostFailure::Rejected { .. }) => {}
-            Err(error) => return Err(error),
-        }
-        if self
-            .run(&["agent", "focus", pane_id], QUERY_TIMEOUT)
-            .is_ok()
-        {
-            return Ok(());
-        }
-        // Herdr 0.8.0 through 0.9.1 expose no focus-by-id for an arbitrary pane;
-        // zooming one focuses it, and the second call restores the layout.
-        self.run(&["pane", "zoom", pane_id, "--on"], QUERY_TIMEOUT)?;
-        self.run(&["pane", "zoom", pane_id, "--off"], QUERY_TIMEOUT)
-            .map(|_| ())
-    }
 }
 
 impl<R: ProcessRunner> CompanionHost for HerdrCompanionHost<R> {
@@ -206,10 +210,12 @@ impl<R: ProcessRunner> CompanionHost for HerdrCompanionHost<R> {
             .collect();
         // A Proqi that cannot reach Herdr, or is still being launched, publishes
         // no display lease. Recognize it by its foreground process so the toggle
-        // focuses it instead of opening a second one. Recognition never makes the pane closable.
+        // focuses it instead of opening a second one. Recognition never makes a
+        // pane closable, and an unprobed or unknown pane simply stays unrecognized.
         for pane in panes
             .iter_mut()
             .filter(|pane| !pane.proqi_presence && !pane.agent)
+            .take(PRESENCE_PROBES)
         {
             if let Some(PaneProcess::Proqi { .. } | PaneProcess::Launcher) =
                 self.process(&pane.pane_id)?
@@ -221,13 +227,18 @@ impl<R: ProcessRunner> CompanionHost for HerdrCompanionHost<R> {
     }
 
     fn process(&mut self, pane_id: &str) -> Result<Option<PaneProcess>, CompanionError> {
+        if self.probes_left == 0 {
+            return Ok(Some(PaneProcess::Unknown));
+        }
+        self.probes_left -= 1;
         match self.json::<wire::ProcessInfoBody>(
             &["pane", "process-info", "--pane", pane_id],
-            QUERY_TIMEOUT,
+            PROBE_TIMEOUT,
         ) {
             Ok(body) => Ok(Some(wire::classify(&body.process_info))),
             Err(HostFailure::Rejected { code, .. }) if code == "pane_not_found" => Ok(None),
-            Err(error) => Err(error.into()),
+            // A slow or failed probe is not evidence; the pane is never closed.
+            Err(_) => Ok(Some(PaneProcess::Unknown)),
         }
     }
 

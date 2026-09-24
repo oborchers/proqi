@@ -24,7 +24,11 @@ const STATE_FILE: &str = "companions.json";
 const LOCK_FILE: &str = "companions.lock";
 const STATE_VERSION: u32 = 1;
 const MAX_STATE_BYTES: u64 = 256 * 1024;
-const LOCK_TIMEOUT: Duration = Duration::from_secs(5);
+/// Oldest tabs are forgotten first beyond this many records.
+const MAX_RECORDS: usize = 512;
+/// A waiting toggle outlasts the slowest complete toggle that holds the lock.
+pub(super) const LOCK_TIMEOUT: Duration =
+    super::TOGGLE_WORST_CASE.saturating_add(Duration::from_secs(10));
 
 #[derive(Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -39,7 +43,7 @@ struct RecordWire {
     #[serde(rename = "tab_id")]
     tab: String,
     #[serde(rename = "pane_id")]
-    pane: String,
+    pane: Option<String>,
     #[serde(rename = "session_id")]
     session: SessionId,
 }
@@ -162,16 +166,8 @@ impl CompanionRecords for FileCompanionRecords {
         let mut records = self.read();
         records.retain(|existing| existing.tab_id != record.tab_id);
         records.push(record.clone());
-        self.write(&records)
-    }
-
-    fn remove(&mut self, tab_id: &str) -> Result<(), CompanionError> {
-        let mut records = self.read();
-        let before = records.len();
-        records.retain(|existing| existing.tab_id != tab_id);
-        if records.len() == before {
-            return Ok(());
-        }
+        let excess = records.len().saturating_sub(MAX_RECORDS);
+        records.drain(..excess);
         self.write(&records)
     }
 }

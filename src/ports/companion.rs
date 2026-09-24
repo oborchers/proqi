@@ -22,6 +22,8 @@ pub struct CompanionContext {
     pub focused_pane_id: String,
     /// Working directory of the focused pane.
     pub focused_pane_cwd: PathBuf,
+    /// Workspace root directory, which does not change with the focused split.
+    pub workspace_cwd: Option<PathBuf>,
 }
 
 /// One pane of the invoking tab, observed from one bounded host snapshot.
@@ -55,16 +57,18 @@ pub enum PaneProcess {
     IdleShell,
     /// Anything else. The toggle never closes such a pane.
     Other,
+    /// The host could not classify the pane in time. It is never closed.
+    Unknown,
 }
 
-/// The one companion pane this plugin opened for a tab.
+/// A tab's Proqi session and, while it is open, the pane this plugin opened for it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CompanionRecord {
     /// Tab the companion belongs to.
     pub tab_id: String,
-    /// Pane the plugin opened.
-    pub pane_id: String,
-    /// Proqi session the pane resumes.
+    /// Pane the plugin opened, or `None` after it closed.
+    pub pane_id: Option<String>,
+    /// Proqi session the tab uses.
     pub session_id: SessionId,
 }
 
@@ -136,6 +140,9 @@ pub trait CompanionHost {
 }
 
 /// Exclusive per-plugin state holding at most one companion record per tab.
+///
+/// A record outlives its pane so that every later toggle in the tab reopens the
+/// same session, whichever pane is focused.
 pub trait CompanionRecords {
     /// Return every retained record in stable tab order.
     ///
@@ -162,13 +169,6 @@ pub trait CompanionRecords {
     ///
     /// Returns [`CompanionError::State`] when the state cannot be written.
     fn save(&mut self, record: &CompanionRecord) -> Result<(), CompanionError>;
-
-    /// Remove the record for one tab.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`CompanionError::State`] when the state cannot be written.
-    fn remove(&mut self, tab_id: &str) -> Result<(), CompanionError>;
 }
 
 /// Whether an existing Proqi session can be opened in a new pane.
