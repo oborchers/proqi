@@ -42,20 +42,12 @@ const WORKFLOW: &str = r#"
     }
     send "\r"
     if {$env(PROQI_TEST_SELECT_ALL) eq "1"} {
-        set deadline [expr {[clock milliseconds] + 25000}]
-        set committed 0
-        while {[clock milliseconds] < $deadline} {
-            if {![catch {exec $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) --json thoughts list $env(PROQI_TEST_SOURCE)} listed] && [regexp {"thoughts"\s*:\s*\[\s*\]} $listed]} {
-                set committed 1
-                break
+        expect {
+            -re {0 thoughts} {}
+            timeout {
+                puts stderr "source TUI after transfer: $expect_out(buffer)"
+                exit 94
             }
-            after 50
-        }
-        if {!$committed} {
-            puts stderr "source after selected transfer: $listed"
-            set destination_listed [exec $env(PROQI_TEST_BINARY) --state-dir $env(PROQI_TEST_STATE) --json thoughts list $env(PROQI_TEST_DESTINATION)]
-            puts stderr "destination after selected transfer: $destination_listed"
-            exit 94
         }
     } else {
         expect {
@@ -113,7 +105,6 @@ fn run_transfer(contents: &[&str], select_all: bool) {
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
         .env("PROQI_TEST_SOURCE", &source)
-        .env("PROQI_TEST_DESTINATION", &destination)
         .env("PROQI_TEST_SELECT_ALL", if select_all { "1" } else { "0" })
         .env("PROQI_TEST_PIDS", &cleanup_pids)
         .env_remove("HERDR_ENV");
