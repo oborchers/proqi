@@ -8,7 +8,7 @@ use crate::{
     domain::{OperationId, SessionId, Timestamp},
     ports::store::{
         BrowserCommitReceipt, NamedSessionCreation, NamedSessionMatch, NamedSessionOutcome,
-        NamedSessionPolicy, SessionRequest, StoreError,
+        NamedSessionPolicy, SessionRequest, StoreError, session_create_digest,
     },
 };
 
@@ -175,27 +175,20 @@ pub(super) fn create_named(
     session
         .validate()
         .map_err(|error| StoreError::Invariant(error.to_string()))?;
+    let request_digest = session_create_digest(&name, &session.origin_cwd);
     let receipt = creation
         .operation_id
         .map(|operation_id| RequestReceipt::Create {
             operation_id,
             session_id: session.id,
-            name: name.clone(),
-            origin_cwd: session.origin_cwd.clone(),
+            request_digest,
         });
-    if let Some(RequestReceipt::Create {
-        operation_id,
-        session_id,
-        name,
-        origin_cwd,
-    }) = &receipt
-    {
+    if let Some(operation_id) = creation.operation_id {
         let request = SessionRequest::Create {
-            session_id: *session_id,
-            name: name.clone(),
-            origin_cwd: origin_cwd.clone(),
+            session_id: session.id,
+            request_digest,
         };
-        match super::browser_history::replay_request(transaction, *operation_id, &request)? {
+        match super::browser_history::replay_request(transaction, operation_id, &request)? {
             ReceiptReplay::Matched(_) => return Ok(NamedSessionOutcome::Replayed),
             ReceiptReplay::Reused => return Ok(NamedSessionOutcome::IdentityReused),
             ReceiptReplay::Absent => {}

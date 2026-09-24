@@ -69,6 +69,41 @@ where
         }
     }
 
+    /// Resolve the session addressed by a retry-safe administration request.
+    ///
+    /// A retry may use a name that its own earlier commit changed or removed.
+    /// When the reference no longer resolves to one session, the session
+    /// recorded with the caller's operation identity is used, and the ordinary
+    /// replay comparison still decides whether the retry is exact.
+    ///
+    /// # Errors
+    ///
+    /// Returns the original resolution failure when no retained request applies.
+    pub fn resolve_session_for_request(
+        &mut self,
+        reference: &str,
+        supplied: Option<OperationId>,
+    ) -> Result<SessionId, SessionServiceError> {
+        match self.resolve_session(reference, true) {
+            Err(
+                error @ (SessionServiceError::SessionNotFound(_)
+                | SessionServiceError::AmbiguousSession { .. }),
+            ) => {
+                let retained = match supplied {
+                    Some(operation_id) => self.store.session_request(operation_id)?,
+                    None => None,
+                };
+                match retained {
+                    Some(StoredSessionRequest::Administration(stored)) => {
+                        stored.request.session_id().ok_or(error)
+                    }
+                    _ => Err(error),
+                }
+            }
+            resolved => resolved,
+        }
+    }
+
     /// Rename or clear one inactive session while holding its lease.
     ///
     /// A request whose name already matches still reserves its operation identity.

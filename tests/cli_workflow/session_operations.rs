@@ -256,3 +256,71 @@ fn session_and_thought_mutations_share_one_identity_namespace() {
     );
     assert_eq!(malformed["code"], "invalid_identifier");
 }
+
+#[test]
+fn retries_may_address_a_session_by_the_name_their_request_changed() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let root = temporary.path();
+    let session = create_session(root);
+    success(root, &["sessions", "rename", &session, "old"], None);
+    let rename = operation_id();
+    let arguments = [
+        "sessions",
+        "rename",
+        "old",
+        "new",
+        "--operation-id",
+        &rename,
+    ];
+    success(root, &arguments, None);
+    let replay = success(root, &arguments, None);
+    assert_receipt(&replay, &rename, true);
+    assert_eq!(replay["session_id"], session);
+    assert_eq!(name_of(root, &session), "new");
+
+    let (exit, unknown) = error(root, &["sessions", "rename", "old", "new"]);
+    assert_eq!(
+        exit,
+        Some(3),
+        "without an identity the stale name stays unknown"
+    );
+    assert_eq!(unknown["code"], "session_not_found");
+
+    success(root, &["sessions", "trash", "new"], None);
+    let prune = operation_id();
+    let prune_arguments = [
+        "sessions",
+        "prune",
+        "new",
+        "--yes",
+        "--operation-id",
+        &prune,
+    ];
+    success(root, &prune_arguments, None);
+    let prune_replay = success(root, &prune_arguments, None);
+    assert_receipt(&prune_replay, &prune, true);
+    assert_eq!(prune_replay["session_id"], session);
+}
+
+#[test]
+fn a_history_retry_after_its_target_is_pruned_still_replays() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let root = temporary.path();
+    let pruned = create_session(root);
+    let other = create_session(root);
+    success(root, &["sessions", "trash", &pruned], None);
+    let undo = operation_id();
+    let undone = success(root, &["sessions", "undo", "--operation-id", &undo], None);
+    success(root, &["sessions", "trash", &pruned], None);
+    success(root, &["sessions", "prune", &pruned, "--yes"], None);
+    success(root, &["sessions", "rename", &other, "later"], None);
+
+    let replay = success(root, &["sessions", "undo", "--operation-id", &undo], None);
+    assert_receipt(&replay, &undo, true);
+    assert_eq!(replay["cursor"], undone["cursor"]);
+    assert_eq!(
+        name_of(root, &other),
+        "later",
+        "the retry must not undo another entry"
+    );
+}

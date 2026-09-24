@@ -1,8 +1,12 @@
 //! Retry-safe session-administration requests and atomic named creation.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use sha2::{Digest as _, Sha256};
 
 use crate::domain::{BrowserOperationKind, OperationId, Session, SessionId};
+
+const CREATE_DOMAIN_SEPARATOR: &[u8] = b"proqi-session-create-request\0";
 
 /// Semantic identity of one public session-administration request.
 ///
@@ -12,13 +16,14 @@ use crate::domain::{BrowserOperationKind, OperationId, Session, SessionId};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SessionRequest {
     /// Create one session with its name and origin directory.
+    ///
+    /// The name and directory are retained only as a digest, so a receipt that
+    /// outlives a permanently pruned session retains no user content.
     Create {
         /// Deterministic session identity derived from the operation identity.
         session_id: SessionId,
-        /// Exact requested session name.
-        name: String,
-        /// Canonical origin directory.
-        origin_cwd: PathBuf,
+        /// SHA-256 of the exact requested name and canonical origin directory.
+        request_digest: [u8; 32],
     },
     /// Set or clear one session name.
     Rename {
@@ -47,6 +52,42 @@ pub enum SessionRequest {
         /// Undo when true, redo otherwise.
         undo: bool,
     },
+}
+
+impl SessionRequest {
+    /// Identify one named creation without retaining its name or directory.
+    #[must_use]
+    pub fn create(session_id: SessionId, name: &str, origin_cwd: &Path) -> Self {
+        Self::Create {
+            session_id,
+            request_digest: session_create_digest(name, origin_cwd),
+        }
+    }
+
+    /// Session addressed by the request, when it addresses one.
+    #[must_use]
+    pub const fn session_id(&self) -> Option<SessionId> {
+        match self {
+            Self::Create { session_id, .. }
+            | Self::Rename { session_id, .. }
+            | Self::Trash { session_id }
+            | Self::Restore { session_id }
+            | Self::Prune { session_id } => Some(*session_id),
+            Self::History { .. } => None,
+        }
+    }
+}
+
+/// Content-free SHA-256 identity of one requested name and origin directory.
+#[must_use]
+pub fn session_create_digest(name: &str, origin_cwd: &Path) -> [u8; 32] {
+    let name = name.as_bytes();
+    let mut digest = Sha256::new();
+    digest.update(CREATE_DOMAIN_SEPARATOR);
+    digest.update(u64::try_from(name.len()).unwrap_or(u64::MAX).to_be_bytes());
+    digest.update(name);
+    digest.update(origin_cwd.as_os_str().as_encoded_bytes());
+    digest.finalize().into()
 }
 
 /// Durable result of one retained session-administration request.

@@ -23,15 +23,8 @@ pub(in crate::adapters::sqlite) fn remove_session(
             |row| row.get(0),
         )
         .map_err(map_sql_error)?;
-    transaction
-        .execute(
-            "DELETE FROM browser_history_receipts
-             WHERE target_operation_id IN (
-                 SELECT id FROM browser_operation_receipts WHERE target_session_id = ?1
-             )",
-            [session_id.database_bytes().as_slice()],
-        )
-        .map_err(map_sql_error)?;
+    // Undo and redo receipts are content-free and stay retained, so a retried
+    // history movement replays instead of moving a later unrelated entry.
     remove_session_receipts(transaction, session_id)?;
     transaction
         .execute(

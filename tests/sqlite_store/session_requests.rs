@@ -186,12 +186,25 @@ fn unconditional_creation_replays_its_identity_and_rejects_divergent_reuse() {
     assert!(matches!(
         store.session_request(operation_id),
         Ok(Some(StoredSessionRequest::Administration(receipt)))
-            if receipt.request == SessionRequest::Create {
+            if receipt.request == SessionRequest::create(
                 session_id,
-                name: "scratch".to_owned(),
-                origin_cwd: PathBuf::from("/work"),
-            }
+                "scratch",
+                std::path::Path::new("/work"),
+            )
     ));
+    let connection = Connection::open(&fixture.config.database_path).expect("inspect database");
+    let payload: String = connection
+        .query_row(
+            "SELECT payload_json FROM browser_operation_receipts WHERE id = ?1",
+            [operation_id.database_bytes().as_slice()],
+            |row| row.get(0),
+        )
+        .expect("creation receipt");
+    assert!(!payload.contains("scratch"), "the receipt retains no name");
+    assert!(
+        !payload.contains("work"),
+        "the receipt retains no directory"
+    );
     assert_eq!(named_rows(&fixture, "scratch").len(), 1);
 }
 

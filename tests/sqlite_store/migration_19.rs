@@ -18,7 +18,7 @@ use super::{DatabaseFixture, one_effect, persist_effect, session_state, test_pat
 
 const DOWNGRADE_TO_18: &str = r"
 ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
-DELETE FROM migration_history WHERE version = 19;
+DELETE FROM migration_history WHERE version >= 19;
 UPDATE schema_meta SET schema_version = 18, storage_protocol = 17;
 ";
 
@@ -107,7 +107,7 @@ fn conflicting_semantic_receipt_column_rolls_back_and_exact_retry_recovers() {
     drop(fixture.open());
     let connection = Connection::open(&fixture.config.database_path).expect("current database");
     connection
-        .execute("DELETE FROM migration_history WHERE version = 19", [])
+        .execute("DELETE FROM migration_history WHERE version >= 19", [])
         .expect("remove current migration marker");
     connection
         .execute(

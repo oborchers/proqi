@@ -163,7 +163,8 @@ identity for another request, including a thought or item mutation, fails with
 
 Rename, trash, restore, and prune return
 `{session_id, status, changed, receipt: {session_id, operation_id,
-idempotent_replay}}`. `changed` reports whether the call changed durable state.
+idempotent_replay}}`. `changed` reports whether this call changed durable state, so an exact replay
+always reports `changed: false` even when the original call changed it.
 Trashing an already trashed session succeeds with `changed: false`. A rename to
 the current name also reports `changed: false`.
 
@@ -177,9 +178,21 @@ before forwarding. Undo and redo return
 
 Prune retains its receipt after the session is deleted, so an exact retry
 succeeds as a replay. Pruning forgets the session's rename, trash, and restore
-receipts but retains its creation receipt. Retrying the `sessions create` that
-made a pruned session therefore fails with `session_not_found` and never
-recreates it.
+receipts, as it forgets its thought and item receipts, so those identities can
+be used again afterward. It retains a content-free creation receipt and every
+undo and redo receipt, so those retries still replay. Retrying
+the `sessions create` that made a pruned session therefore fails with
+`session_not_found` and never recreates it.
+
+A retry can address the session by the name it had before the request, for
+example after `sessions rename old new` or `sessions prune old --yes`. When that
+reference no longer resolves, Proqi uses the session recorded with the operation
+identity.
+
+A typed `ses_` identifier is accepted without a lookup, so an absent session
+addressed that way fails later with `not_found`. A name that matches no session
+fails with `session_not_found`, as does a creation replay whose session was
+pruned.
 
 ## Change Board items
 

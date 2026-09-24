@@ -4,8 +4,6 @@
 //! or one tagged request receipt that deliberately creates no Browser history.
 //! This module is the single decoder for both payload families.
 
-use std::path::PathBuf;
-
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
@@ -15,7 +13,6 @@ use crate::{
 };
 
 use super::codec::decode as decode_operation;
-use crate::adapters::sqlite::support::{path_from_bytes, path_to_bytes};
 
 const RENAME_NOOP: &str = "rename_noop_v1";
 const TRASH_NOOP: &str = "trash_noop_v1";
@@ -37,12 +34,11 @@ pub(in crate::adapters::sqlite) enum RequestReceipt {
         operation_id: OperationId,
         session_id: SessionId,
     },
-    /// Creation of one named session.
+    /// Creation of one named session, retained without its name or directory.
     Create {
         operation_id: OperationId,
         session_id: SessionId,
-        name: String,
-        origin_cwd: PathBuf,
+        request_digest: [u8; 32],
     },
     /// Permanent deletion of one trashed session.
     Prune {
@@ -83,8 +79,7 @@ struct CreateJson {
     receipt: String,
     operation_id: OperationId,
     session_id: SessionId,
-    name: String,
-    origin_cwd_hex: String,
+    request_sha256: String,
 }
 
 impl RequestReceipt {
@@ -132,14 +127,12 @@ impl RequestReceipt {
             Self::Create {
                 operation_id,
                 session_id,
-                name,
-                origin_cwd,
+                request_digest,
             } => serde_json::to_string(&CreateJson {
                 receipt: SESSION_CREATE.to_owned(),
                 operation_id: *operation_id,
                 session_id: *session_id,
-                name: name.clone(),
-                origin_cwd_hex: encode_hex(&path_to_bytes(origin_cwd)),
+                request_sha256: encode_hex(request_digest),
             }),
         };
         encoded.map_err(|_| StoreError::Serialization("session receipt encoding failed".to_owned()))
@@ -158,13 +151,11 @@ impl RequestReceipt {
             },
             Self::Create {
                 session_id,
-                name,
-                origin_cwd,
+                request_digest,
                 ..
             } => SessionRequest::Create {
                 session_id: *session_id,
-                name: name.clone(),
-                origin_cwd: origin_cwd.clone(),
+                request_digest: *request_digest,
             },
             Self::Prune { session_id, .. } => SessionRequest::Prune {
                 session_id: *session_id,
@@ -250,8 +241,9 @@ fn decode_payload(payload: &str) -> Result<RetainedPayload, StoreError> {
             RequestReceipt::Create {
                 operation_id: json.operation_id,
                 session_id: json.session_id,
-                name: json.name,
-                origin_cwd: path_from_bytes(decode_hex(&json.origin_cwd_hex)?)?,
+                request_digest: decode_hex(&json.request_sha256)?.try_into().map_err(|_| {
+                    StoreError::Corrupt("invalid session receipt digest".to_owned())
+                })?,
             }
         }
         _ => {
@@ -311,7 +303,7 @@ fn encode_hex(bytes: &[u8]) -> String {
 }
 
 fn decode_hex(value: &str) -> Result<Vec<u8>, StoreError> {
-    let invalid = || StoreError::Corrupt("invalid session receipt path encoding".to_owned());
+    let invalid = || StoreError::Corrupt("invalid session receipt hex encoding".to_owned());
     let (pairs, remainder) = value.as_bytes().as_chunks::<2>();
     if !remainder.is_empty() {
         return Err(invalid());
@@ -333,8 +325,6 @@ fn decode_hex(value: &str) -> Result<Vec<u8>, StoreError> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use super::{RequestReceipt, RetainedPayload, decode_hex, decode_retained, encode_hex};
     use crate::ports::store::SessionRequest;
 
@@ -359,8 +349,7 @@ mod tests {
             RequestReceipt::Create {
                 operation_id,
                 session_id,
-                name: "agent-os-claude".to_owned(),
-                origin_cwd: PathBuf::from("/work/ü space"),
+                request_digest: [7; 32],
             },
         ];
         for receipt in receipts {

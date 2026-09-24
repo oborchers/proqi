@@ -37,7 +37,7 @@ pub(super) fn rename(
 ) -> Result<Outcome, CliError> {
     let supplied = parse_operation_id(operation)?;
     let mut service = session_service(context)?;
-    let id = service.resolve_session(session, true)?;
+    let id = service.resolve_session_for_request(session, supplied)?;
     let admitted = match service.admit_rename(id, name, supplied)? {
         RenameAdmission::Replayed(receipt) => {
             return Ok(administration_outcome(&receipt, "renamed"));
@@ -61,7 +61,7 @@ pub(super) fn manage(
 ) -> Result<Outcome, CliError> {
     let supplied = parse_operation_id(operation)?;
     let mut service = session_service(context)?;
-    let id = service.resolve_session(reference, true)?;
+    let id = service.resolve_session_for_request(reference, supplied)?;
     let receipt = match action {
         Management::Trash => service.trash_session(id, supplied)?,
         Management::Restore => service.restore_session(id, supplied)?,
