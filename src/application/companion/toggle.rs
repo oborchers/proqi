@@ -168,17 +168,14 @@ where
             }
             let session_id = open_session(host, records, sessions, &context, &cwd, session)?;
             let pane_id = host.open_beside(&target_pane_id, &cwd, session_id)?;
-            let saved = records.save(&CompanionRecord {
+            // On failure the new Proqi stays open and usable. Closing it could
+            // discard edits, and later toggles still recognize and focus it.
+            // The dead pane is kept because nothing recorded its replacement.
+            records.save(&CompanionRecord {
                 tab_id: context.tab_id.clone(),
                 pane_id: pane_id.clone(),
                 session_id,
-            });
-            if let Err(error) = saved {
-                // An unrecorded pane could never be closed by a later toggle.
-                // Its Proqi has not been used yet, so closing it loses nothing.
-                let _best_effort = host.close(&pane_id);
-                return Err(error.into());
-            }
+            })?;
             if let Some(dead) = &dead_pane_id {
                 host.close(dead)?;
             }
@@ -260,9 +257,12 @@ where
         }
         match host.process(&record.pane_id)? {
             Some(PaneProcess::Launcher) => return Ok(true),
+            // The same predicate as the tab's own record: only the exact
+            // session is the plugin's. A Proqi resuming it by name holds the
+            // session lease, which the preceding state check already reports.
             Some(PaneProcess::Proqi {
-                session_id: running,
-            }) if running.is_none_or(|running| running == session_id) => return Ok(true),
+                session_id: Some(running),
+            }) if running == session_id => return Ok(true),
             Some(_) => {}
             None => records.remove(&record.tab_id)?,
         }

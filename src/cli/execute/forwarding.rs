@@ -83,7 +83,7 @@ fn sync_owner(
         if required {
             Err(CliError::new(
                 ErrorCode::SessionBusy,
-                "Proqi has not confirmed its pending edits yet; try again once it has started"
+                "Proqi did not confirm that its pending edits are saved, so its pane stays open"
                     .to_owned(),
             ))
         } else {

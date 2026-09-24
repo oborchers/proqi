@@ -87,16 +87,21 @@ directory, for example two repositories that both have a tab labeled `main`,
 the toggle reports a name conflict instead of guessing. Rename one of the tabs,
 or rename the other session with `proqi sessions rename`.
 
-If Proqi is still starting when you close it, the toggle keeps the pane and asks
-you to try again, because it closes Proqi only after Proqi confirms that your
-edits are saved.
+The toggle closes Proqi only after Proqi confirms that your edits are saved.
+Without that confirmation, for example while Proqi is still starting, it keeps
+the pane open; toggle again or quit Proqi with its own Quit action.
+
+If the plugin cannot write its private state after opening Proqi, it reports
+the error and leaves that Proqi open rather than risk your edits. Later toggles
+focus it but never close it; quit it with Proqi's own Quit action.
 
 ## Limitations
 
 - Herdr does not restore plugin panes after a cold restart of its server. The
   pane comes back as an empty shell. The next toggle recognizes it, reopens the
   same Proqi session beside the agent, and closes the empty shell. It never
-  closes a pane that runs anything else.
+  closes a pane that runs anything else. Text typed at that shell's prompt but
+  never submitted is not visible to Herdr and is discarded with the shell.
 - The plugin opens Proqi to the right of the focused pane. Move or resize the
   pane with Herdr's normal pane commands.
 - To focus a Proqi pane the plugin did not open, or to return to the agent,

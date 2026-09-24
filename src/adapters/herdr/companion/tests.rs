@@ -213,6 +213,10 @@ fn process_classification_distinguishes_proqi_launcher_idle_shell_and_other_work
             ),
             Some(PaneProcess::Launcher),
         ),
+        (
+            info(5, 8, &[(8, &["vim", "herdr-plugin/proqi.sh"])]),
+            Some(PaneProcess::Other),
+        ),
         (info(5, 5, &[(5, &["-zsh"])]), Some(PaneProcess::IdleShell)),
         (
             info(5, 5, &[(5, &["/bin/bash"])]),

@@ -120,12 +120,15 @@ pub(super) fn classify(info: &ProcessInfo) -> PaneProcess {
             session_id: resumed_session(&process.argv),
         };
     }
-    // Matches both the manifest's `sh -c` wrapper and the exec'd launcher.
+    // Matches both the manifest's `sh -c` wrapper and the exec'd launcher,
+    // and nothing else that merely names the launcher, such as an editor.
     if info.foreground_processes.iter().any(|process| {
-        process
-            .argv
-            .iter()
-            .any(|argument| argument.contains(LAUNCHER_PATH))
+        program_name(&process.argv) == Some("sh")
+            && process
+                .argv
+                .iter()
+                .skip(1)
+                .any(|argument| argument.contains(LAUNCHER_PATH))
     }) {
         return PaneProcess::Launcher;
     }

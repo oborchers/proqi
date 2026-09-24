@@ -124,9 +124,11 @@ fn record_state(
             session_id: Some(session_id),
         }) if *session_id == record.session_id => live,
         Some(PaneProcess::Launcher) => live,
-        // A verified idle shell runs no Proqi, so a display lease on it is a
-        // stale leftover from a crash and does not keep the pane alive.
-        Some(PaneProcess::IdleShell) if pane.label.as_deref() == Some(COMPANION_PANE_LABEL) => {
+        // Any remaining Proqi signal keeps the pane: a lease left by a crash
+        // expires within its TTL, and closing is never the conservative choice.
+        Some(PaneProcess::IdleShell)
+            if !pane.proqi_presence && pane.label.as_deref() == Some(COMPANION_PANE_LABEL) =>
+        {
             RecordState::Dead {
                 pane_id: record.pane_id.clone(),
                 session_id: record.session_id,
@@ -162,12 +164,7 @@ pub(crate) fn plan_toggle(
             }
         };
     }
-    let dead = match &state {
-        RecordState::Dead { pane_id, .. } => Some(pane_id.as_str()),
-        _ => None,
-    };
-    let present =
-        |pane: &&PaneObservation| pane.proqi_presence && Some(pane.pane_id.as_str()) != dead;
+    let present = |pane: &&PaneObservation| pane.proqi_presence;
     if panes
         .iter()
         .filter(present)
