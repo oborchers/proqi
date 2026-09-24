@@ -185,9 +185,14 @@ the `sessions create` that made a pruned session therefore fails with
 `session_not_found` and never recreates it.
 
 A retry can address the session by the name it had before the request, for
-example after `sessions rename old new` or `sessions prune old --yes`. When that
-reference no longer resolves, Proqi uses the session recorded with the operation
-identity.
+example after `sessions rename old new` or `sessions prune old --yes`. When the
+operation identity already names a session, a name reference resolves to that
+recorded session, even if another session has since taken the name. A typed
+`ses_` identifier always addresses exactly that session.
+
+A `sessions create` retry recomputes its request identity from the name and the
+canonical `--cwd`, so that directory must still exist when the command is
+retried.
 
 A typed `ses_` identifier is accepted without a lookup, so an absent session
 addressed that way fails later with `not_found`. A name that matches no session

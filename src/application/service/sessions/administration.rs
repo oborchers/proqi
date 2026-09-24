@@ -71,37 +71,30 @@ where
 
     /// Resolve the session addressed by a retry-safe administration request.
     ///
-    /// A retry may use a name that its own earlier commit changed or removed.
-    /// When the reference no longer resolves to one session, the session
-    /// recorded with the caller's operation identity is used, and the ordinary
-    /// replay comparison still decides whether the retry is exact.
+    /// A name is mutable, so a retry may use a name that its own earlier commit
+    /// changed, removed, or that another session has since taken. When the
+    /// caller's operation identity already names a session, that recorded
+    /// session is authoritative for a name reference, and the ordinary replay
+    /// comparison still decides whether the retry is exact. A typed session
+    /// identifier always addresses exactly that session.
     ///
     /// # Errors
     ///
-    /// Returns the original resolution failure when no retained request applies.
+    /// Returns an identifier, lookup, or resolution failure.
     pub fn resolve_session_for_request(
         &mut self,
         reference: &str,
         supplied: Option<OperationId>,
     ) -> Result<SessionId, SessionServiceError> {
-        match self.resolve_session(reference, true) {
-            Err(
-                error @ (SessionServiceError::SessionNotFound(_)
-                | SessionServiceError::AmbiguousSession { .. }),
-            ) => {
-                let retained = match supplied {
-                    Some(operation_id) => self.store.session_request(operation_id)?,
-                    None => None,
-                };
-                match retained {
-                    Some(StoredSessionRequest::Administration(stored)) => {
-                        stored.request.session_id().ok_or(error)
-                    }
-                    _ => Err(error),
-                }
-            }
-            resolved => resolved,
+        if !super::looks_like_typed_id(reference)
+            && let Some(operation_id) = supplied
+            && let Some(StoredSessionRequest::Administration(stored)) =
+                self.store.session_request(operation_id)?
+            && let Some(session_id) = stored.request.session_id()
+        {
+            return Ok(session_id);
         }
+        self.resolve_session(reference, true)
     }
 
     /// Rename or clear one inactive session while holding its lease.

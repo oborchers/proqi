@@ -278,6 +278,21 @@ fn retries_may_address_a_session_by_the_name_their_request_changed() {
     assert_eq!(replay["session_id"], session);
     assert_eq!(name_of(root, &session), "new");
 
+    let other = create_session(root);
+    success(root, &["sessions", "rename", &other, "old"], None);
+    let reused_name = success(root, &arguments, None);
+    assert_receipt(&reused_name, &rename, true);
+    assert_eq!(
+        reused_name["session_id"], session,
+        "the recorded session wins"
+    );
+    assert_eq!(
+        name_of(root, &other),
+        "old",
+        "the session now named old is untouched"
+    );
+    success(root, &["sessions", "rename", &other, "--clear"], None);
+
     let (exit, unknown) = error(root, &["sessions", "rename", "old", "new"]);
     assert_eq!(
         exit,
