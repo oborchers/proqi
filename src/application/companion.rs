@@ -12,7 +12,9 @@ use std::path::PathBuf;
 
 use crate::{
     domain::SessionId,
-    ports::companion::{CompanionContext, CompanionRecord, PaneObservation, PaneProcess},
+    ports::companion::{
+        CompanionContext, CompanionRecord, PaneObservation, PaneProcess, ProqiPresence,
+    },
 };
 
 pub use toggle::{CompanionToggleError, CompanionToggleOutcome, toggle_companion};
@@ -86,6 +88,8 @@ pub(crate) enum TogglePlan {
     },
     /// A companion the plugin cannot close is focused and no single agent exists.
     NoReturnTarget,
+    /// A pane Herdr could not classify may hide a Proqi, so nothing is opened.
+    Unclassified { pane_id: String },
 }
 
 /// What the tab's record currently describes.
@@ -141,7 +145,8 @@ fn record_state(
         // Any remaining Proqi signal keeps the pane: a lease left by a crash
         // expires within its TTL, and closing is never the conservative choice.
         Some(PaneProcess::IdleShell)
-            if !pane.proqi_presence && pane.label.as_deref() == Some(COMPANION_PANE_LABEL) =>
+            if pane.presence == ProqiPresence::Absent
+                && pane.label.as_deref() == Some(COMPANION_PANE_LABEL) =>
         {
             RecordState::Dead {
                 pane_id,
@@ -184,7 +189,7 @@ pub(crate) fn plan_toggle(
         }
         RecordState::None | RecordState::Closed { .. } | RecordState::Dead { .. } => {}
     }
-    let present = |pane: &&PaneObservation| pane.proqi_presence;
+    let present = |pane: &&PaneObservation| pane.presence == ProqiPresence::Present;
     if panes
         .iter()
         .filter(present)
@@ -197,13 +202,25 @@ pub(crate) fn plan_toggle(
             pane_id: pane.pane_id.clone(),
         };
     }
+    let dead = match &state {
+        RecordState::Dead { pane_id, .. } => Some(pane_id.as_str()),
+        _ => None,
+    };
+    if let Some(pane) = panes
+        .iter()
+        .find(|pane| pane.presence == ProqiPresence::Unknown && Some(pane.pane_id.as_str()) != dead)
+    {
+        return TogglePlan::Unclassified {
+            pane_id: pane.pane_id.clone(),
+        };
+    }
     open_plan(context, panes, &state)
 }
 
 fn return_focus(panes: &[PaneObservation]) -> TogglePlan {
     let mut agents = panes
         .iter()
-        .filter(|pane| pane.agent && !pane.proqi_presence);
+        .filter(|pane| pane.agent && pane.presence == ProqiPresence::Absent);
     match (agents.next(), agents.next()) {
         (Some(agent), None) => TogglePlan::ReturnFocus {
             pane_id: agent.pane_id.clone(),

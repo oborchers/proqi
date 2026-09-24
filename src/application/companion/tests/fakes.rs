@@ -9,7 +9,7 @@ use crate::{
     domain::SessionId,
     ports::companion::{
         CompanionContext, CompanionError, CompanionHost, CompanionRecord, CompanionRecords,
-        CompanionSessionState, CompanionSessions, PaneObservation, PaneProcess,
+        CompanionSessionState, CompanionSessions, PaneObservation, PaneProcess, ProqiPresence,
     },
 };
 
@@ -42,7 +42,7 @@ pub(super) fn shell(pane: &str) -> PaneObservation {
         pane_id: pane.to_owned(),
         focused: false,
         agent: false,
-        proqi_presence: false,
+        presence: ProqiPresence::Absent,
         label: None,
         cwd: Some(PathBuf::from("/work")),
     }
@@ -59,7 +59,7 @@ pub(super) fn agent(pane: &str, focused: bool) -> PaneObservation {
 pub(super) fn companion(pane: &str, focused: bool) -> PaneObservation {
     PaneObservation {
         focused,
-        proqi_presence: true,
+        presence: ProqiPresence::Present,
         label: Some(crate::application::COMPANION_PANE_LABEL.to_owned()),
         ..shell(pane)
     }

@@ -5,7 +5,7 @@ use std::time::Duration;
 use serde_json::json;
 
 use crate::ports::{
-    companion::{CompanionHost, PaneProcess},
+    companion::{CompanionHost, PaneProcess, ProqiPresence},
     environment::ProcessOutput,
 };
 
@@ -42,8 +42,16 @@ fn an_unrelated_failing_pane_does_not_abort_the_tab_snapshot() {
     let panes = host(&runner, &plugin_context())
         .tab_panes("w1:t1")
         .expect("snapshot");
-    let present: Vec<_> = panes.iter().map(|pane| pane.proqi_presence).collect();
-    assert_eq!(present, vec![false, false, true]);
+    let presence: Vec<_> = panes.iter().map(|pane| pane.presence).collect();
+    assert_eq!(
+        presence,
+        vec![
+            ProqiPresence::Absent,
+            ProqiPresence::Unknown,
+            ProqiPresence::Present
+        ],
+        "the failing pane is marked unknown"
+    );
 }
 
 #[test]
@@ -71,7 +79,7 @@ fn every_unleased_non_agent_pane_is_probed_within_the_window() {
         .expect("snapshot");
     assert_eq!(runner.requests().len(), 21);
     assert!(
-        panes[19].proqi_presence,
+        panes[19].presence == ProqiPresence::Present,
         "a late lease-free Proqi is still found"
     );
 }

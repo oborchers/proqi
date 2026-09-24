@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::{
     domain::SessionId,
-    ports::companion::{CompanionContext, PaneObservation, PaneProcess},
+    ports::companion::{CompanionContext, PaneObservation, PaneProcess, ProqiPresence},
 };
 
 use super::LAUNCHER_PATH;
@@ -78,7 +78,11 @@ pub(super) struct PaneWire {
 impl From<PaneWire> for PaneObservation {
     fn from(pane: PaneWire) -> Self {
         Self {
-            proqi_presence: pane.display_agent.as_deref() == Some(PROQI_DISPLAY_AGENT),
+            presence: if pane.display_agent.as_deref() == Some(PROQI_DISPLAY_AGENT) {
+                ProqiPresence::Present
+            } else {
+                ProqiPresence::Absent
+            },
             pane_id: pane.pane_id,
             focused: pane.focused,
             agent: pane.agent.is_some(),

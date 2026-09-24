@@ -6,7 +6,7 @@ mod safety;
 
 use std::path::PathBuf;
 
-use crate::ports::companion::{CompanionRecord, CompanionSessionState, PaneProcess};
+use crate::ports::companion::{CompanionRecord, CompanionSessionState, PaneProcess, ProqiPresence};
 
 use super::{
     CompanionToggleError, CompanionToggleOutcome, companion_session_cwd, companion_session_name,
@@ -172,7 +172,7 @@ fn failed_flush_keeps_the_companion_open_and_reports_it() {
 #[test]
 fn a_starting_launcher_counts_as_the_live_companion() {
     let mut launching = companion("w1:p9", false);
-    launching.proqi_presence = false;
+    launching.presence = ProqiPresence::Absent;
     let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true), launching])
         .with_process("w1:p9", PaneProcess::Launcher);
     let mut records = FakeRecords(vec![record(Some("w1:p9"), OWN)]);
@@ -271,8 +271,8 @@ fn other_tab(pane: Option<&str>) -> CompanionRecord {
 }
 
 #[test]
-fn a_companion_another_tab_is_launching_running_or_unclassified_blocks_the_open() {
-    for process in [PaneProcess::Launcher, own_proqi(), PaneProcess::Unknown] {
+fn a_companion_another_tab_is_launching_or_running_blocks_the_open() {
+    for process in [PaneProcess::Launcher, own_proqi()] {
         let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)])
             .with_process("w2:p4", process.clone());
         let mut records = FakeRecords(vec![other_tab(Some("w2:p4"))]);
@@ -313,5 +313,58 @@ fn records_are_scoped_to_their_own_tab() {
     assert_eq!(
         sessions.ensured,
         vec![("agent-tab".to_owned(), PathBuf::from("/work"))]
+    );
+}
+
+#[test]
+fn an_unclassified_pane_in_another_tabs_record_blocks_and_names_that_pane() {
+    let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)])
+        .with_process("w2:p4", PaneProcess::Unknown);
+    let mut records = FakeRecords(vec![other_tab(Some("w2:p4"))]);
+    let mut sessions = FakeSessions::with_named("agent-tab", OWN);
+    let error = toggle_companion(&mut host, &mut records, &mut sessions).expect_err("blocked");
+    assert!(matches!(
+        &error,
+        CompanionToggleError::Unclassified { pane_id } if pane_id == "w2:p4"
+    ));
+    assert!(host.calls.is_empty());
+    assert!(host.notifications[0].contains("w2:p4"));
+
+    // Once Herdr reports the pane again, the same toggle opens normally.
+    let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)])
+        .with_process("w2:p4", PaneProcess::Other);
+    toggle_companion(&mut host, &mut records, &mut sessions).expect("recovered");
+}
+
+#[test]
+fn an_unclassified_pane_in_this_tab_blocks_opening_but_not_focusing() {
+    let mut hidden = shell("w1:p7");
+    hidden.presence = ProqiPresence::Unknown;
+    let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true), hidden.clone()]);
+    let error = toggle_companion(
+        &mut host,
+        &mut FakeRecords::default(),
+        &mut FakeSessions::with_named("agent-tab", OWN),
+    )
+    .expect_err("may hide a Proqi");
+    assert!(matches!(
+        &error,
+        CompanionToggleError::Unclassified { pane_id } if pane_id == "w1:p7"
+    ));
+    assert!(host.calls.is_empty());
+
+    let panes = vec![agent("w1:p1", true), hidden, companion("w1:p9", false)];
+    let mut host = FakeHost::new("w1:p1", panes);
+    let focused = toggle_companion(
+        &mut host,
+        &mut FakeRecords::default(),
+        &mut FakeSessions::default(),
+    )
+    .expect("focus still works");
+    assert_eq!(
+        focused,
+        CompanionToggleOutcome::Focused {
+            pane_id: "w1:p9".to_owned()
+        }
     );
 }

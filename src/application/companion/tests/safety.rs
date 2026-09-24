@@ -12,7 +12,7 @@ use super::{
 
 fn dead(pane: &str) -> crate::ports::companion::PaneObservation {
     let mut pane = companion(pane, false);
-    pane.proqi_presence = false;
+    pane.presence = crate::ports::companion::ProqiPresence::Absent;
     pane
 }
 

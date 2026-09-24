@@ -2041,8 +2041,9 @@ the `herdr_companion_toggle` capability, and replaces itself with
 
 - The terminal-independent `CompanionHost`, `CompanionRecords`, and
   `CompanionSessions` ports in `ports::companion`. They speak in panes, tabs,
-  classified foreground processes (`Proqi`, `Launcher`, `IdleShell`, `Other`,
-  `Unknown`), and Proqi sessions.
+  Proqi presence (`Present`, `Absent`, `Unknown`), classified foreground
+  processes (`Proqi`, `Launcher`, `IdleShell`, `Other`, `Unknown`), and Proqi
+  sessions.
 - The application policy `application::companion`, a pure planner plus one
   orchestrating use case. It owns session naming (meaningful tab label, else
   the stable public tab identity), the session origin (the adapter-supplied
@@ -2052,8 +2053,9 @@ the `herdr_companion_toggle` capability, and replaces itself with
   foreground process is Proqi resuming exactly the recorded session or the
   plugin's own launcher, and the session owner confirms a durable flush. A recorded idle shell labeled `Proqi`, with no Proqi signal,
   is replaced after a restart, and it is rechecked immediately before it
-  closes. `Unknown`, foreign, and lease-carrying panes are only focused, and an
-  `Unknown` pane recorded by another tab for the same session blocks the open.
+  closes. `Unknown`, foreign, and lease-carrying panes are only focused. An `Unknown`
+  pane in the tab, or one recorded by another tab for the same session, blocks
+  opening and is named in the error, because it might hide a Proqi.
 - The Herdr adapter `adapters::herdr::companion`. It reads the plugin
   environment, runs direct bounded Herdr CLI calls without a shell, recognizes
   Proqi by its display lease or foreground process, probes every unleased

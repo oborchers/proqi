@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::VecDeque, ffi::OsString, path::PathBuf, rc
 use serde_json::{Value, json};
 
 use crate::ports::{
-    companion::{CompanionError, CompanionHost, PaneProcess},
+    companion::{CompanionError, CompanionHost, PaneProcess, ProqiPresence},
     environment::{ProcessError, ProcessOutput, ProcessRequest, ProcessRunner},
 };
 
@@ -149,8 +149,8 @@ fn tab_panes_keep_only_the_invoking_tab_and_detect_the_proqi_lease() {
         .tab_panes("w1:t1")
         .expect("panes");
     assert_eq!(panes.len(), 2);
-    assert!(panes[0].agent && panes[0].focused && !panes[0].proqi_presence);
-    assert!(panes[1].proqi_presence && !panes[1].agent);
+    assert!(panes[0].agent && panes[0].focused && panes[0].presence == ProqiPresence::Absent);
+    assert!(panes[1].presence == ProqiPresence::Present && !panes[1].agent);
     assert_eq!(panes[1].label.as_deref(), Some("Proqi"));
     assert_eq!(runner.requests(), vec![vec!["pane", "list"]]);
 }
@@ -177,7 +177,10 @@ fn a_proqi_or_launcher_without_a_display_lease_is_recognized_by_its_process() {
     let panes = host(&runner, &plugin_context())
         .tab_panes("w1:t1")
         .expect("panes");
-    let present: Vec<_> = panes.iter().map(|pane| pane.proqi_presence).collect();
+    let present: Vec<_> = panes
+        .iter()
+        .map(|pane| pane.presence == ProqiPresence::Present)
+        .collect();
     assert_eq!(present, vec![false, true, false, false, true]);
     let queried: Vec<_> = runner
         .requests()

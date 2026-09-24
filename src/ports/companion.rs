@@ -36,12 +36,23 @@ pub struct PaneObservation {
     pub focused: bool,
     /// Whether the host recognizes a coding agent in this pane.
     pub agent: bool,
-    /// Whether a running Proqi is present, by its display lease or foreground process.
-    pub proqi_presence: bool,
+    /// Whether a running Proqi is present in this pane.
+    pub presence: ProqiPresence,
     /// Persisted pane label, when one exists.
     pub label: Option<String>,
     /// Pane working directory, when the host reports one.
     pub cwd: Option<PathBuf>,
+}
+
+/// Whether a pane holds a running Proqi, as far as the host can tell.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProqiPresence {
+    /// Proqi publishes its display lease here or is the foreground process.
+    Present,
+    /// The host reports no Proqi here.
+    Absent,
+    /// The host could not report the pane in time, so it may hide a Proqi.
+    Unknown,
 }
 
 /// Foreground process state of one pane, reduced to what the toggle may act on.

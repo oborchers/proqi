@@ -63,6 +63,11 @@ pub enum CompanionToggleError<E> {
     },
     /// A companion the plugin did not open is focused and no single agent exists.
     NoReturnTarget,
+    /// Herdr could not report a pane that may hide a Proqi, so nothing was opened.
+    Unclassified {
+        /// Pane that could not be classified.
+        pane_id: String,
+    },
 }
 
 impl<E: fmt::Display> fmt::Display for CompanionToggleError<E> {
@@ -82,6 +87,10 @@ impl<E: fmt::Display> fmt::Display for CompanionToggleError<E> {
             ),
             Self::NoReturnTarget => formatter.write_str(
                 "this Proqi pane was not opened by the plugin and the tab has no single agent pane",
+            ),
+            Self::Unclassified { pane_id } => write!(
+                formatter,
+                "Herdr did not report pane {pane_id} in time, so Proqi was not opened; try again or close that pane"
             ),
         }
     }
@@ -165,6 +174,7 @@ where
             Ok(CompanionToggleOutcome::Returned { pane_id })
         }
         TogglePlan::NoReturnTarget => Err(CompanionToggleError::NoReturnTarget),
+        TogglePlan::Unclassified { pane_id } => Err(CompanionToggleError::Unclassified { pane_id }),
         TogglePlan::Open {
             target_pane_id,
             session,
@@ -248,19 +258,28 @@ where
     {
         return Err(active);
     }
-    if other_tab_is_opening(host, records, &context.tab_id, session_id)? {
-        return Err(active);
+    match other_tab_blocker(host, records, &context.tab_id, session_id)? {
+        Some(Blocker::Opening) => Err(active),
+        Some(Blocker::Unclassified(pane_id)) => Err(CompanionToggleError::Unclassified { pane_id }),
+        None => Ok(session_id),
     }
-    Ok(session_id)
+}
+
+/// Why another tab's record prevents opening the same session here.
+enum Blocker {
+    /// That tab's companion is starting or running the session.
+    Opening,
+    /// That tab's recorded pane could not be classified.
+    Unclassified(String),
 }
 
 /// Catch a companion another tab opened moments ago, before its Proqi owns the lease.
-fn other_tab_is_opening<H, R>(
+fn other_tab_blocker<H, R>(
     host: &mut H,
     records: &mut R,
     tab_id: &str,
     session_id: SessionId,
-) -> Result<bool, CompanionError>
+) -> Result<Option<Blocker>, CompanionError>
 where
     H: CompanionHost,
     R: CompanionRecords,
@@ -273,19 +292,22 @@ where
             continue;
         };
         // A pane that cannot be classified might be a companion still starting,
-        // so it blocks the open; refusing is safe and a retry resolves it.
+        // so it blocks the open and is named, so a stuck pane can be closed.
         match host.process(pane_id).unwrap_or(Some(PaneProcess::Unknown)) {
-            Some(PaneProcess::Launcher | PaneProcess::Unknown) => return Ok(true),
+            Some(PaneProcess::Launcher) => return Ok(Some(Blocker::Opening)),
+            Some(PaneProcess::Unknown) => {
+                return Ok(Some(Blocker::Unclassified(pane_id.to_owned())));
+            }
             // The same predicate as the tab's own record: only the exact
             // session is the plugin's. A Proqi resuming it by name holds the
             // session lease, which the preceding state check already reports.
             Some(PaneProcess::Proqi {
                 session_id: Some(running),
-            }) if running == session_id => return Ok(true),
+            }) if running == session_id => return Ok(Some(Blocker::Opening)),
             // A vanished pane is left recorded; that tab corrects it on its
             // own next toggle, so this loop never writes plugin state.
             Some(_) | None => {}
         }
     }
-    Ok(false)
+    Ok(None)
 }

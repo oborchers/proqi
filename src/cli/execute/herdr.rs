@@ -136,6 +136,7 @@ fn toggle_error(error: CompanionToggleError<CliError>) -> CliError {
                 .with_details(json!({ "session_id": session_id, "name": name }))
         }
         CompanionToggleError::NoReturnTarget => CliError::new(ErrorCode::InvalidState, message),
+        CompanionToggleError::Unclassified { .. } => CliError::new(ErrorCode::HerdrFailed, message),
     }
 }
 

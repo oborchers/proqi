@@ -147,6 +147,10 @@ stays open in that case until a later toggle replaces it or you close it.
 - Herdr can focus an arbitrary pane only by zooming it. The plugin reads the
   tab's zoom state first: an unzoomed tab ends unzoomed, and a zoomed tab stays
   zoomed on the newly focused pane.
+- If Herdr cannot report a pane's process in time, that pane might hide a
+  Proqi, so the toggle does not open another one. It names the pane in its
+  notification; try again, or close that pane if it stays unresponsive.
+  Focusing and closing an existing Proqi still work.
 - When the focused pane runs a Proqi you started yourself, the toggle returns
   focus to the tab's only agent. With several agents in the tab it reports that
   instead of guessing.

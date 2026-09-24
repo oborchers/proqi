@@ -19,6 +19,7 @@ use crate::{
     ports::{
         companion::{
             CompanionContext, CompanionError, CompanionHost, PaneObservation, PaneProcess,
+            ProqiPresence,
         },
         environment::{ProcessRequest, ProcessRunner},
     },
@@ -48,6 +49,8 @@ pub const MIN_HERDR_VERSION: &str = "0.8.0";
 const QUERY_SECONDS: u64 = 3;
 const PROBE_SECONDS: u64 = 1;
 const OPEN_SECONDS: u64 = 10;
+/// A timed-out child is terminated and its readers joined within this allowance.
+const CLEANUP_SECONDS: u64 = 1;
 const QUERY_TIMEOUT: Duration = Duration::from_secs(QUERY_SECONDS);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(PROBE_SECONDS);
 const OPEN_TIMEOUT: Duration = Duration::from_secs(OPEN_SECONDS);
@@ -59,12 +62,14 @@ const CONTROL_CALLS: u64 = 6;
 /// convergence admission (5 s), store transactions with bounded retry (about
 /// 1 s each, at most three), and the confirmed owner flush (5 s).
 const SESSION_SECONDS: u64 = 5 + 5 + 3 + 5;
-/// Upper bound of one toggle built from its bounded parts; the lock waits longer.
+/// Bound of one toggle derived from each part's own limit, including cleanup of
+/// a timed-out child and a last probe that starts just before the window ends.
+/// The plugin lock waits longer than this.
 pub(crate) const TOGGLE_WORST_CASE: Duration = Duration::from_secs(
-    QUERY_SECONDS
-        + PROBE_WINDOW_SECONDS
-        + OPEN_SECONDS
-        + CONTROL_CALLS * QUERY_SECONDS
+    (QUERY_SECONDS + CLEANUP_SECONDS)
+        + (PROBE_WINDOW_SECONDS + PROBE_SECONDS + CLEANUP_SECONDS)
+        + (OPEN_SECONDS + CLEANUP_SECONDS)
+        + CONTROL_CALLS * (QUERY_SECONDS + CLEANUP_SECONDS)
         + SESSION_SECONDS,
 );
 const NOTIFICATION_TITLE: &str = "Proqi";
@@ -228,15 +233,18 @@ impl<R: ProcessRunner> CompanionHost for HerdrCompanionHost<R> {
         // A Proqi that cannot reach Herdr, or is still being launched, publishes
         // no display lease. Recognize it by its foreground process so the toggle
         // focuses it instead of opening a second one. Recognition never makes a
-        // pane closable, and an unprobed or unknown pane simply stays unrecognized.
+        // pane closable. A pane Herdr cannot report in time is marked, and the
+        // policy then refuses to open rather than risk a second companion.
         for pane in panes
             .iter_mut()
-            .filter(|pane| !pane.proqi_presence && !pane.agent)
+            .filter(|pane| pane.presence == ProqiPresence::Absent && !pane.agent)
         {
-            if let Some(PaneProcess::Proqi { .. } | PaneProcess::Launcher) =
-                self.process(&pane.pane_id)?
-            {
-                pane.proqi_presence = true;
+            match self.process(&pane.pane_id)? {
+                Some(PaneProcess::Proqi { .. } | PaneProcess::Launcher) => {
+                    pane.presence = ProqiPresence::Present;
+                }
+                Some(PaneProcess::Unknown) => pane.presence = ProqiPresence::Unknown,
+                _ => {}
             }
         }
         Ok(panes)

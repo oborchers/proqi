@@ -542,7 +542,9 @@ Exit status 0 is success. Other statuses follow [Errors](#errors):
 pane's directory no longer exists, `ambiguous_session` (4) when several live
 sessions share the tab's name and directory, `companion_session_active` or
 `session_busy` (5), `session_name_conflict` or `invalid_state` (7),
-`herdr_failed` (1) when Herdr rejects or cannot answer a request, and
+`herdr_failed` (1) when Herdr rejects or cannot answer a request, including a
+pane whose process Herdr cannot report in time, which blocks opening because it
+might hide a Proqi, and
 `plugin_state_failed` (1) when the plugin's private state or its toggle lock is
 unavailable.
 

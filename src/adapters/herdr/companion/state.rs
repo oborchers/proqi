@@ -26,9 +26,10 @@ const STATE_VERSION: u32 = 1;
 const MAX_STATE_BYTES: u64 = 256 * 1024;
 /// Oldest tabs are forgotten first beyond this many records.
 const MAX_RECORDS: usize = 512;
-/// A waiting toggle outlasts the slowest complete toggle that holds the lock.
+/// A waiting toggle outlasts the slowest complete toggle that holds the lock,
+/// with margin for the derived bound's store allowances.
 pub(super) const LOCK_TIMEOUT: Duration =
-    super::TOGGLE_WORST_CASE.saturating_add(Duration::from_secs(10));
+    super::TOGGLE_WORST_CASE.saturating_add(Duration::from_secs(30));
 
 #[derive(Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
