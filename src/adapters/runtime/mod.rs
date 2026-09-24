@@ -5,6 +5,7 @@ mod control_endpoint;
 pub(crate) mod input_recovery;
 mod schema_lock;
 mod system;
+mod transient;
 mod update;
 
 pub use capture::FileCaptureLease;
@@ -12,6 +13,7 @@ pub use schema_lock::{FileSchemaLease, SchemaLockPolicy};
 pub use system::{
     NativePaths, SystemClock, SystemEnvironment, SystemIdGenerator, SystemMonotonicClock,
 };
+pub(crate) use transient::TransientSessionCoordinator;
 
 use std::{
     collections::BTreeMap,
@@ -110,6 +112,47 @@ impl FileRuntimeCoordinator {
         &self.runtime_dir
     }
 
+    fn acquire_session_lease(
+        &self,
+        session_id: SessionId,
+        interactive: bool,
+    ) -> Result<FileSessionLease, RuntimeError> {
+        let file = open_private_file(&self.session_lock_path(session_id))?;
+        match try_session_lock(&file) {
+            Ok(()) => {}
+            Err(TryLockError::WouldBlock) => {
+                return Err(RuntimeError::SessionBusy {
+                    session_id,
+                    holder: self.holder_for(session_id).map(Box::new),
+                });
+            }
+            Err(TryLockError::Error(error)) => return Err(io_error(error)),
+        }
+        if let Err(error) = self.purge_metadata_for(session_id) {
+            let _ = FileExt::unlock(&file);
+            return Err(error);
+        }
+        let metadata_path = self.metadata_path();
+        let info = self.instance_info(session_id);
+        if let Err(error) = write_private_json(&metadata_path, &info) {
+            let _ = FileExt::unlock(&file);
+            return Err(error);
+        }
+        let prepared_control_endpoint = if interactive {
+            control_endpoint::prepare(&self.runtime_dir, self.instance_id)
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
+        Ok(FileSessionLease {
+            file,
+            metadata_path,
+            info,
+            prepared_control_endpoint,
+        })
+    }
+
     fn session_lock_path(&self, session_id: SessionId) -> PathBuf {
         self.runtime_dir
             .join("sessions")
@@ -193,39 +236,7 @@ impl RuntimeCoordinator for FileRuntimeCoordinator {
     type ExclusiveSchemaLease = FileSchemaLease;
 
     fn acquire_session(&self, session_id: SessionId) -> Result<Self::SessionLease, RuntimeError> {
-        let lock_path = self.session_lock_path(session_id);
-        let file = open_private_file(&lock_path)?;
-        match try_session_lock(&file) {
-            Ok(()) => {}
-            Err(TryLockError::WouldBlock) => {
-                return Err(RuntimeError::SessionBusy {
-                    session_id,
-                    holder: self.holder_for(session_id).map(Box::new),
-                });
-            }
-            Err(TryLockError::Error(error)) => return Err(io_error(error)),
-        }
-        if let Err(error) = self.purge_metadata_for(session_id) {
-            let _ = FileExt::unlock(&file);
-            return Err(error);
-        }
-        let metadata_path = self.metadata_path();
-        let info = self.instance_info(session_id);
-        if let Err(error) = write_private_json(&metadata_path, &info) {
-            let _ = FileExt::unlock(&file);
-            return Err(error);
-        }
-        Ok(FileSessionLease {
-            file,
-            metadata_path,
-            info,
-            prepared_control_endpoint: control_endpoint::prepare(
-                &self.runtime_dir,
-                self.instance_id,
-            )
-            .ok()
-            .flatten(),
-        })
+        self.acquire_session_lease(session_id, true)
     }
 
     fn acquire_schema_shared(&self) -> Result<Self::SharedSchemaLease, RuntimeError> {

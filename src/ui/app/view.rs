@@ -253,10 +253,6 @@ impl BoardApp {
 
     pub(super) fn thought_mutable(&self, thought_id: ThoughtId) -> bool {
         !self.submission_locked(thought_id)
-            && !self
-                .pending_transfer_removals
-                .values()
-                .any(|pending| *pending == thought_id)
     }
 
     pub(super) fn edit_content_mutation_blocked(&self, thought_id: ThoughtId) -> bool {

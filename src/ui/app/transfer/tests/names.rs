@@ -36,11 +36,11 @@ fn name_only_source_change_keeps_source_after_move_receipt() {
     app.begin_session_transfer(true, &mut ids, &clock);
     app.complete_transfer_discovery(1, Ok(vec![super::session_hit(destination)]));
     let effects = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
-    let [Effect::TransferThought(request)] = effects.as_slice() else {
+    let [Effect::TransferThoughts(request)] = effects.as_slice() else {
         panic!("expected transfer request");
     };
     assert_eq!(
-        request.name.as_ref().map(ThoughtName::as_str),
+        request.items[0].name.as_ref().map(ThoughtName::as_str),
         Some("Sent name")
     );
 
@@ -54,11 +54,14 @@ fn name_only_source_change_keeps_source_after_move_receipt() {
         renamed.as_slice(),
         [Effect::CommitBoardOperation(_)]
     ));
-    let result = super::successful_transfer(destination, request.operation_id, &mut ids);
+    let result = super::successful_transfer(destination, request.operation_id);
 
-    let completion = app.complete_session_transfer(request, Ok(result), &mut ids, &clock);
+    let completion = app.complete_session_transfer_batch(request, Ok(result), &mut ids, &clock);
 
-    assert!(completion.is_empty());
+    assert!(matches!(
+        completion.as_slice(),
+        [Effect::FinishTransfer { removal: None, .. }]
+    ));
     let current = app
         .state
         .board

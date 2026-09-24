@@ -223,7 +223,7 @@ fn pending_single_transfer_blocks_its_thought_but_not_an_unrelated_selected_run(
     app.begin_session_transfer(true, &mut ids, &clock);
     app.complete_transfer_discovery(1, Ok(vec![session_hit(destination)]));
     let pending = app.handle_transfer_input(&UiInput::Key(UiKey::Enter), &mut ids, &clock);
-    assert!(matches!(pending.as_slice(), [Effect::TransferThought(_)]));
+    assert!(matches!(pending.as_slice(), [Effect::TransferThoughts(_)]));
     assert!(app.reorder(&mut ids, &clock, -1).is_empty());
     assert!(app.reflow_thought_in_place(&mut ids, &clock).is_empty());
     assert!(

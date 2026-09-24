@@ -51,7 +51,6 @@ pub(super) fn enqueue_effects(
             | Effect::StoreIntegrationContext { .. }
             | Effect::CommitBrowserOperation(_)
             | Effect::DiscoverTransferSessions { .. }
-            | Effect::TransferThought(_)
             | Effect::TransferThoughts(_)
             | Effect::FinishTransfer { .. }
             | Effect::PrepareSubmission(_)
@@ -148,7 +147,6 @@ fn enqueue_persistence_effect(
         Effect::DiscoverTransferSessions { generation } => lanes
             .persistence
             .discover_transfer_sessions(app.state.board.session.id, generation)?,
-        Effect::TransferThought(request) => lanes.persistence.transfer_thought(request)?,
         Effect::TransferThoughts(request) => lanes.persistence.transfer_thoughts(request)?,
         Effect::FinishTransfer {
             request,
@@ -260,8 +258,7 @@ fn complete_result(
             pending.persistence = pending.persistence.saturating_sub(1);
             app.complete_transfer_discovery(generation, result);
         }
-        result @ (PersistenceResult::ThoughtTransferred { .. }
-        | PersistenceResult::ThoughtsTransferred { .. }) => {
+        result @ PersistenceResult::ThoughtsTransferred { .. } => {
             complete_transferred(app, lanes, pending, ids, clock, result)?;
         }
         result @ PersistenceResult::TransferFinished { .. } => {
@@ -311,9 +308,6 @@ fn complete_transferred(
 ) -> Result<(), TerminalError> {
     pending.persistence = pending.persistence.saturating_sub(1);
     let effects = match result {
-        PersistenceResult::ThoughtTransferred { request, result } => {
-            app.complete_session_transfer(&request, result, ids, clock)
-        }
         PersistenceResult::ThoughtsTransferred { request, result } => {
             app.complete_session_transfer_batch(&request, result, ids, clock)
         }

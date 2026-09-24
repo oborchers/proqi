@@ -166,7 +166,6 @@ fn process_unsequenced(
                 .is_ok()
         }
         request @ (PersistenceRequest::DiscoverTransferSessions { .. }
-        | PersistenceRequest::TransferThought(_)
         | PersistenceRequest::TransferThoughts(_)
         | PersistenceRequest::FinishTransfer { .. }) => {
             process_transfer_unsequenced(store, runtime, request, retained, results)
@@ -216,14 +215,6 @@ fn process_transfer_unsequenced(
             let result = transfer::discover(store, current_session_id);
             results
                 .send(PersistenceResult::TransferSessions { generation, result })
-                .is_ok()
-        }
-        PersistenceRequest::TransferThought(request) => {
-            let result = runtime
-                .ok_or_else(|| "session transfer runtime is unavailable".to_owned())
-                .and_then(|runtime| transfer::deliver(store, runtime, &request));
-            results
-                .send(PersistenceResult::ThoughtTransferred { request, result })
                 .is_ok()
         }
         PersistenceRequest::TransferThoughts(request) => {

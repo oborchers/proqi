@@ -53,7 +53,7 @@ impl BoardApp {
             })
         }) {
             self.transfer = None;
-            self.set_warning("selected thoughts already have a transfer in progress");
+            self.set_warning("thoughts already have a transfer in progress");
             return Vec::new();
         }
         let request = self.transfer.as_ref().and_then(|state| {
@@ -115,11 +115,19 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         if let Err(error) = result {
-            self.set_error(format!("selected thoughts were not sent: {error}"));
+            if request.items.len() == 1 {
+                self.set_error(format!("thought was not sent: {error}"));
+            } else {
+                self.set_error(format!("selected thoughts were not sent: {error}"));
+            }
             return Vec::new();
         }
         if !request.remove_source {
-            self.set_success("selected thoughts sent to the destination session");
+            if request.items.len() == 1 {
+                self.set_success("thought sent to the destination session");
+            } else {
+                self.set_success("selected thoughts sent to the destination session");
+            }
             return vec![Effect::FinishTransfer {
                 request: request.clone(),
                 removal: None,
@@ -138,12 +146,25 @@ impl BoardApp {
                 })
         });
         if !unchanged {
-            self.set_warning("selected thoughts were sent; changed sources were kept");
+            if request.items.len() == 1 {
+                let source_id = request.items[0].source_thought_id;
+                let removed = self
+                    .state
+                    .board
+                    .thought(source_id)
+                    .is_none_or(|thought| !thought.is_live());
+                self.set_info(stale_single_source_message(removed));
+            } else {
+                self.set_warning("selected thoughts were sent; changed sources were kept");
+            }
             return vec![Effect::FinishTransfer {
                 request: request.clone(),
                 removal: None,
                 reason: "source_changed",
             }];
+        }
+        if request.items.len() == 1 {
+            self.set_info("thought sent; removing the source");
         }
         self.reduce_with_empty_transition(
             Action::DeleteThoughts {
@@ -168,5 +189,13 @@ impl BoardApp {
             other => other,
         })
         .collect()
+    }
+}
+
+const fn stale_single_source_message(removed: bool) -> &'static str {
+    if removed {
+        "thought sent; source was already removed"
+    } else {
+        "thought sent; source changed and was kept"
     }
 }

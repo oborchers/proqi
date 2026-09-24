@@ -1,14 +1,13 @@
 //! Typed messages crossing the ordered persistence lane.
 
 use crate::{
-    application::ThoughtMutation,
     domain::{BrowserOperation, OperationSequence, RequestId, SessionId, SubmissionId, Timestamp},
     ports::{
         store::{
             CaptureCommit, CaptureCommitOutcome, CommitReceipt, OperationBatch, SessionHit,
             StoreError, StoredOperationRequest, SubmissionAttempt, SubmissionOutcome,
         },
-        transfer::{SessionTransferBatchRequest, SessionTransferRequest},
+        transfer::SessionTransferBatchRequest,
     },
 };
 
@@ -31,10 +30,6 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
     TransferSessions {
         generation: u64,
         result: Result<Vec<SessionHit>, StoreError>,
-    },
-    ThoughtTransferred {
-        request: SessionTransferRequest,
-        result: Result<ThoughtMutation, String>,
     },
     ThoughtsTransferred {
         request: SessionTransferBatchRequest,
@@ -83,7 +78,6 @@ pub(super) enum PersistenceRequest {
         current_session_id: SessionId,
         generation: u64,
     },
-    TransferThought(SessionTransferRequest),
     TransferThoughts(SessionTransferBatchRequest),
     FinishTransfer {
         request: SessionTransferBatchRequest,

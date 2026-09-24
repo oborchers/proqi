@@ -11,7 +11,7 @@ use crate::{
         invocation::{InvocationDiscoveryRequest, InvocationReferenceDiscoveryRequest},
         recovery::RecoveryDocument,
         store::{OperationBatch, SubmissionAttempt, SubmissionOutcome},
-        transfer::{SessionTransferBatchRequest, SessionTransferRequest},
+        transfer::SessionTransferBatchRequest,
     },
 };
 
@@ -35,9 +35,7 @@ pub enum Effect {
         /// Picker generation used to discard a completion from an earlier owner.
         generation: u64,
     },
-    /// Copy one exact thought to another session before optional source removal.
-    TransferThought(SessionTransferRequest),
-    /// Deliver one selected thought cohort as one durable destination operation.
+    /// Deliver one thought cohort as one durable destination operation.
     TransferThoughts(SessionTransferBatchRequest),
     /// Complete a selected transfer journal, atomically committing source removal when present.
     FinishTransfer {

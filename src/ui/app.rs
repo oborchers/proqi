@@ -183,7 +183,6 @@ pub struct BoardApp {
     deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     preflight_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
-    pending_transfer_removals: BTreeMap<OperationId, ThoughtId>,
     pending_transfer_batches:
         BTreeMap<OperationId, crate::ports::transfer::SessionTransferBatchRequest>,
     screenshot: screenshot::ScreenshotInbox,
@@ -288,7 +287,6 @@ impl BoardApp {
             deferred_submissions: BTreeMap::new(),
             preflight_submissions: BTreeMap::new(),
             pending_submissions: BTreeMap::new(),
-            pending_transfer_removals: BTreeMap::new(),
             pending_transfer_batches: BTreeMap::new(),
             screenshot: screenshot::ScreenshotInbox::default(),
             update_barrier: None,

@@ -984,6 +984,17 @@ is journaled before any source deletion; source deletion and journal completion
 commit in one transaction. A restart replays the same destination identity,
 and an older writer refuses the new storage protocol.
 
+Both focused and selected TUI transfers use this intent and receipt path, even
+for a one-thought cohort. When the destination has no live owner, the transfer
+worker creates a short-lived destination coordinator with its own instance
+identity. It acquires the destination session lease without publishing an
+interactive control endpoint and releases that lease after the durable
+destination mutation. The source coordinator retains its own metadata and
+control ownership throughout. When the destination is active, the worker sends
+the same stable cohort operation through owner control. A retry after an
+uncertain acknowledgement must use the journaled operation identity in either
+case.
+
 ### Stable session attachment ordinals
 
 Schema 14 and storage protocol 13 add separate session image and file allocation

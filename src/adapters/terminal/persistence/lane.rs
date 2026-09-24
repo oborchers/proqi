@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     domain::{RequestId, SessionId},
-    ports::transfer::{SessionTransferBatchRequest, SessionTransferRequest},
+    ports::transfer::SessionTransferBatchRequest,
 };
 use std::sync::mpsc::{RecvTimeoutError, TrySendError};
 
@@ -106,13 +106,6 @@ impl PersistenceLane {
             current_session_id,
             generation,
         })
-    }
-
-    pub(in crate::adapters::terminal) fn transfer_thought(
-        &self,
-        request: SessionTransferRequest,
-    ) -> Result<(), TerminalError> {
-        self.send(PersistenceRequest::TransferThought(request))
     }
 
     pub(in crate::adapters::terminal) fn transfer_thoughts(
