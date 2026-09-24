@@ -49,6 +49,16 @@ fn engaged_empty_compose_editor() {
 }
 
 #[test]
+fn first_api_item_has_the_ordinary_board_focus_presentation() {
+    let mut fixture = Fixture::new();
+    durable_thought(&mut fixture, "first API focus");
+    fixture
+        .app
+        .acknowledge_persistence(OperationSequence::new(1), true);
+    insta::assert_snapshot!(snapshot(&mut fixture, 48, 12, ThemePreference::Dark));
+}
+
+#[test]
 fn populated_board_with_folded_attachment() {
     let mut fixture = attachment_numbering::populated_attachment_fixture();
     assert_platform_snapshot!(snapshot(&mut fixture, 60, 12, ThemePreference::Dark));

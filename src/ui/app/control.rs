@@ -8,9 +8,18 @@ use crate::{
         Action, ApplicationError, Effect, InteractionMode, OwnedThoughtCreation,
         exact_live_thought, reduce,
     },
-    domain::{BoardOperationKind, OperationId, TextPosition, ThoughtId, Timestamp, UndoScope},
+    domain::{
+        BoardItemId, BoardOperationKind, OperationId, OperationSequence, TextPosition, ThoughtId,
+        Timestamp, UndoScope,
+    },
     ports::{control::ControlMutation, environment::Clock},
 };
+
+pub(super) struct FirstControlFocus {
+    sequence: OperationSequence,
+    item: BoardItemId,
+    accepted: bool,
+}
 
 impl BoardApp {
     /// Resolve owner-local settings that participate in one semantic request.
@@ -35,11 +44,42 @@ impl BoardApp {
         }
         let previous_mode = self.state.mode;
         let previous_focus = self.state.focused_item;
+        let first_item = if matches!(previous_mode, InteractionMode::Compose)
+            && self.state.board.live_items().is_empty()
+            && self
+                .editor_snapshot()
+                .is_some_and(|editor| editor.content.is_empty())
+        {
+            match mutation {
+                ControlMutation::Add { thought_id, .. }
+                | ControlMutation::PreserveAdd { thought_id, .. } => {
+                    Some(BoardItemId::Thought(*thought_id))
+                }
+                ControlMutation::InsertSeparator { separator_id, .. } => {
+                    Some(BoardItemId::Separator(*separator_id))
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
         let at = clock.now();
         let Some(action) = self.control_action(mutation, at)? else {
             return Ok(Vec::new());
         };
         let effects = reduce(&mut self.state, action)?;
+        if let Some(item) = first_item
+            && let Some(sequence) = effects
+                .iter()
+                .find_map(Effect::persistence_batch)
+                .and_then(|batch| batch.sequence())
+        {
+            self.pending_first_control_focus = Some(FirstControlFocus {
+                sequence,
+                item,
+                accepted: false,
+            });
+        }
         if matches!(mutation, ControlMutation::RenameSession { .. })
             && effects
                 .iter()
@@ -56,7 +96,58 @@ impl BoardApp {
     /// Restore the reducer state when owner-control effect validation rejects a mutation.
     pub(crate) fn restore_control_state(&mut self, state: crate::application::AppState) {
         self.state = state;
+        if self
+            .pending_first_control_focus
+            .as_ref()
+            .is_some_and(|pending| self.state.board.item_position(pending.item).is_none())
+        {
+            self.pending_first_control_focus = None;
+        }
         self.sync_editor_from_state();
+    }
+
+    pub(super) fn acknowledge_first_control_focus(
+        &mut self,
+        sequence: OperationSequence,
+        succeeded: bool,
+    ) {
+        if let Some(pending) = &mut self.pending_first_control_focus
+            && pending.sequence == sequence
+        {
+            pending.accepted = succeeded;
+        }
+        self.finish_first_control_focus();
+    }
+
+    pub(super) fn finish_first_control_focus(&mut self) {
+        let Some(pending) = &self.pending_first_control_focus else {
+            return;
+        };
+        if !pending.accepted || !self.pending_clipboard_reads.is_empty() {
+            return;
+        }
+        let item = pending.item;
+        self.pending_first_control_focus = None;
+        if !matches!(self.state.mode, InteractionMode::Compose)
+            || !self
+                .editor_snapshot()
+                .is_some_and(|editor| editor.content.is_empty())
+        {
+            return;
+        }
+        let focus = if self.state.board.item_position(item).is_some() {
+            item
+        } else if let Some(first_live) = self.state.board.live_items().first() {
+            first_live.id()
+        } else {
+            return;
+        };
+        self.state.mode = InteractionMode::Board;
+        self.state.focused_item = Some(focus);
+        self.insertion_focus = super::InsertionFocus::Inactive;
+        self.compose_generation = self.compose_generation.wrapping_add(1);
+        self.sync_editor_from_state();
+        self.layout = None;
     }
 
     fn control_action(
