@@ -162,6 +162,17 @@
         "Keep bounded automatic input recovery available after executable upgrades and ordinary session resumes, with clearer content-free diagnostics.",
         "Explore task-oriented user guides for editing, selection, attachments, delivery, sessions, recovery, shortcuts, and configuration."
       ]
+    },
+    {
+      "version": "0.13.0",
+      "highlights": [
+        "Move selected Board items together with the existing reorder keys while preserving their order and making one undoable change.",
+        "Clean up spacing in selected thoughts as one undoable action without changing separators.",
+        "Send selected thoughts to another Proqi session as one durable cohort, removing sources only after the complete destination is accepted.",
+        "Focus the first item added through the public API to an untouched empty Board without opening its text editor.",
+        "Find or create named sessions atomically, create named thoughts in one action, and retry session changes with operation IDs.",
+        "Page JSON session and Board-item lists, use structured help and version output, and discover documented error codes."
+      ]
     }
   ]
 }
