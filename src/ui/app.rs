@@ -226,7 +226,6 @@ impl BoardApp {
         editor_factory: impl EditorFactory + 'static,
     ) -> Self {
         let footer_chrome_visibility = FooterChromeVisibility::from_hidden(settings.footer_hidden);
-        let insertion_focus = InsertionFocus::Inactive;
         let editor_factory: Box<dyn EditorFactory> = Box::new(editor_factory);
         let editor = if matches!(state.mode, InteractionMode::Compose) {
             Some((EditorOwner::Compose, editor_factory.create("")))
@@ -259,7 +258,7 @@ impl BoardApp {
             overlay_activation: None,
             hovered: None,
             pointer_position: None,
-            insertion_focus,
+            insertion_focus: InsertionFocus::Inactive,
             insertion_confirmation: InsertionConfirmation::Idle,
             edit_boundary: None,
             palette_selection_handoff: None,
