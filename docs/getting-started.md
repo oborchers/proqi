@@ -26,6 +26,18 @@ Rust users can install with Rust 1.88 or newer:
 cargo install proqi --locked
 ```
 
+<span class="version-scope">Next release</span> In
+[Herdr](https://github.com/herdrdev/herdr) 0.8.0 or newer, the Proqi plugin
+installs Proqi when it is missing and adds a toggle that opens Proqi beside
+the focused pane:
+
+```sh
+herdr plugin install oborchers/proqi
+```
+
+An existing Homebrew, standalone, Cargo, or Debian installation is used as is.
+See [Use Proqi as a Herdr plugin](guides/herdr-plugin.md).
+
 Proqi supports the macOS and Linux targets published on the
 [latest release](https://github.com/oborchers/proqi/releases/latest). Only the
 latest pre-1.0 minor release is supported.

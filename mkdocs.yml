@@ -103,6 +103,7 @@ nav:
           - Paste and attach: guides/paste-and-attachments.md
           - Discover skills and commands: guides/discovery-and-invocations.md
           - Deliver to agents: guides/agent-delivery.md
+          - Use the Herdr plugin: guides/herdr-plugin.md
           - Sessions and recovery: guides/organization-and-recovery.md
           - Updates and restarts: guides/updates.md
           - Configure and troubleshoot shortcuts: guides/shortcuts.md

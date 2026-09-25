@@ -4,6 +4,7 @@ mod action;
 mod admission;
 mod attachments;
 mod capture;
+mod companion;
 mod control;
 mod error;
 mod history_contract;
@@ -36,6 +37,10 @@ pub use attachments::{
     AttachmentRefreshCause, AttachmentRefreshOutcome, attachment_keys,
 };
 pub use capture::{apply_capture, prepare_capture};
+pub use companion::{
+    COMPANION_PANE_LABEL, CompanionToggleError, CompanionToggleOutcome, companion_session_name,
+    toggle_companion,
+};
 pub(crate) use control::{ControlReplay, attach_control_fingerprint, match_control_replay};
 pub use error::{ApplicationError, ApplicationResult, FailureCode};
 pub(crate) use history_contract::UndoContract;

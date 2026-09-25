@@ -45,9 +45,19 @@ impl CliError {
         }
     }
 
+    pub(super) fn message(&self) -> &str {
+        &self.message
+    }
+
     pub(super) fn with_details(mut self, details: Value) -> Self {
         self.details = details;
         self
+    }
+}
+
+impl std::fmt::Display for CliError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
     }
 }
 
