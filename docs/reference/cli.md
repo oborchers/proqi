@@ -600,3 +600,41 @@ npx skills add oborchers/proqi --skill proqi-debug -g
 These skills do not install the Proqi executable. Their supported operations
 follow the repository version that supplies them, so automation must still
 begin with `proqi --json capabilities` from the installed executable.
+
+### Install as a Claude Code plugin
+
+Claude Code users can install both skills from the repository's
+[plugin marketplace](https://code.claude.com/docs/en/discover-plugins) instead
+of `npx skills add`:
+
+```text
+/plugin marketplace add oborchers/proqi
+/plugin install proqi@proqi
+```
+
+The equivalent shell commands are
+`claude plugin marketplace add oborchers/proqi` and
+`claude plugin install proqi@proqi`. Use one installation method per harness so
+the same skill is not listed twice.
+
+The `proqi` plugin contains exactly the `skills/proqi` and `skills/proqi-debug`
+files that `npx skills add` installs, without repository-internal maintainer
+skills. Claude Code namespaces plugin skills, so they appear as `/proqi:proqi`
+and `/proqi:proqi-debug`; the bare `/proqi` form also works when no other skill
+uses that name.
+
+The marketplace serves the default branch, and the plugin version equals the
+Cargo version. Claude Code therefore offers an update when a release changes
+that version, not for every commit. Automatic updates are off by default for
+third-party marketplaces. Refresh the catalog, then update the installed
+plugin:
+
+```text
+/plugin marketplace update proqi
+/plugin update proqi@proqi
+```
+
+Between release preparation and publication, the default branch can describe
+operations that the installed executable does not yet provide. The skills
+therefore require each operation's exact spelling in
+`proqi --json capabilities` before using it.

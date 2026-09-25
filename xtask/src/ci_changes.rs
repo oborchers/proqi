@@ -194,7 +194,9 @@ fn classify_path(path: &str, classes: &mut BTreeSet<ChangeClass>) {
         (ChangeClass::PersistenceContract, is_persistence(path)),
         (
             ChangeClass::Product,
-            path.starts_with("src/") || path.starts_with("tests/"),
+            path.starts_with("src/")
+                || path.starts_with("tests/")
+                || path.starts_with(SHIPPED_SKILLS),
         ),
         (
             ChangeClass::Tooling,
@@ -221,6 +223,8 @@ fn is_known(path: &str) -> bool {
         || is_herdr_plugin(path)
         || path.starts_with("src/")
         || path.starts_with("tests/")
+        || path.starts_with(SHIPPED_SKILLS)
+        || path.starts_with(CLAUDE_PLUGIN)
         || path.starts_with("xtask/")
         || path.starts_with("tools/")
         || path.starts_with("docs/")
@@ -267,8 +271,15 @@ fn is_documentation(path: &str) -> bool {
         )
 }
 
+/// Shipped agent skills are product contracts verified by Rust tests.
+const SHIPPED_SKILLS: &str = "skills/";
+/// Claude Code plugin marketplace distribution manifest.
+const CLAUDE_PLUGIN: &str = ".claude-plugin/";
+
 fn is_ordinary_markdown(path: &str) -> bool {
-    has_extension(path, "md") && !path.starts_with(".github/release-notes/")
+    has_extension(path, "md")
+        && !path.starts_with(".github/release-notes/")
+        && !path.starts_with(SHIPPED_SKILLS)
 }
 
 fn is_ci_policy(path: &str) -> bool {
@@ -280,9 +291,11 @@ fn is_ci_policy(path: &str) -> bool {
         || path.ends_with("CLAUDE.md")
         || matches!(path, "context/ARCHITECTURE.md" | "context/PRODUCT.md")
         || path.starts_with("xtask/src/release_policy/")
+        || path.starts_with("xtask/src/ci_changes/")
         || matches!(
             path,
             "xtask/src/ci_changes.rs"
+                | "xtask/src/claude_marketplace.rs"
                 | "xtask/src/dev_gates.rs"
                 | "xtask/src/documentation.rs"
                 | "xtask/src/gate_lock.rs"
@@ -313,6 +326,7 @@ fn is_herdr_plugin(path: &str) -> bool {
 fn is_packaging(path: &str) -> bool {
     is_herdr_plugin(path)
         || path.starts_with("tools/ci-linux/")
+        || path.starts_with(CLAUDE_PLUGIN)
         || path.starts_with("tests/package_contract")
         || matches!(path, "about.toml" | "about.hbs" | "dist-workspace.toml")
         || path.strip_prefix("xtask/src/").is_some_and(|name| {

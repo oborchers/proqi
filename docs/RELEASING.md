@@ -12,6 +12,10 @@ authority by itself.
 - Every `.github/release-notes/vX.Y.Z.md` has one exact matching version in
   `release-highlights.json`, with three to six jointly reviewed user-facing
   highlights. Release planning and package assembly fail when they diverge.
+- The Claude Code plugin entry in `.claude-plugin/marketplace.json` carries
+  the exact Cargo version and a relative `./skills` source. `cargo xtask
+  quality` and `release-plan` fail when they diverge. See
+  [Claude Code plugin marketplace](#claude-code-plugin-marketplace).
 - Release archives exist only for the six targets printed by `cargo xtask
   release-targets triples`: Apple silicon and Intel macOS, x86-64 and ARM64 GNU
   Linux, and x86-64 and ARM64 musl Linux.
@@ -157,6 +161,31 @@ contract, confirm that the default-branch launcher and the released binary
 still agree before tagging; the launcher checks the `herdr_companion_toggle`
 capability and reports an older binary instead of running it.
 
+## Claude Code plugin marketplace
+
+`.claude-plugin/marketplace.json` publishes the `skills/` tree as the
+`proqi@proqi` Claude Code plugin. Release preparation bumps its plugin
+`version` together with `Cargo.toml`. Claude Code skips an update while the
+resolved version is unchanged, so this bump is what announces new skill
+content to existing installations.
+
+The plugin uses a relative source, so it serves the skill files on the default
+branch. This matches `npx skills add oborchers/proqi`. A `git-subdir` source
+pinned to `vX.Y.Z` would keep the skill identical to the released executable.
+However, after preparation bumps the version and before the tag exists, that
+ref would not resolve, and every install and update would fail. The relative
+source was chosen instead. The gap it leaves, a default-branch skill that can
+describe operations the installed binary lacks, is bounded by the skill's rule
+to require each exact operation in `proqi --json capabilities`. `cargo xtask
+quality` rejects a pinned remote source or a version that differs from Cargo.
+
+Verify the manifest with the Claude Code CLI when it changes:
+
+```shell
+claude plugin validate --strict .
+claude plugin validate --strict ./skills
+```
+
 ## Public Linux QA tools image
 
 `tools/ci-linux/image.json` exclusively owns the GHCR repository name. The
@@ -185,7 +214,7 @@ The public repository metadata is reviewed as one unit:
 ```text
 Description: An agent-optimized terminal scratchpad for capturing, editing, and submitting follow-up prompts beside coding-agent sessions.
 Website after first release: https://github.com/oborchers/proqi/releases/latest
-Topics: rust, terminal, tui, cli, ratatui, developer-tools, ai-agents, coding-agents, prompt-management, scratchpad, local-first, sqlite, productivity, herdr
+Topics: rust, terminal, tui, cli, ratatui, developer-tools, ai-agents, coding-agents, prompt-management, scratchpad, local-first, sqlite, productivity, herdr, herdr-plugin
 Social preview: assets/proqi-social-preview.png
 ```
 
@@ -197,7 +226,7 @@ gh repo edit oborchers/proqi \
   --enable-issues \
   --enable-discussions=false \
   --description "An agent-optimized terminal scratchpad for capturing, editing, and submitting follow-up prompts beside coding-agent sessions." \
-  --add-topic rust,terminal,tui,cli,ratatui,developer-tools,ai-agents,coding-agents,prompt-management,scratchpad,local-first,sqlite,productivity,herdr
+  --add-topic rust,terminal,tui,cli,ratatui,developer-tools,ai-agents,coding-agents,prompt-management,scratchpad,local-first,sqlite,productivity,herdr,herdr-plugin
 ```
 
 After the first release exists, add the website separately:
@@ -230,8 +259,9 @@ Manual and API-managed settings must also:
 After the readiness audit:
 
 1. Prepare and jointly review the Cargo version,
-   `.github/release-notes/vX.Y.Z.md`, and the exact matching bounded entry in
-   `release-highlights.json`, then push `main`.
+   `.github/release-notes/vX.Y.Z.md`, the exact matching bounded entry in
+   `release-highlights.json`, and the plugin version in
+   `.claude-plugin/marketplace.json`, then push `main`.
 2. The `Release candidate` workflow classifies that exact main SHA from the
    checked-in inputs. If release-ready, it builds the native candidates in
    parallel with ordinary CI and records one 30-day immutable candidate. It has

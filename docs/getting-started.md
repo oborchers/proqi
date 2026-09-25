@@ -95,6 +95,26 @@ keyboard remapper, terminal, and multiplexer all get a chance to consume or
 rewrite a key before Proqi receives it. See
 [Configure and troubleshoot shortcuts](guides/shortcuts.md).
 
+## Add the agent skills
+
+The optional Proqi skills let a coding agent use the JSON CLI for a session you
+name. Install them with the [Agent Skills CLI](https://github.com/vercel-labs/skills):
+
+```sh
+npx skills add oborchers/proqi --skill proqi -g --agent codex --agent claude-code
+```
+
+In Claude Code, you can use the plugin marketplace instead:
+
+```text
+/plugin marketplace add oborchers/proqi
+/plugin install proqi@proqi
+```
+
+The plugin installs both `proqi` and `proqi-debug`. Neither method installs the
+Proqi executable. See
+[Install the shipped agent skills](reference/cli.md#install-the-shipped-agent-skills).
+
 ## Continue learning
 
 - [Capture and edit](guides/capture-and-edit.md)

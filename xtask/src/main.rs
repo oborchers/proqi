@@ -13,6 +13,7 @@
 )]
 
 mod ci_changes;
+mod claude_marketplace;
 mod crate_package;
 mod debian;
 mod debian_container;

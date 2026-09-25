@@ -77,6 +77,7 @@ fn readiness_findings(
     collect(validate_highlights(root, &version), &mut findings);
     // The Herdr plugin manifest restates the Cargo version for the marketplace.
     findings.extend(super::herdr_plugin::findings(root)?);
+    collect(super::claude_marketplace::validate(root), &mut findings);
     collect(validate_source_sha(root, source_sha), &mut findings);
     if matches!(phase, ReleasePhase::Preparation) {
         collect(validate_main_identity(root, source_sha), &mut findings);
@@ -269,6 +270,7 @@ mod tests {
         )
         .expect("highlights");
         write_herdr_plugin(root.path(), "1.2.3");
+        write_marketplace(root.path(), "1.2.3");
         git(root.path(), &["init", "-q", "-b", "main"]);
         git(root.path(), &["config", "user.name", "Proqi Test"]);
         git(root.path(), &["config", "user.email", "test@proqi.invalid"]);
@@ -296,6 +298,17 @@ mod tests {
             )
             .expect("plugin script");
         }
+    }
+
+    fn write_marketplace(root: &Path, version: &str) {
+        fs::create_dir_all(root.join(".claude-plugin")).expect("marketplace directory");
+        fs::write(
+            root.join(".claude-plugin/marketplace.json"),
+            format!(
+                r#"{{"name":"proqi","owner":{{"name":"Test"}},"plugins":[{{"name":"proqi","source":"./skills","version":"{version}"}}]}}"#
+            ),
+        )
+        .expect("marketplace");
     }
 
     fn git(root: &Path, arguments: &[&str]) -> String {
@@ -390,6 +403,22 @@ mod tests {
             findings
                 .iter()
                 .any(|finding| finding.contains("clean Git worktree"))
+        );
+    }
+
+    #[test]
+    fn stale_claude_marketplace_version_blocks_preparation() {
+        let root = fixture();
+        write_marketplace(root.path(), "1.2.2");
+        git(root.path(), &["commit", "-qam", "stale marketplace"]);
+        let sha = git(root.path(), &["rev-parse", "HEAD"]);
+        let findings = readiness_findings(root.path(), "v1.2.3", &sha, ReleasePhase::Preparation)
+            .expect("findings");
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("must exactly match Cargo version 1.2.3")),
+            "{findings:#?}"
         );
     }
 

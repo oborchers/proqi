@@ -195,7 +195,8 @@ focused. A tab's first session is named after the tab's agent when exactly one
 agent there has a Herdr name, else after the tab label, or after the stable tab
 identity when that label is only Herdr's position number. Herdr does not
 restore plugin panes after a cold server restart; the next toggle reopens the
-same session and closes the leftover shell if it is still idle. See the [Herdr plugin guide](docs/guides/herdr-plugin.md).
+same session and closes the leftover shell if it is still idle. See the
+[Herdr plugin guide](docs/guides/herdr-plugin.md).
 
 ## Start and resume
 
@@ -515,6 +516,22 @@ For read-only-first failure investigation:
 ```shell
 npx skills add oborchers/proqi --skill proqi-debug -g
 ```
+
+### Claude Code plugin
+
+Claude Code can install both skills from this repository's plugin marketplace
+instead:
+
+```text
+/plugin marketplace add oborchers/proqi
+/plugin install proqi@proqi
+```
+
+The plugin ships the same `skills/proqi` and `skills/proqi-debug` files, invoked
+as `/proqi:proqi` and `/proqi:proqi-debug`. It follows the default branch and
+reports a new version when a release changes the Cargo version. Update with
+`/plugin marketplace update proqi`, then `/plugin update proqi@proqi`. It does
+not install the Proqi executable.
 
 ## Privacy, durability, and recovery
 

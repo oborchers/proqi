@@ -143,7 +143,7 @@ surface.
 | Typed canonical identifiers | Shipped | Prefixes identify resource kinds and retain complete UUIDv7 values. | [CLI](cli.md) |
 | Idempotent mutations | Shipped | Matching operation identities return the original receipt; divergent semantic reuse is rejected. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Machine-readable errors | Shipped | Versioned envelopes use stable current error codes and nonzero exits. | [CLI](cli.md) |
-| Dedicated Proqi and debug skills | Shipped | Teach compatible coding agents to use the explicit JSON CLI or investigate read-only-first without scraping storage or the TUI. | [CLI](cli.md#install-the-shipped-agent-skills) |
+| Dedicated Proqi and debug skills | Shipped | Teach compatible coding agents to use the explicit JSON CLI or investigate read-only-first without scraping storage or the TUI. Install with `npx skills add` or, in Claude Code, as the `proqi@proqi` marketplace plugin. | [CLI](cli.md#install-the-shipped-agent-skills) |
 | Read-only doctor | Shipped | Checks local health without repair or mutation. | [Privacy and diagnostics](privacy-and-diagnostics.md#run-read-only-health-checks) |
 | Content-redacted diagnostics | Shipped | Bounded local collection, no upload, and no overwrite. | [Privacy and diagnostics](privacy-and-diagnostics.md#collect-a-private-support-bundle) |
 | User-only local state | Shipped | Private state paths, databases, companions, backups, and recovery destinations are preflighted. | [Privacy and diagnostics](privacy-and-diagnostics.md) |

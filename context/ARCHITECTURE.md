@@ -2442,7 +2442,8 @@ A preflight job uses the xtask-owned classifier on the complete pull-request or
 push diff before the matrix starts. When every changed path is ordinary
 Markdown, CI runs one lightweight documentation gate for whitespace and
 repository-owned public-asset contracts. Reviewed files under
-`.github/release-notes/` are product inputs even though they are Markdown;
+`.github/release-notes/` and the shipped `skills/` tree are product inputs
+even though they are Markdown, so a skill edit runs its Rust contract tests;
 the Rust test, coverage, audit, PTY, package, and platform jobs are explicitly
 skipped. Any non-Markdown path runs the distinct product boundaries. Coverage
 runs only for relevant code changes, and the full MSRV suite runs only for its
@@ -2636,6 +2637,8 @@ tests/
   pty/
 skills/
   proqi/SKILL.md
+.claude-plugin/
+  marketplace.json   Claude Code marketplace publishing skills/ as proqi@proqi
 xtask/             canonical development, CI, and packaging commands
 ```
 

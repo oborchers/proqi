@@ -47,6 +47,7 @@ fn policy_and_classifier_changes_fail_closed() {
         "AGENTS.md",
         "context/ARCHITECTURE.md",
         "xtask/src/ci_changes.rs",
+        "xtask/src/ci_changes/git.rs",
         "xtask/src/dev_gates.rs",
         "xtask/src/documentation.rs",
         "xtask/src/release_policy/docs.rs",
@@ -84,6 +85,49 @@ fn dependency_package_release_and_unknown_paths_use_full_gate() {
     ] {
         assert_eq!(paths(&[path]).local_plan, LocalPlan::Full, "{path}");
     }
+}
+
+#[test]
+fn shipped_skills_leave_the_documentation_path_without_hiding_it() {
+    for path in [
+        "skills/proqi/SKILL.md",
+        "skills/proqi-debug/references/storage.md",
+        "skills/proqi/agents/openai.yaml",
+    ] {
+        let result = paths(&[path]);
+        assert!(!result.docs_only, "{path}");
+        assert_eq!(result.local_plan, LocalPlan::Fast, "{path}");
+        assert!(result.classes.contains(&ChangeClass::Product), "{path}");
+        assert!(!result.classes.contains(&ChangeClass::Unknown), "{path}");
+    }
+    let docs = paths(&[
+        "README.md",
+        "docs/getting-started.md",
+        "docs/guides/updates.md",
+    ]);
+    assert!(docs.docs_only);
+    assert_eq!(docs.local_plan, LocalPlan::Documentation);
+    let mixed = paths(&["docs/reference/cli.md", "skills/proqi/SKILL.md"]);
+    assert!(!mixed.docs_only);
+    assert_eq!(mixed.local_plan, LocalPlan::Fast);
+}
+
+#[test]
+fn claude_marketplace_manifest_and_policy_use_full_gate() {
+    for path in [
+        ".claude-plugin/marketplace.json",
+        "xtask/src/claude_marketplace.rs",
+    ] {
+        let result = paths(&[path]);
+        assert_eq!(result.local_plan, LocalPlan::Full, "{path}");
+        assert!(result.full_msrv, "{path}");
+        assert!(!result.classes.contains(&ChangeClass::Unknown), "{path}");
+    }
+    assert!(
+        paths(&[".claude-plugin/marketplace.json"])
+            .classes
+            .contains(&ChangeClass::Packaging)
+    );
 }
 
 #[test]
