@@ -204,15 +204,35 @@ impl BoardApp {
             self.set_error("export: the path must be valid UTF-8");
             return Vec::new();
         }
-        Self::request_write(state, ids, path, ExportOverwrite::Refuse)
+        self.request_write(ids, path, ExportOverwrite::Refuse)
     }
 
+    /// Write the current copy text of the selected thoughts, read at save time.
     fn request_write(
-        state: &mut ExportState,
+        &mut self,
         ids: &mut impl IdGenerator,
         path: PathBuf,
         overwrite: ExportOverwrite,
     ) -> Vec<Effect> {
+        let live = self.state.board.live_thoughts();
+        let Some(state) = self.export.active.as_mut() else {
+            return Vec::new();
+        };
+        let current = state
+            .sources
+            .iter()
+            .map(|source| {
+                live.iter()
+                    .find(|thought| thought.id == source.id)
+                    .map(|thought| (*thought).clone())
+            })
+            .collect::<Option<Vec<_>>>();
+        let Some(current) = current else {
+            self.export.active = None;
+            self.set_error("export: a selected thought was removed; nothing was written");
+            return Vec::new();
+        };
+        state.sources = current;
         let request_id = ids.request_id();
         state.stage = ExportStage::Writing {
             request_id,
@@ -249,7 +269,7 @@ impl BoardApp {
             return Vec::new();
         }
         let (path, existing) = (path.clone(), *existing);
-        Self::request_write(state, ids, path, ExportOverwrite::Confirmed(existing))
+        self.request_write(ids, path, ExportOverwrite::Confirmed(existing))
     }
 
     /// Apply one generation-matched directory listing to the destination field.

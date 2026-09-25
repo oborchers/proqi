@@ -481,12 +481,19 @@ accepts an absolute destination, exact bytes, and a closed replacement policy:
 refuse, refuse unless the existing regular file already holds exactly these
 bytes, replace only the confirmed content-free identity (device, inode, length,
 and modification time), or replace any regular file for an explicit CLI flag.
+Replacement is an atomic exchange (`renameat` with `RENAME_EXCHANGE` or
+`RENAME_SWAP`). The displaced entry is then verified as the confirmed regular
+file and is exchanged back when it is not, so an entry that appeared after the
+last check is never overwritten. File systems without an atomic exchange fall
+back to a recheck followed by an ordinary rename. A replacement keeps the
+replaced file's permission bits. The identity is content-free, so a same-length
+rewrite within the file system's timestamp granularity is not detected.
 The adapter requires an existing parent folder and never creates one, refuses
 symbolic links, folders, and other non-regular targets, writes a `tempfile`
 temporary in the destination folder with mode `0666` before the umask, flushes
-and `fsync`s it, then persists it with `persist_noclobber` or, only when
-replacement is authorized, `persist`. A confirmed identity is rechecked
-immediately before the rename, and the folder is synchronized afterwards.
+and `fsync`s it, then installs it with `persist_noclobber` or, only when
+replacement is authorized, the verified exchange described above. The folder is
+synchronized afterwards.
 Failures are typed as missing folder, invalid or unsafe target, existing file,
 changed after confirmation, permission, read-only, storage full, or I/O, and no
 partial destination file remains.
@@ -513,11 +520,14 @@ for mutation admission until its write completes.
 The CLI writes the file in its own process and then commits the Board step,
 either under the inactive session lease through `SessionService::complete_export`
 or through owner control. The forwarded request carries the ordered thoughts,
-their SHA-256 content digests, the disposition, and for replacement the absolute
-path and a reference `ThoughtId` derived from the operation identity. Its
-content-redacted semantic fingerprint hashes the path. An exact retry is matched
-against the retained receipt before any write, so a replay never rewrites the
-file.
+their SHA-256 content digests as execution preconditions, the disposition, the
+absolute output path, and for replacement a reference `ThoughtId` derived from
+the operation identity. Its content-redacted semantic fingerprint covers the
+caller's inputs (thoughts, disposition, reference identity, and a digest of the
+path) but not the derived content digests, so an exact retry still matches after
+later edits, while reusing an identity for another destination conflicts. An
+exact retry is matched against the retained receipt before any write, so a
+replay never rewrites the file.
 
 ### `AttachmentAccessibility`
 

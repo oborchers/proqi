@@ -11,7 +11,6 @@ use crate::{
     adapters::{
         attachment::FileAttachmentStore,
         clipboard::PlatformClipboard,
-        export::FileExport,
         herdr::{HerdrGateway, HerdrPauseNotifier},
         invocation::FilesystemInvocationCatalog,
         process::{CancellationFlag, SystemProcessRunner},
@@ -26,10 +25,6 @@ use crate::{
         },
         attachment::AttachmentStore,
         clipboard::{Clipboard, ClipboardContent, ClipboardError, ClipboardText, ClipboardWrite},
-        export::{
-            DirectoryLister as _, DirectoryListing, DirectoryListingError, ExportWriteError,
-            ExportWriteRequest, ExportWriter as _, ExportWritten,
-        },
         invocation::{
             AdditionalInvocationRoot, InvocationCatalog, InvocationDiscovery,
             InvocationDiscoveryRequest, InvocationDiscoveryStage, InvocationIncompleteReason,
@@ -79,18 +74,6 @@ enum ExternalRequest {
     ThoughtExport(ThoughtExportRequest),
 }
 
-/// Plain-text export work owned by the external lane.
-enum ThoughtExportRequest {
-    Write {
-        request_id: RequestId,
-        request: Box<ExportWriteRequest>,
-    },
-    List {
-        generation: u64,
-        directory: PathBuf,
-    },
-}
-
 pub(super) enum ExternalResult {
     AgentsDiscovered {
         pane_id: Option<String>,
@@ -120,18 +103,6 @@ pub(super) enum ExternalResult {
         result: Result<PathBuf, RecoveryError>,
     },
     ThoughtExport(ThoughtExportResult),
-}
-
-/// Completion of one plain-text export request.
-pub(super) enum ThoughtExportResult {
-    Written {
-        request_id: RequestId,
-        result: Result<ExportWritten, ExportWriteError>,
-    },
-    Listed {
-        generation: u64,
-        result: Result<DirectoryListing, DirectoryListingError>,
-    },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -426,25 +397,6 @@ fn external_loop(
     }
 }
 
-fn run_thought_export(request: ThoughtExportRequest) -> ExternalResult {
-    ExternalResult::ThoughtExport(match request {
-        ThoughtExportRequest::Write {
-            request_id,
-            request,
-        } => ThoughtExportResult::Written {
-            request_id,
-            result: FileExport.write(&request),
-        },
-        ThoughtExportRequest::List {
-            generation,
-            directory,
-        } => ThoughtExportResult::Listed {
-            generation,
-            result: FileExport.list(&directory),
-        },
-    })
-}
-
 fn discover_invocations(
     invocations: &mut impl InvocationCatalog,
     request: InvocationDiscoveryRequest,
@@ -520,6 +472,10 @@ fn read_clipboard(
             .map_err(|_| ExternalReadError::NonUnicodePath),
     }
 }
+
+mod export;
+pub(super) use export::ThoughtExportResult;
+use export::{ThoughtExportRequest, run_thought_export};
 
 #[cfg(test)]
 mod tests;

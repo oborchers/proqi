@@ -1362,15 +1362,22 @@ changes the content. Attachment paths appear exactly as in the copy text;
 attached files are never copied.
 
 An existing regular file is never replaced silently. Proqi asks with **Cancel**
-preselected and replaces only the exact file it observed; a file changed or
-removed during the confirmation is reported and nothing is replaced. An
+preselected and replaces only a file whose content-free identity (device, inode,
+length, and modification time) still matches the one it observed; a file changed
+or removed during the confirmation is reported and nothing is replaced. A
+same-length rewrite within the file system's timestamp granularity is
+indistinguishable from the observed file. An
 existing symbolic link, folder, or other non-regular entry is refused, so a
 link is never replaced by a regular file.
 
 The write goes through a temporary file in the destination folder. The file is
 synchronized, atomically moved into place without replacing an entry that
 appeared meanwhile unless replacement was confirmed, and the folder is
-synchronized. Permissions follow the user's umask like any saved file. Only
+synchronized. A new file's permissions follow the user's umask; replacing a
+file keeps its permission bits, as text editors do. The written text is read
+from the Board when the user saves, so edits made while the path field was open
+are included, and a selected thought that disappeared meanwhile cancels the
+export without writing. Only
 after this durable success does the Board change: removal and replacement are
 each one Board operation and one undo step, admitted like other asynchronous
 sequence producers. Undo restores the thoughts and removes the reference; the

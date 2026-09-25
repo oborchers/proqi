@@ -49,7 +49,16 @@ pub(super) fn export(
         SystemEnvironment.home_directory().as_deref(),
     )
     .map_err(|error| invalid_output(arguments.output, error))?;
-    let output = path.to_string_lossy().into_owned();
+    let output = path
+        .to_str()
+        .ok_or_else(|| {
+            CliError::new(
+                ErrorCode::ExportTargetInvalid,
+                "the destination path must be valid UTF-8".to_owned(),
+            )
+            .with_details(json!({ "output": arguments.output, "reason": "not_utf8" }))
+        })?
+        .to_owned();
     let session_id = session_service(context)?.resolve_session(arguments.session, false)?;
     forwarding::sync(context, session_id)?;
     let sources = ordered_sources(context, session_id, &thought_ids)?;
@@ -174,7 +183,7 @@ fn board_request(
             .collect(),
         disposition,
         reference_thought_id,
-        reference_path: replace.then(|| output.to_owned()),
+        output_path: output.to_owned(),
     }))
 }
 
@@ -258,7 +267,8 @@ fn invalid_output(output: &str, error: ExportPathError) -> CliError {
     let reason = match error {
         ExportPathError::Empty => "empty",
         ExportPathError::HomeUnavailable => "home_unavailable",
-        ExportPathError::MissingFileName | ExportPathError::RelativeBase => "missing_file_name",
+        ExportPathError::MissingFileName => "missing_file_name",
+        ExportPathError::RelativeBase => "relative_base",
     };
     CliError::new(ErrorCode::ExportTargetInvalid, error.to_string())
         .with_details(json!({ "output": output, "reason": reason }))

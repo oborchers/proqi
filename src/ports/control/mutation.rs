@@ -180,8 +180,8 @@ pub enum ControlMutation {
         disposition: ExportDisposition,
         /// Deterministic identity of the reference thought, present only for replacement.
         reference_thought_id: Option<ThoughtId>,
-        /// Absolute exported file path, present only for replacement.
-        reference_path: Option<String>,
+        /// Absolute path of the durable exported file; the reference body for replacement.
+        output_path: String,
     },
     /// Clean one exact thought with Proqi's canonical spacing policy.
     ReflowThought {

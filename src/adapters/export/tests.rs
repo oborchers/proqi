@@ -249,3 +249,87 @@ fn listings_stop_at_their_bound() {
     assert_eq!(listing.entries.len(), MAX_LISTED_ENTRIES);
     assert!(listing.truncated);
 }
+
+#[test]
+fn an_entry_swapped_in_after_the_last_check_is_exchanged_back_untouched() {
+    let temporary = tempfile::tempdir().expect("directory");
+    let path = temporary.path().join("notes.txt");
+    fs::write(&path, "confirmed").expect("original");
+    let Err(ExportWriteError::Exists(confirmed)) =
+        FileExport.write(&request(&path, "new", ExportOverwrite::Refuse))
+    else {
+        panic!("exists");
+    };
+    let elsewhere = temporary.path().join("elsewhere.txt");
+    fs::write(&elsewhere, "must survive").expect("link target");
+    fs::remove_file(&path).expect("remove");
+    symlink(&elsewhere, &path).expect("race: link swapped in");
+    let staged = super::temporary_file(temporary.path(), b"new").expect("staged");
+    assert_eq!(
+        super::replace(
+            staged,
+            &request(&path, "new", ExportOverwrite::Confirmed(confirmed))
+        ),
+        Err(ExportWriteError::Changed)
+    );
+    assert!(
+        fs::symlink_metadata(&path)
+            .expect("link")
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(
+        fs::read_to_string(&elsewhere).expect("target"),
+        "must survive"
+    );
+    assert!(leftovers(temporary.path()).is_empty());
+
+    fs::remove_file(&path).expect("remove link");
+    fs::create_dir(&path).expect("race: folder swapped in");
+    let staged = super::temporary_file(temporary.path(), b"new").expect("staged");
+    assert_eq!(
+        super::replace(staged, &request(&path, "new", ExportOverwrite::Always)),
+        Err(ExportWriteError::TargetIsDirectory)
+    );
+    assert!(path.is_dir());
+    assert!(leftovers(temporary.path()).is_empty());
+}
+
+#[test]
+fn a_confirmed_exchange_replaces_the_file_and_removes_the_displaced_copy() {
+    let temporary = tempfile::tempdir().expect("directory");
+    let path = temporary.path().join("notes.txt");
+    fs::write(&path, "confirmed").expect("original");
+    let Err(ExportWriteError::Exists(confirmed)) =
+        FileExport.write(&request(&path, "new", ExportOverwrite::Refuse))
+    else {
+        panic!("exists");
+    };
+    let staged = super::temporary_file(temporary.path(), b"exchanged").expect("staged");
+    assert_eq!(
+        super::replace(
+            staged,
+            &request(&path, "exchanged", ExportOverwrite::Confirmed(confirmed))
+        ),
+        Ok(())
+    );
+    assert_eq!(fs::read_to_string(&path).expect("file"), "exchanged");
+    assert!(
+        leftovers(temporary.path()).is_empty(),
+        "the displaced file is removed"
+    );
+}
+
+#[test]
+fn replacing_keeps_the_permission_bits_of_the_replaced_file() {
+    let temporary = tempfile::tempdir().expect("directory");
+    let path = temporary.path().join("private.txt");
+    fs::write(&path, "secret").expect("original");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).expect("private");
+    FileExport
+        .write(&request(&path, "replaced", ExportOverwrite::Always))
+        .expect("replace");
+    let mode = fs::metadata(&path).expect("metadata").permissions().mode() & 0o777;
+    assert_eq!(mode, 0o600);
+    assert_eq!(fs::read_to_string(&path).expect("file"), "replaced");
+}

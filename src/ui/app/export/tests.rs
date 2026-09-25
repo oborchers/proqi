@@ -333,37 +333,6 @@ fn write_failures_and_invalid_paths_never_change_the_board() {
 }
 
 #[test]
-fn sources_changed_during_the_write_are_kept_and_reported() {
-    let mut fixture = Fixture::new(&[("body", None)]);
-    let thought_id = fixture.app.state.board.live_thoughts()[0].id;
-    fixture.app.state.focused_item = fixture.app.live_item_ids().first().copied();
-    fixture.begin(ExportDisposition::Remove);
-    let (request_id, request) = fixture.submit();
-    let revision_id = fixture.ids.revision_id();
-    crate::application::reduce(
-        &mut fixture.app.state,
-        crate::application::Action::EditThought {
-            thought_id,
-            revision_id,
-            before_content: "body".to_owned(),
-            after_content: "body changed".to_owned(),
-            before_annotations: Vec::new(),
-            after_annotations: Vec::new(),
-            before_cursor: crate::domain::TextPosition::new(0, 0),
-            after_cursor: crate::domain::TextPosition::new(0, 0),
-            at: Timestamp::from_millis(2),
-        },
-    )
-    .expect("external edit");
-    assert!(
-        fixture
-            .complete(request_id, Ok(written(&request.path)))
-            .is_empty()
-    );
-    assert_eq!(fixture.contents(), ["body changed"]);
-}
-
-#[test]
 fn tab_completion_lists_once_then_cycles_and_ignores_stale_listings() {
     let mut fixture = Fixture::new(&[("body", None)]);
     fixture.app.state.focused_item = fixture.app.live_item_ids().first().copied();
@@ -468,3 +437,5 @@ fn pointer_rows_save_and_complete() {
 
 #[path = "tests/rendering.rs"]
 mod rendering;
+#[path = "tests/sources.rs"]
+mod sources;

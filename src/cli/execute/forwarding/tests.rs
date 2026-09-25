@@ -38,7 +38,7 @@ fn export_completion_refuses_owners_older_than_protocol_thirteen() {
         expected_digests: vec![[0; 32]],
         disposition: ExportDisposition::Remove,
         reference_thought_id: None,
-        reference_path: None,
+        output_path: "/work/out.txt".to_owned(),
     };
     let refused = required_protocol(&owner(12), &mutation).expect_err("old owner");
     assert_eq!(refused.code(), ErrorCode::ProtocolMismatch);

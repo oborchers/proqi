@@ -77,7 +77,8 @@ save row to write.
   absent. The Board changes only after that. Removing or replacing is one undo
   step; undo restores the thoughts and removes the reference, and the file
   stays. If a write fails, for example on a read-only folder or a full disk,
-  the Board is left unchanged. New files follow your umask like any saved file.
+  the Board is left unchanged. New files follow your umask; replacing a file
+  keeps its permissions, as text editors do.
 
 The same export is available from scripts with
 [`proqi thoughts export`](../reference/cli.md#export-thoughts-to-a-file). The CLI

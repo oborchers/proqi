@@ -34,6 +34,7 @@ impl ExportWriter for FileExport {
         injected_test_failure()?;
         let temporary = temporary_file(parent, request.content.as_bytes())?;
         if existing.is_some() {
+            keep_permissions(&temporary, path)?;
             replace(temporary, request)?;
         } else {
             persist_new(temporary, path)?;
@@ -74,14 +75,97 @@ fn authorize(
     }
 }
 
-/// Atomically rename the synchronized temporary file over an authorized target.
+/// Atomically exchange the synchronized temporary file with an authorized target.
+///
+/// The exchange moves the displaced entry to the temporary name, where it is
+/// verified: it must be a regular file and, after a confirmation, the exact file
+/// the user confirmed. Anything else is exchanged back, so a file or link that
+/// appeared after the last check is never overwritten. File systems without an
+/// atomic exchange fall back to a recheck followed by an ordinary rename.
 fn replace(
     temporary: tempfile::NamedTempFile,
     request: &ExportWriteRequest,
 ) -> Result<(), ExportWriteError> {
-    if let ExportOverwrite::Confirmed(expected) = request.overwrite
-        && inspect_target(&request.path)? != Some(expected)
-    {
+    let expected = match request.overwrite {
+        ExportOverwrite::Confirmed(expected) => Some(expected),
+        ExportOverwrite::Always => None,
+        ExportOverwrite::Refuse | ExportOverwrite::RefuseUnlessIdentical => {
+            return Err(ExportWriteError::Io);
+        }
+    };
+    let staged = temporary.path().to_path_buf();
+    match exchange(&staged, &request.path) {
+        Ok(()) => {}
+        Err(rustix::io::Errno::NOENT) => return Err(ExportWriteError::Changed),
+        Err(rustix::io::Errno::NOSYS | rustix::io::Errno::INVAL | rustix::io::Errno::NOTSUP) => {
+            return replace_by_rename(temporary, request, expected);
+        }
+        Err(error) => return Err(map_io(&io::Error::from(error))),
+    }
+    let displaced = fs::symlink_metadata(&staged).map_err(|error| map_io(&error))?;
+    let verdict = if displaced.file_type().is_symlink() {
+        Err(ExportWriteError::TargetIsSymlink)
+    } else if displaced.is_dir() {
+        Err(ExportWriteError::TargetIsDirectory)
+    } else if !displaced.is_file() {
+        Err(ExportWriteError::TargetNotRegular)
+    } else if expected.is_some_and(|expected| expected != existing_file(&displaced)) {
+        Err(ExportWriteError::Changed)
+    } else {
+        Ok(())
+    };
+    if let Err(error) = verdict {
+        exchange(&staged, &request.path).map_err(|swap| map_io(&io::Error::from(swap)))?;
+        return Err(match error {
+            ExportWriteError::TargetIsSymlink
+            | ExportWriteError::TargetIsDirectory
+            | ExportWriteError::TargetNotRegular
+                if expected.is_some() =>
+            {
+                ExportWriteError::Changed
+            }
+            other => other,
+        });
+    }
+    // The temporary name now holds the replaced file; dropping the guard removes it.
+    drop(temporary);
+    Ok(())
+}
+
+/// Give the replacement the permission bits of the file it replaces, as editors do,
+/// so replacing never widens access to a private file.
+fn keep_permissions(
+    temporary: &tempfile::NamedTempFile,
+    path: &Path,
+) -> Result<(), ExportWriteError> {
+    let mode = fs::symlink_metadata(path)
+        .map_err(|error| map_io(&error))?
+        .permissions()
+        .mode()
+        & 0o7777;
+    temporary
+        .as_file()
+        .set_permissions(Permissions::from_mode(mode))
+        .map_err(|error| map_io(&error))
+}
+
+fn exchange(left: &Path, right: &Path) -> Result<(), rustix::io::Errno> {
+    rustix::fs::renameat_with(
+        rustix::fs::CWD,
+        left,
+        rustix::fs::CWD,
+        right,
+        rustix::fs::RenameFlags::EXCHANGE,
+    )
+}
+
+fn replace_by_rename(
+    temporary: tempfile::NamedTempFile,
+    request: &ExportWriteRequest,
+    expected: Option<ExistingFile>,
+) -> Result<(), ExportWriteError> {
+    let current = inspect_target(&request.path)?;
+    if current.is_none() || expected.is_some_and(|expected| current != Some(expected)) {
         return Err(ExportWriteError::Changed);
     }
     temporary

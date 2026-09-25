@@ -349,10 +349,11 @@ proqi --json thoughts export <session> <thought> --output ~/notes.txt --replace-
 - An existing file fails with `export_target_exists` unless you pass
   `--replace-existing`. An existing symbolic link, folder, or other non-regular
   entry always fails with `export_target_invalid`; name the file the link
-  points to instead.
+  points to instead. A destination that is not valid UTF-8 fails with
+  `export_target_invalid` and `details.reason` `not_utf8`.
 - The file is written to a temporary file in the destination folder, synchronized,
   and then atomically moved into place, so readers never see a partial file.
-  New files follow your umask like any saved file.
+  New files follow your umask; replacing a file keeps its permissions.
 - `--remove` deletes the thoughts after the file is durable. `--replace-with-reference`
   replaces them with one thought holding the file's absolute path followed by
   one space, shown as `[File N]`. Either change is one Board operation, so one
@@ -365,7 +366,9 @@ proqi --json thoughts export <session> <thought> --output ~/notes.txt --replace-
   `details.file_written: true`.
 - With `--operation-id`, an exact retry after a completed Board change returns
   the original receipt with `idempotent_replay: true` and does not rewrite the
-  file. A retry also accepts an existing file that already holds exactly the
+  file, even if the thoughts were restored and edited since. Reusing the
+  identity for other thoughts, another disposition, or another `--output`
+  fails with `idempotency_conflict`. A retry also accepts an existing file that already holds exactly the
   exported bytes, so an interruption between writing and the Board change
   converges without `--replace-existing`.
 

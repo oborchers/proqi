@@ -67,7 +67,7 @@ pub fn export_completion_for_request(
         expected_digests,
         disposition,
         reference_thought_id,
-        reference_path,
+        output_path,
     } = request
     else {
         return Err(ApplicationError::InvalidState);
@@ -75,15 +75,17 @@ pub fn export_completion_for_request(
     if thought_ids.is_empty() || thought_ids.len() != expected_digests.len() {
         return Err(ApplicationError::InvalidState);
     }
-    let change = match (disposition, reference_thought_id, reference_path) {
-        (ExportDisposition::Remove, None, None) => ExportBoardChange::Remove,
-        (ExportDisposition::ReplaceWithReference, Some(reference), Some(path))
-            if *reference == export_reference_thought_id(*operation_id)?
-                && Path::new(path).is_absolute() =>
+    if !Path::new(output_path).is_absolute() {
+        return Err(ApplicationError::InvalidState);
+    }
+    let change = match (disposition, reference_thought_id) {
+        (ExportDisposition::Remove, None) => ExportBoardChange::Remove,
+        (ExportDisposition::ReplaceWithReference, Some(reference))
+            if *reference == export_reference_thought_id(*operation_id)? =>
         {
             ExportBoardChange::ReplaceWithReference {
                 reference_thought_id: *reference,
-                path: PathBuf::from(path),
+                path: PathBuf::from(output_path),
             }
         }
         _ => return Err(ApplicationError::InvalidState),
