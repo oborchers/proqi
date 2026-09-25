@@ -30,6 +30,9 @@ impl FakeHerdr {
 printf 'herdr %s\n' "$*" >> '{log}'
 case "$1 $2" in
   "pane list") cat "$dir/panes.json" ;;
+  "agent list")
+    if [ -f "$dir/agents.json" ]; then cat "$dir/agents.json"; else
+      printf '%s\n' '{{"id":"x","result":{{"type":"agent_list","agents":[]}}}}'; fi ;;
   "pane process-info")
     if [ -f "$dir/process-$4.json" ]; then cat "$dir/process-$4.json"; else
       printf '%s\n' '{{"error":{{"code":"pane_not_found","message":"pane not found"}}}}' >&2; exit 1; fi ;;
@@ -65,6 +68,13 @@ esac
         self.write(
             "panes.json",
             &json!({ "id": "x", "result": { "type": "pane_list", "panes": panes } }),
+        );
+    }
+
+    fn agents(&self, agents: &[Value]) {
+        self.write(
+            "agents.json",
+            &json!({ "id": "x", "result": { "type": "agent_list", "agents": agents } }),
         );
     }
 
@@ -183,7 +193,7 @@ fn toggle_opens_once_focuses_repeatedly_closes_and_replaces_a_dead_pane() {
         open.contains("--target-pane w1:p1 --direction right"),
         "{open}"
     );
-    assert_named_session(&herdr, &session);
+    assert_named_session(&herdr, &session, "demo-w1-t1");
 
     herdr.panes(&[agent(), companion("w1:p2", true)]);
     herdr.process("w1:p2", &["/opt/bin/proqi", "--resume", &session], false);
@@ -263,7 +273,7 @@ fn a_recorded_pane_now_running_other_work_is_left_untouched() {
     );
 }
 
-fn assert_named_session(herdr: &FakeHerdr, session: &str) {
+fn assert_named_session(herdr: &FakeHerdr, session: &str, name: &str) {
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_proqi"))
         .args(["--json", "--state-dir"])
         .arg(herdr.sandbox.path().join("proqi-state"))
@@ -277,12 +287,26 @@ fn assert_named_session(herdr: &FakeHerdr, session: &str) {
         .expect("sessions array");
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0]["id"], session);
-    assert_eq!(sessions[0]["name"], "demo-w1-t1");
+    assert_eq!(sessions[0]["name"], name);
     let origin = sessions[0]["origin_cwd"].as_str().expect("origin");
     assert_eq!(
         Path::new(origin),
         fs::canonicalize(&herdr.work).expect("canonical work")
     );
+}
+
+#[test]
+fn the_first_open_names_the_session_after_the_tabs_only_named_agent() {
+    let herdr = FakeHerdr::new();
+    herdr.panes(&[agent()]);
+    herdr.agents(&[
+        json!({ "pane_id": "w1:p1", "tab_id": "w1:t1", "agent": "claude", "name": "api-claude" }),
+        json!({ "pane_id": "w1:p8", "tab_id": "w1:t2", "agent": "codex", "name": "elsewhere" }),
+    ]);
+    herdr.opens("w1:p2");
+    let opened = data(&herdr.toggle("w1:p1", true));
+    let session = opened["session_id"].as_str().expect("session");
+    assert_named_session(&herdr, session, "api-claude");
 }
 
 #[test]

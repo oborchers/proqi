@@ -1,7 +1,8 @@
-//! Companion toggle naming, session resolution, and open/focus/close policy
-//! over fake host, state, and sessions. Close safety lives in `safety`.
+//! Companion session resolution and open/focus/close policy over fake host,
+//! state, and sessions. Naming lives in `naming`, close safety in `safety`.
 
 mod fakes;
+mod naming;
 mod safety;
 
 use std::path::PathBuf;
@@ -9,8 +10,7 @@ use std::path::PathBuf;
 use crate::ports::companion::{CompanionRecord, CompanionSessionState, PaneProcess, ProqiPresence};
 
 use super::{
-    CompanionToggleError, CompanionToggleOutcome, companion_session_cwd, companion_session_name,
-    toggle_companion,
+    CompanionToggleError, CompanionToggleOutcome, companion_session_cwd, toggle_companion,
 };
 use fakes::{
     FakeHost, FakeRecords, FakeSessions, agent, companion, context, record, session, shell,
@@ -23,49 +23,6 @@ fn own_proqi() -> PaneProcess {
     PaneProcess::Proqi {
         session_id: Some(session(OWN)),
     }
-}
-
-#[test]
-fn a_meaningful_tab_label_names_the_session() {
-    let mut named = context("w1:p1");
-    named.tab_label = Some("  herdr-plugin ".to_owned());
-    assert_eq!(companion_session_name(&named), "herdr-plugin");
-}
-
-#[test]
-fn default_numeric_labels_use_the_stable_tab_identity_not_the_position() {
-    // Herdr labels unnamed tabs by position, so tab w1:t4 shown second and tab
-    // w1:t2 shown second at another time must still get different names.
-    let mut fourth = context("w1:p1");
-    fourth.tab_id = "w1:t4".to_owned();
-    fourth.tab_label = Some("2".to_owned());
-    let mut second = fourth.clone();
-    second.tab_id = "w1:t2".to_owned();
-    assert_eq!(companion_session_name(&fourth), "demo-w1-t4");
-    assert_eq!(companion_session_name(&second), "demo-w1-t2");
-    // Closing or reordering tabs changes the label but not the name.
-    let mut moved = fourth.clone();
-    moved.tab_label = Some("1".to_owned());
-    assert_eq!(
-        companion_session_name(&moved),
-        companion_session_name(&fourth)
-    );
-}
-
-#[test]
-fn duplicate_workspace_labels_still_yield_distinct_default_names() {
-    let mut first = context("w1:p1");
-    first.tab_label = None;
-    let mut second = first.clone();
-    second.workspace_id = "w2".to_owned();
-    second.tab_id = "w2:t1".to_owned();
-    assert_ne!(
-        companion_session_name(&first),
-        companion_session_name(&second)
-    );
-    let mut blank = first.clone();
-    blank.workspace_label = Some(" ".to_owned());
-    assert_eq!(companion_session_name(&blank), "w1-w1-t1");
 }
 
 #[test]

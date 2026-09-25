@@ -244,7 +244,10 @@ where
     let (session_id, name) = if let Some(session_id) = recorded {
         (session_id, None)
     } else {
-        let name = companion_session_name(context);
+        // A failed query stops here: the first choice is recorded, so falling
+        // back to the label would pin a different session for good.
+        let agent_names = host.tab_agent_names(&context.tab_id)?;
+        let name = companion_session_name(context, &agent_names);
         let session_id = sessions
             .ensure(&name, &companion_session_cwd(context))
             .map_err(CompanionToggleError::Session)?;

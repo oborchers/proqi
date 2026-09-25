@@ -156,6 +156,29 @@ fn tab_panes_keep_only_the_invoking_tab_and_detect_the_proqi_lease() {
 }
 
 #[test]
+fn tab_agent_names_keep_named_agents_of_the_invoking_tab() {
+    let runner = ScriptedRunner::with(vec![
+        ok(&json!({ "type": "agent_list", "agents": [
+            { "pane_id": "w1:p1", "tab_id": "w1:t1", "agent": "claude", "name": "api-claude", "future": 1 },
+            { "pane_id": "w1:p2", "tab_id": "w1:t1", "agent": "codex", "name": null },
+            { "pane_id": "w1:p5", "tab_id": "w1:t1", "agent": "pi" },
+            { "pane_id": "w1:p7", "tab_id": "w1:t2", "agent": "codex", "name": "other-tab" }
+        ]})),
+        rejected("server_busy"),
+    ]);
+    let mut host = host(&runner, &plugin_context());
+    assert_eq!(
+        host.tab_agent_names("w1:t1").expect("names"),
+        vec!["api-claude".to_owned()]
+    );
+    assert_eq!(runner.requests(), vec![vec!["agent", "list"]]);
+    assert!(matches!(
+        host.tab_agent_names("w1:t1"),
+        Err(CompanionError::Host(_))
+    ));
+}
+
+#[test]
 fn a_proqi_or_launcher_without_a_display_lease_is_recognized_by_its_process() {
     let runner = ScriptedRunner::with(vec![
         ok(&json!({ "type": "pane_list", "panes": [
@@ -237,6 +260,17 @@ fn process_classification_recognizes_proqi_and_both_launcher_phases() {
         ),
         (
             info(6, 9, &[(9, &["proqi", "-r", SESSION])]),
+            Some(PaneProcess::Proqi {
+                session_id: Some(session),
+            }),
+        ),
+        (
+            // The in-app update restarts a session in place with this argv.
+            info(
+                7,
+                7,
+                &[(7, &["/opt/proqi", "--state-dir", "/s", "-r", SESSION])],
+            ),
             Some(PaneProcess::Proqi {
                 session_id: Some(session),
             }),

@@ -24,13 +24,22 @@ pub const COMPANION_PANE_LABEL: &str = "Proqi";
 
 /// Derive the Proqi session name for a tab's first companion.
 ///
-/// A meaningful tab label names the session directly. Herdr's default labels
-/// are tab positions, which change when tabs close or move, so a missing or
-/// numeric-only label uses the stable public tab identity instead, prefixed by
-/// the workspace label for readability. The plugin reuses an existing session
-/// only when this rule produces its exact name and origin directory.
+/// The name of the tab's only named agent wins, so the companion shares the
+/// agent's name. Otherwise a meaningful tab label names the session. Herdr's
+/// default labels are tab positions, which change when tabs close or move, so
+/// a missing or numeric-only label uses the stable public tab identity instead,
+/// prefixed by the workspace label for readability. The plugin reuses an
+/// existing session only when this rule produces its exact name and origin
+/// directory.
 #[must_use]
-pub fn companion_session_name(context: &CompanionContext) -> String {
+pub fn companion_session_name(context: &CompanionContext, agent_names: &[String]) -> String {
+    let mut named = agent_names
+        .iter()
+        .map(|name| name.trim())
+        .filter(|name| !name.is_empty());
+    if let (Some(name), None) = (named.next(), named.next()) {
+        return name.to_owned();
+    }
     let label = context
         .tab_label
         .as_deref()

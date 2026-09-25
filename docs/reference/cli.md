@@ -502,9 +502,12 @@ It acts only on the tab that had focus:
   has a recorded session, the toggle reopens it in a new pane to the right of
   the focused pane, whichever pane is focused.
 - For a tab's first companion, it runs the same get-or-create as
-  `sessions ensure`. The name is the tab label; a numeric default label, which
-  Herdr derives from the tab's position, is replaced by the stable tab identity,
-  so tab `w1:t4` in workspace `demo` uses `demo-w1-t4`. The origin is the
+  `sessions ensure`. The name is the Herdr name of the tab's agent when exactly
+  one agent in the tab has a name. Otherwise it is the tab label; a numeric
+  default label, which Herdr derives from the tab's position, is replaced by
+  the stable tab identity, so tab `w1:t4` in workspace `demo` uses
+  `demo-w1-t4`. When Herdr cannot list the tab's agents, the toggle fails with
+  `herdr_failed` and opens nothing. The origin is the
   Herdr worktree checkout, else the Git repository root containing the focused
   pane's directory, else that directory.
 - When the tab already shows a Proqi pane, it focuses that pane.

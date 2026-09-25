@@ -97,10 +97,17 @@ focused. Closing the pane never deletes the session.
 For a tab's first companion, the plugin finds or creates a session with the
 same get-or-create rule as `proqi sessions ensure`:
 
-- The name is the tab label. Herdr labels unnamed tabs with their position,
-  which changes when tabs close or move, so a numeric label is replaced by the
-  tab's stable identity, for example `api-w2-t4` for tab `w2:t4` in workspace
-  `api`.
+- The name is the agent's name when exactly one agent in the tab has a Herdr
+  name, for example `api-claude` for an agent started with
+  `herdr agent start api-claude` or renamed with `herdr agent rename`. Unnamed
+  agents do not count.
+- Otherwise the name is the tab label. Herdr labels unnamed tabs with their
+  position, which changes when tabs close or move, so a numeric label is
+  replaced by the tab's stable identity, for example `api-w2-t4` for tab
+  `w2:t4` in workspace `api`.
+- If Herdr cannot list the tab's agents, the toggle opens nothing and shows a
+  notification; try again. It does not fall back to the tab label, because the
+  plugin remembers the first session it picks.
 - The origin is the Herdr worktree checkout for a worktree workspace, else the
   Git repository root containing the focused pane's directory, else that
   directory itself. Splits in subdirectories of one repository therefore share

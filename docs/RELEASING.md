@@ -50,6 +50,12 @@ cargo xtask release-plan <vX.Y.Z>
 git diff --check
 ```
 
+The same preparation commit replaces every `Next release` and next-release
+scope marker in `README.md` and `docs/` with the new version. Wording that
+avoids a version until release, such as the Herdr plugin's "first Proqi release
+that includes `proqi herdr toggle`" in `README.md` and
+`docs/guides/herdr-plugin.md`, names that version from then on.
+
 `release-plan` checks the Cargo version, canonical absent tag, matching release
 notes, bounded reviewed `release-highlights.json`, exact locally known `main`
 identity, and a clean worktree. It does not compile, package, run containers, or

@@ -114,6 +114,13 @@ pub trait CompanionHost {
     /// Returns [`CompanionError`] when the host cannot be queried.
     fn tab_panes(&mut self, tab_id: &str) -> Result<Vec<PaneObservation>, CompanionError>;
 
+    /// Return the host names of the live agents in one tab; unnamed agents are omitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CompanionError`] when the host cannot be queried.
+    fn tab_agent_names(&mut self, tab_id: &str) -> Result<Vec<String>, CompanionError>;
+
     /// Classify the foreground process of one pane, or `None` when it no longer exists.
     ///
     /// # Errors

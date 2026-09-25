@@ -72,6 +72,9 @@ pub(super) struct FakeHost {
     processes: HashMap<String, VecDeque<PaneProcess>>,
     next_pane: u32,
     pub(super) fail_open: bool,
+    /// Names `tab_agent_names` reports; `None` makes the query fail.
+    pub(super) agent_names: Option<Vec<String>>,
+    pub(super) agent_queries: usize,
     pub(super) calls: Vec<String>,
     pub(super) notifications: Vec<String>,
 }
@@ -84,6 +87,8 @@ impl FakeHost {
             processes: HashMap::new(),
             next_pane: 10,
             fail_open: false,
+            agent_names: Some(Vec::new()),
+            agent_queries: 0,
             calls: Vec::new(),
             notifications: Vec::new(),
         }
@@ -103,6 +108,11 @@ impl FakeHost {
         self.context = context;
         self
     }
+
+    pub(super) fn with_agent_names(mut self, names: &[&str]) -> Self {
+        self.agent_names = Some(names.iter().map(|name| (*name).to_owned()).collect());
+        self
+    }
 }
 
 impl CompanionHost for FakeHost {
@@ -113,6 +123,14 @@ impl CompanionHost for FakeHost {
     fn tab_panes(&mut self, tab_id: &str) -> Result<Vec<PaneObservation>, CompanionError> {
         assert_eq!(tab_id, self.context.tab_id);
         Ok(self.panes.clone())
+    }
+
+    fn tab_agent_names(&mut self, tab_id: &str) -> Result<Vec<String>, CompanionError> {
+        assert_eq!(tab_id, self.context.tab_id);
+        self.agent_queries += 1;
+        self.agent_names
+            .clone()
+            .ok_or_else(|| CompanionError::Host("agent list timed out".to_owned()))
     }
 
     fn process(&mut self, pane_id: &str) -> Result<Option<PaneProcess>, CompanionError> {

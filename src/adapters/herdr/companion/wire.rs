@@ -75,6 +75,28 @@ pub(super) struct PaneWire {
     cwd: Option<PathBuf>,
 }
 
+#[derive(Deserialize)]
+pub(super) struct AgentListBody {
+    agents: Vec<AgentWire>,
+}
+
+/// One live agent; Herdr reports `name` only for a named agent.
+#[derive(Deserialize)]
+struct AgentWire {
+    tab_id: String,
+    name: Option<String>,
+}
+
+impl AgentListBody {
+    pub(super) fn names_in_tab(self, tab_id: &str) -> Vec<String> {
+        self.agents
+            .into_iter()
+            .filter(|agent| agent.tab_id == tab_id)
+            .filter_map(|agent| agent.name)
+            .collect()
+    }
+}
+
 impl From<PaneWire> for PaneObservation {
     fn from(pane: PaneWire) -> Self {
         Self {

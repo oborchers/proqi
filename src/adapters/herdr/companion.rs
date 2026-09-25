@@ -57,8 +57,9 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(PROBE_SECONDS);
 const OPEN_TIMEOUT: Duration = Duration::from_secs(OPEN_SECONDS);
 /// Total time one toggle may spend on process probes; later probes report `Unknown`.
 const PROBE_WINDOW_SECONDS: u64 = 12;
-/// Sequential Herdr calls that focus, close, or notify in one toggle.
-const CONTROL_CALLS: u64 = 6;
+/// Sequential Herdr calls that focus, close, or notify in one toggle, plus the
+/// agent-name query of a tab's first open.
+const CONTROL_CALLS: u64 = 7;
 /// Proqi's own bounded waits under the lock: schema admission (5 s), update
 /// convergence admission (5 s), store transactions with bounded retry (about
 /// 1 s each, at most three), and the confirmed owner flush (5 s).
@@ -249,6 +250,11 @@ impl<R: ProcessRunner> CompanionHost for HerdrCompanionHost<R> {
             }
         }
         Ok(panes)
+    }
+
+    fn tab_agent_names(&mut self, tab_id: &str) -> Result<Vec<String>, CompanionError> {
+        let body: wire::AgentListBody = self.json(&["agent", "list"], QUERY_TIMEOUT)?;
+        Ok(body.names_in_tab(tab_id))
     }
 
     fn process(&mut self, pane_id: &str) -> Result<Option<PaneProcess>, CompanionError> {

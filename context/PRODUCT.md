@@ -1834,8 +1834,9 @@ recognized and focused, never closed; toggling from it returns focus to the
 tab's only agent.
 
 Each tab keeps one recorded session, reopened from any pane in the tab. A
-tab's first session uses the `sessions ensure` rule with the tab label as its
-name, or the stable tab identity when Herdr shows a numeric position label, and
+tab's first session uses the `sessions ensure` rule. Its name is the name of
+the tab's only named Herdr agent, else the tab label, else the stable tab
+identity when Herdr shows a numeric position label. Its origin is
 the Herdr worktree checkout or the Git repository root containing the focused
 directory as its origin. The plugin never adopts sessions by other
 naming rules. It refuses to start a second Proqi for a session already open
