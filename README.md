@@ -467,6 +467,22 @@ For read-only-first failure investigation:
 npx skills add oborchers/proqi --skill proqi-debug -g
 ```
 
+### Claude Code plugin
+
+Claude Code can install both skills from this repository's plugin marketplace
+instead:
+
+```text
+/plugin marketplace add oborchers/proqi
+/plugin install proqi@proqi
+```
+
+The plugin ships the same `skills/proqi` and `skills/proqi-debug` files, invoked
+as `/proqi:proqi` and `/proqi:proqi-debug`. It follows the default branch and
+reports a new version when a release changes the Cargo version. Update with
+`/plugin marketplace update proqi`, then `/plugin update proqi@proqi`. It does
+not install the Proqi executable.
+
 ## Privacy, durability, and recovery
 
 Thoughts, attachments, settings, and redacted logs stay local. No telemetry,

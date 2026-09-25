@@ -340,6 +340,9 @@ pub(super) fn quality(root: &Path) -> Result<(), String> {
     super::timing::phase("quality.release_highlights", || {
         super::release_highlights::validate(root, None)
     })?;
+    super::timing::phase("quality.claude_marketplace", || {
+        super::claude_marketplace::validate(root)
+    })?;
     super::timing::phase("quality.assets", || super::public_assets::check(root))?;
     super::timing::phase("quality.architecture", || super::policy::check(root))?;
     super::timing::phase("quality.clippy", || {
