@@ -12,7 +12,7 @@
       "source": "./skills",
       "strict": false,
       "skills": ["./proqi", "./proqi-debug"],
-      "version": "0.13.0",
+      "version": "0.14.0",
       "description": "Operate an explicit Proqi scratchpad session through its JSON CLI, or diagnose a Proqi failure read-only first. Requires the proqi executable.",
       "author": {
         "name": "Oliver Borchers"

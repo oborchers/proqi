@@ -1,6 +1,6 @@
 # Configure and troubleshoot shortcuts
 
-> Applies to Proqi 0.11.0 plus next-release main.
+> Applies to Proqi 0.14.0.
 
 Proqi receives logical key events only after macOS or Linux, a keyboard
 remapper, the terminal host, and any terminal multiplexer have handled them.

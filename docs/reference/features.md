@@ -1,15 +1,13 @@
 # Complete feature index
 
-<span class="version-scope">Proqi 0.11.0 plus next-release main</span>
+<span class="version-scope">Proqi 0.14.0</span>
 
 <div class="feature-index" markdown>
 
-This index is the discovery map for the published v0.11.0 product plus additive
-commands already on `main`. **Shipped** works in the published binary.
-**Next release** is implemented on `main` but not in the published v0.11.0
-binary. **Conditional** needs the platform or verified integration named in the
-row. Deliberate boundaries are included so absence is not mistaken for a hidden
-setting.
+This index is the discovery map for Proqi 0.14.0. **Shipped** works in that
+release. **Conditional** needs the platform or verified integration named in
+the row. Deliberate boundaries are included so absence is not mistaken for a
+hidden setting.
 
 The [Commands reference](commands.md) separately accounts for every searchable
 action. The [CLI reference](cli.md) accounts for every public command-line
@@ -49,12 +47,12 @@ surface.
 | Thought names | Shipped | Optional names organize without entering copied or delivered bodies. | [Sessions and recovery](../guides/organization-and-recovery.md) |
 | Session names | Shipped | Set, clear, search, and resume by unique name. | [Sessions and recovery](../guides/organization-and-recovery.md) |
 | Payload-free separators | Shipped | Persistent structural items can move and participate in history without becoming prompt content. | [Transform and organize](../guides/edit-and-transform.md#add-visual-structure-without-payload) |
-| Scriptable mixed Board items | Next release | Insert, move, duplicate, or recoverably delete typed thoughts and separators as atomic Board operations. | [CLI](cli.md#change-board-items) |
+| Scriptable mixed Board items | Shipped since 0.12.0 | Insert, move, duplicate, or recoverably delete typed thoughts and separators as atomic Board operations. | [CLI](cli.md#change-board-items) |
 | Split thought | Shipped | Divide at the exact cursor as one atomic operation. | [Transform and organize](../guides/edit-and-transform.md#split-at-the-cursor) |
 | Extract selection | Shipped | Move exact selected text into a neighboring thought atomically. | [Transform and organize](../guides/edit-and-transform.md#extract-selected-text) |
 | Merge thoughts | Shipped | Join a contiguous thought range with the configured exact separator. | [Transform and organize](../guides/edit-and-transform.md#merge-a-contiguous-range) |
 | Existing-thought cleanup | Shipped | Clean prose spacing while preserving protected structures and annotations. | [Transform and organize](../guides/edit-and-transform.md#clean-existing-spacing) |
-| Scriptable exact transformations | Next release | Split, extract, merge, and reflow with content digests, UTF-8 byte boundaries, and idempotent retry identities. | [CLI](cli.md#inspect-and-change-thoughts) |
+| Scriptable exact transformations | Shipped since 0.12.0 | Split, extract, merge, and reflow with content digests, UTF-8 byte boundaries, and idempotent retry identities. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Persistent contextual undo and redo | Shipped | Separate Board, editor, and Browser histories survive restart and never claim to recall external effects. | [Undo and redo](undo-redo.md) |
 
 ## Paste, files, and screenshots
@@ -89,7 +87,7 @@ surface.
 | Submit complete board | Conditional on Herdr | Deliver all live thought bodies in canonical order, keeping or removing together. | [Agent delivery](../guides/agent-delivery.md) |
 | Cross-session transfer | Shipped | Copy selected thoughts as one durable destination cohort, optionally removing all sources after acceptance. | [Commands](commands.md#delivery-and-transfer) |
 | Pane presentation identity | Conditional on Herdr | Advertise bounded display-only Proqi identity without impersonating an agent. | [Agent delivery](../guides/agent-delivery.md) |
-| Herdr plugin toggle | Next release, conditional on Herdr 0.8.0 or newer | Install with `herdr plugin install oborchers/proqi`; one action opens, focuses, or closes one Proqi pane per tab and replaces a pane left over from a Herdr restart. | [Herdr plugin](../guides/herdr-plugin.md) |
+| Herdr plugin toggle | Shipped since 0.14.0, conditional on Herdr 0.8.0 or newer | Install with `herdr plugin install oborchers/proqi`; one action opens, focuses, or closes one Proqi pane per tab and replaces a pane left over from a Herdr restart. | [Herdr plugin](../guides/herdr-plugin.md) |
 | Conversation reading or response waiting | Not shipped | Proqi deliberately does neither and never falls back to raw key injection. | [Agent delivery](../guides/agent-delivery.md#choose-copy-or-direct-delivery) |
 
 ## Sessions, persistence, and recovery
@@ -114,7 +112,7 @@ surface.
 | Auto, light, dark, limited, and custom themes | Shipped | Semantic colors are validated; focus never relies on color alone. | [Configuration](../guides/configuration.md#theme-safely) |
 | Comfortable and compact density | Shipped | Shallow panes automatically resolve to compact spacing. | [Configuration](../guides/configuration.md#core-settings) |
 | Mouse capture toggle | Shipped | Disable when a terminal or multiplexer mishandles SGR mouse reporting. | [Configuration](../guides/configuration.md#core-settings) |
-| Optional footer chrome visibility | Next release | Start hidden from configuration or temporarily toggle Board for one running process; operational and recovery state stays visible. | [Configuration](../guides/configuration.md#hide-optional-footer-chrome) |
+| Optional footer chrome visibility | Shipped since 0.12.0 | Start hidden from configuration or temporarily toggle Board for one running process; operational and recovery state stays visible. | [Configuration](../guides/configuration.md#hide-optional-footer-chrome) |
 | Versioned keymap with platform overrides | Shipped | Replace exact action/context alias lists with startup validation and safe invariants. | [Shortcut troubleshooting](../guides/shortcuts.md#remap-one-action) |
 | Keypress inspector | Shipped | Observe one content-redacted logical event and its resolved action. | [Shortcut troubleshooting](../guides/shortcuts.md#see-what-proqi-actually-receives) |
 | Explicit update check | Shipped | Query the verified stable channel without installing. | [CLI](cli.md#check-updates) |
@@ -132,14 +130,14 @@ surface.
 | --- | --- | --- | --- |
 | Versioned JSON capability discovery | Shipped | Discover schema, bounds, identifiers, transfer, updates, control, and optional integrations. | [CLI](cli.md#discover-capabilities) |
 | Human and JSON session commands | Shipped | List, search, rename, trash, restore, history, and prune. | [CLI](cli.md#manage-sessions) |
-| Atomic named sessions | Next release | `sessions ensure` returns or atomically creates the one live session with a name and directory; `sessions create` adds another named session. Neither opens a TUI. | [CLI](cli.md#create-named-sessions) |
-| Named thought creation | Next release | `thoughts add --name` creates content, name, and position as one undoable operation. | [CLI](cli.md#inspect-and-change-thoughts) |
-| Retry-safe session changes | Next release | Session rename, trash, restore, undo, redo, prune, and create accept `--operation-id`; repeated trash is a successful no-op. | [CLI](cli.md#retry-session-changes) |
-| Bounded lists | Next release | `thoughts list` and `sessions list` accept `--limit` and `--after` and report `total` and `next_after`. | [CLI](cli.md#bounded-lists) |
-| JSON help and version | Next release | `--json --help` and `--json --version` succeed with structured data and exit 0. | [CLI](cli.md#common-options) |
-| Documented error codes | Next release | Every JSON error code, exit status, retry class, and `details` shape, also published in `capabilities`. | [CLI](cli.md#errors) |
-| Human and JSON Board-item commands | Next release | Insert separators and move, duplicate, or delete typed thoughts and separators. | [CLI](cli.md#change-board-items) |
-| Human and JSON thought commands | Shipped plus next release | The published binary provides list, inspect, add, rename, replace, collapse, move, send, delete, undo, and redo. Split, extract, merge, and reflow are next-release additions. | [CLI](cli.md#inspect-and-change-thoughts) |
+| Atomic named sessions | Shipped since 0.13.0 | `sessions ensure` returns or atomically creates the one live session with a name and directory; `sessions create` adds another named session. Neither opens a TUI. | [CLI](cli.md#create-named-sessions) |
+| Named thought creation | Shipped since 0.13.0 | `thoughts add --name` creates content, name, and position as one undoable operation. | [CLI](cli.md#inspect-and-change-thoughts) |
+| Retry-safe session changes | Shipped since 0.13.0 | Session rename, trash, restore, undo, redo, prune, and create accept `--operation-id`; repeated trash is a successful no-op. | [CLI](cli.md#retry-session-changes) |
+| Bounded lists | Shipped since 0.13.0 | `thoughts list` and `sessions list` accept `--limit` and `--after` and report `total` and `next_after`. | [CLI](cli.md#bounded-lists) |
+| JSON help and version | Shipped since 0.13.0 | `--json --help` and `--json --version` succeed with structured data and exit 0. | [CLI](cli.md#common-options) |
+| Documented error codes | Shipped since 0.13.0 | Every JSON error code, exit status, retry class, and `details` shape, also published in `capabilities`. | [CLI](cli.md#errors) |
+| Human and JSON Board-item commands | Shipped since 0.12.0 | Insert separators and move, duplicate, or delete typed thoughts and separators. | [CLI](cli.md#change-board-items) |
+| Human and JSON thought commands | Shipped | List, inspect, add, rename, replace, collapse, move, send, delete, undo, and redo; split, extract, merge, and reflow have been available since 0.12.0. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Typed canonical identifiers | Shipped | Prefixes identify resource kinds and retain complete UUIDv7 values. | [CLI](cli.md) |
 | Idempotent mutations | Shipped | Matching operation identities return the original receipt; divergent semantic reuse is rejected. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Machine-readable errors | Shipped | Versioned envelopes use stable current error codes and nonzero exits. | [CLI](cli.md) |

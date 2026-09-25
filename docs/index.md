@@ -1,6 +1,6 @@
 # Keep the next prompt out of the live input
 
-<span class="version-scope">Proqi 0.11.0 plus labeled next-release additions</span>
+<span class="version-scope">Proqi 0.14.0</span>
 
 Proqi is a terminal-native prompt composer for people coordinating several
 coding agents. Capture each next instruction as an independent thought, refine
@@ -44,7 +44,7 @@ remove semantics.
 ## Discover everything
 
 Browse every shipped capability and Commands action, plus the complete CLI with
-next-release additions labeled at their version boundary.
+the version history of recent additions.
 
 [Open the feature index](reference/features.md)
 </div>

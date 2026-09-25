@@ -90,7 +90,7 @@ update prompt.
 
 ## Herdr plugin
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.14.0</span>
 
 The [Herdr plugin](herdr-plugin.md) and Proqi update separately.
 

@@ -1,6 +1,6 @@
 # Transform and organize thoughts
 
-<span class="version-scope">Proqi 0.11.0</span>
+<span class="version-scope">Proqi 0.14.0</span>
 
 Proqi can reshape prompt material without turning the board into a document
 editor. Every transformation is one durable operation with an explicit local
@@ -31,15 +31,11 @@ Build a contiguous Board range, then press the configured transform key,
 factory `t`, or choose **Merge selected thoughts**. Proqi joins thought bodies
 with the configured `merge_separator`, which defaults to one blank line.
 
-Separators are structural items and never become prompt payload. In v0.11.0,
-merge requires at least two adjacent live thoughts; a separator between those
-thoughts is not merged and remains on the Board. The first thought keeps its
-identity and name, the others are recoverably deleted, the survivor receives
-Board focus, and selection clears.
-
-On next-release `main`, thought contiguity follows the mixed Board order. An
-intervening separator therefore makes the merge fail without changing the
-Board.
+Separators are structural items and never become prompt payload. Merge
+requires at least two contiguous live thoughts in mixed Board order. An
+intervening separator makes the merge fail without changing the Board. The
+first thought keeps its identity and name, the others are recoverably deleted,
+the survivor receives Board focus, and selection clears.
 
 Split, extract, and merge preserve an annotation whose complete semantic text
 survives. A boundary-crossing attachment, fold, invocation reference, or
@@ -75,8 +71,7 @@ An unchanged result creates no history entry. See
 Choose **Insert separator** in Commands. A separator is a persistent Board item
 that can be focused, selected, moved, dragged, duplicated, deleted, undone, and
 redone. It has no body, cannot be named, and never enters copied or delivered
-text. In v0.11.0 it remains in place when the adjacent live thoughts around it
-are merged. On next-release `main`, it prevents that merge.
+text. It prevents merging thoughts across its position.
 
 Thought and session names are also organizational metadata. They remain
 separate from prompt bodies. See
@@ -93,10 +88,9 @@ See [Undo and redo](../reference/undo-redo.md).
 
 ## Apply the same operations from the CLI
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.12.0</span>
 
-The following CLI operations are available on `main` for the next release, not
-in the published v0.11.0 binary.
+The following CLI operations have been available since Proqi 0.12.0.
 
 The JSON CLI exposes these exact Board operations for scripts and coding
 agents. Inspect the thought first, retain its `content_sha256`, then submit that

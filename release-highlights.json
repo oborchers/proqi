@@ -173,6 +173,15 @@
         "Find or create named sessions atomically, create named thoughts in one action, and retry session changes with operation IDs.",
         "Page JSON session and Board-item lists, use structured help and version output, and discover documented error codes."
       ]
+    },
+    {
+      "version": "0.14.0",
+      "highlights": [
+        "Install Proqi as a Herdr plugin on Herdr 0.8.0 or newer, using an existing Proqi installation or installing it when missing.",
+        "Toggle one Proqi pane per Herdr tab, focus it again, or close it after Proqi confirms edits are saved.",
+        "Install the shipped Proqi and Proqi Debug agent skills through the Claude Code plugin marketplace.",
+        "See Session is ready during a continuing multi-session update instead of an incorrect cancellation message."
+      ]
     }
   ]
 }

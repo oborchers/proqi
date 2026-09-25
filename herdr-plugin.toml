@@ -6,7 +6,7 @@
 
 id = "proqi"
 name = "Proqi"
-version = "0.13.0"
+version = "0.14.0"
 min_herdr_version = "0.8.0"
 description = "An agent-optimized terminal scratchpad for follow-up prompts next to coding-agent sessions. One action opens, focuses, or closes one Proqi pane per tab."
 platforms = ["linux", "macos"]

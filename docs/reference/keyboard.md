@@ -1,6 +1,6 @@
 # Keyboard and pointer map
 
-<span class="version-scope">Factory behavior in Proqi 0.11.0 plus next-release main</span>
+<span class="version-scope">Factory behavior in Proqi 0.14.0</span>
 
 The map below is a discovery summary. Contextual Help is the authoritative view
 of the bindings effective in the running application after configuration.

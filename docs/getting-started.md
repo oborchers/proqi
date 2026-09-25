@@ -26,7 +26,7 @@ Rust users can install with Rust 1.88 or newer:
 cargo install proqi --locked
 ```
 
-<span class="version-scope">Next release</span> In
+<span class="version-scope">Proqi 0.14.0</span> In
 [Herdr](https://github.com/herdrdev/herdr) 0.8.0 or newer, the Proqi plugin
 installs Proqi when it is missing and adds a toggle that opens Proqi beside
 the focused pane:

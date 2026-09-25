@@ -1,16 +1,14 @@
 # Command-line reference
 
-<span class="version-scope">Proqi 0.11.0 plus next-release main</span>
+<span class="version-scope">Proqi 0.14.0</span>
 
-!!! note "Version boundary"
+!!! note "Version history"
 
-    The published v0.11.0 binary does not include the `items` family or the
-    `thoughts split`, `extract`, `merge`, and `reflow` operations. Those eight
-    additive commands are available on `main` for the next release and are
-    labeled below. Next-release main also adds `sessions ensure` and
-    `sessions create`, `--operation-id` on every session mutation,
-    `thoughts add --name`, bounded list pages, and successful JSON help and
-    version output. It removes the legacy `thoughts` array from `thoughts list`.
+    Proqi 0.12.0 added the `items` family and the `thoughts split`, `extract`,
+    `merge`, and `reflow` operations. Proqi 0.13.0 added named session creation,
+    retry identities for session mutations, named thought creation, bounded
+    lists, and JSON help and version output. It also removed the legacy
+    `thoughts` array from `thoughts list`. Proqi 0.14.0 adds `herdr toggle`.
     Always read `capabilities` from the installed binary before using an
     operation.
 
@@ -64,7 +62,7 @@ and subcommand. `-V` is the short form of `--version`, which prints the
 installed release. `--json` is global, so it can precede or follow a command;
 examples keep it immediately after `proqi` for consistency.
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.13.0</span>
 
 With `--json`, help and version are successful informational requests. They
 exit 0 and return `ok: true`. Version data is `{"name": "proqi", "version":
@@ -95,15 +93,14 @@ proqi --json capabilities
 
 The response reports the current schema, identifier encoding, input bounds,
 control protocol, transfer support, update support, and optional Herdr
-capabilities. In v0.11.0, `commands` names the `sessions`, `thoughts`, and
-`update` families. Next-release main expands that list to every top-level
-family, adds an `operations` inventory with the separate Board, editor, and
-Browser history scopes, and makes the active-session flags platform-aware.
+capabilities. Since 0.13.0, `commands` names every top-level family, and
+`operations` distinguishes Board, editor, and Browser history scopes. The
+active-session flags are platform-aware.
 Read only fields that the installed response actually contains.
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.13.0 and 0.14.0</span>
 
-Next-release main also adds these discovery fields:
+These releases add the following discovery fields:
 
 - `options` lists the long options that each `sessions`, `items`, and
   `thoughts` operation accepts, derived from the installed parser. For example,
@@ -160,7 +157,7 @@ deletes an already trashed session and requires `--yes`. It is not undoable.
 
 ### Create named sessions
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.13.0</span>
 
 `sessions ensure` returns the one live session whose exact name and origin
 directory match, and creates it when no live session uses the name. The name
@@ -202,7 +199,7 @@ session with `proqi --resume <session-id>`.
 
 ### Retry session changes
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.13.0</span>
 
 Every session mutation except `sessions ensure` accepts `--operation-id`.
 `ensure` needs none, because repeating it with the same name and directory
@@ -257,7 +254,7 @@ pruned.
 
 ## Change Board items
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.12.0</span>
 
 Use the `items` family when the target can be either a thought or a separator:
 
@@ -316,7 +313,7 @@ distinguishes thoughts from payload-free separators. Each thought entry carries
 returns one exact thought body, its `content_sha256`, and metadata. Names
 remain separate metadata.
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.13.0</span>
 
 The legacy `thoughts` array is removed from `thoughts list`. Read thought
 content from the `items` entries whose `kind` is `thought`.
@@ -330,7 +327,7 @@ before any write. The name is part of the operation identity, so the same
 
 ### Bounded lists
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.13.0</span>
 
 `thoughts list` and `sessions list` accept `--limit N`, where `N` is at least 1.
 Both return `total`, the number of entries in the complete list, and
@@ -353,7 +350,7 @@ Replace normally requires the SHA-256 digest of current content so a stale
 writer cannot overwrite newer text. `--force` is an explicit opt-out. External
 replacement becomes an editor revision and participates in normal undo.
 
-The next four transformations are available on `main` for the next release.
+The following four transformations have been available since Proqi 0.12.0.
 
 Split and extract use zero-based UTF-8 byte offsets. Each offset must be a valid
 character boundary in the exact inspected content. Extract uses a nonempty
@@ -376,24 +373,24 @@ identities make matching retries idempotent and reject divergent reuse.
 `--remove-operation-id` is accepted only together with `--remove`.
 
 On macOS and Linux, a supported mutation aimed at an active session is sent to
-that session's authoritative process. Reads synchronize first. On next-release
-main, other platforms report active control as unavailable in `capabilities`;
+that session's authoritative process. Reads synchronize first. Other platforms
+report active control as unavailable in `capabilities`;
 they do not bypass the session lease. The CLI does not expose TUI focus, cursor
 or pointer geometry, clipboard acquisition, host target discovery, or raw key
 injection.
 
 ## Errors
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.13.0 and 0.14.0</span>
 
 The complete table, `capabilities.error_codes`, and the codes
 `session_name_conflict`, `cursor_not_found`, `clipboard_failed`, and
-`clipboard_metadata_unsupported` are next-release additions. An active owner
+`clipboard_metadata_unsupported` were added in 0.13.0. An active owner
 whose advertised control protocol cannot represent a request now reports
 `protocol_mismatch` instead of the retryable `session_busy`. A lease holder
 that advertises no protocol yet, such as another command in progress, still
-reports `session_busy`. The Herdr plugin toggle adds
-`companion_session_active`, `herdr_failed`, and `plugin_state_failed`.
+reports `session_busy`. Proqi 0.14.0 adds `companion_session_active`,
+`herdr_failed`, and `plugin_state_failed` for the Herdr plugin toggle.
 
 With `--json`, every failure writes
 `{"schema_version": 1, "ok": false, "error": {"code", "message", "details"}}` to
@@ -485,7 +482,7 @@ any other failure.
 
 ## Toggle Proqi beside a Herdr agent
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.14.0</span>
 
 ```text
 proqi herdr toggle

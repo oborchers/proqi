@@ -1,6 +1,6 @@
 # Commands palette reference
 
-<span class="version-scope">59 actions in Proqi 0.11.0 plus next-release main</span>
+<span class="version-scope">59 actions in Proqi 0.14.0</span>
 
 Press `:` in Board mode to open Commands. Search, use the arrow keys or pointer
 to choose a result, then press `Enter` or click. The same canonical

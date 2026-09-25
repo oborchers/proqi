@@ -1,8 +1,7 @@
 # Proqi user guides
 
-> Applies to Proqi 0.11.0. These guides describe behavior shipped in that
-> release. The transformation guide also labels the additive CLI operations
-> already on `main` for the next release.
+> Applies to Proqi 0.14.0. Earlier additions are identified by version where
+> the distinction matters.
 
 Proqi is a local, resumable prompt board. Each thought stays editable. Copying
 never changes it, and **Submit and keep** retains it. For direct agent delivery,

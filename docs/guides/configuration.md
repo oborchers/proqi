@@ -1,6 +1,6 @@
 # Configure appearance and behavior
 
-<span class="version-scope">Proqi 0.11.0 plus next-release main</span>
+<span class="version-scope">Proqi 0.14.0</span>
 
 Proqi works without configuration. Optional settings live in the
 platform-native Proqi configuration directory as `config.toml`. Invalid
@@ -43,7 +43,7 @@ footer_hidden = false
 
 ## Hide optional footer chrome
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.12.0</span>
 
 Set `footer_hidden = true` to start with the session identity, Board summary,
 shortcut and agent hints, and other optional persistent footer decoration hidden.

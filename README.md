@@ -151,7 +151,7 @@ an explanation. Uninstalling preserves data.
 
 ### As a Herdr plugin
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.14.0</span>
 
 Proqi is an agent-optimized terminal scratchpad for follow-up prompts next to
 coding-agent sessions. The Herdr plugin opens it beside the focused pane with
@@ -161,10 +161,9 @@ one action:
 herdr plugin install oborchers/proqi
 ```
 
-The plugin needs the first Proqi release that includes `proqi herdr toggle`,
-plus Herdr 0.8.0 or newer on macOS or Linux. Until that release is published, a
-fresh install receives the latest published Proqi, and the toggle reports it as
-too old instead of running.
+The plugin needs Proqi 0.14.0 or newer and Herdr 0.8.0 or newer on macOS or
+Linux. If an older Proqi is already installed, upgrade it through its existing
+installation channel before using the toggle.
 
 Herdr previews the plugin before it runs anything. When `proqi` is already
 installed, the plugin uses it and installs nothing, so Homebrew, Cargo, Debian,
@@ -229,8 +228,7 @@ elsewhere. Proqi receives modifiers only after the operating system, keyboard
 remapper, and terminal have handled the key. Raw `Ctrl` is not a second Primary
 modifier on macOS.
 
-Complete user documentation for the published 0.11.0 product, with main-only
-next-release additions clearly labeled, starts at the
+Complete user documentation for the published 0.14.0 product starts at the
 [Proqi documentation home](https://oborchers.github.io/proqi/). Use the
 [complete feature index](https://oborchers.github.io/proqi/reference/features.html)
 to discover the full

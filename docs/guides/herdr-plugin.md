@@ -1,11 +1,10 @@
 # Use Proqi as a Herdr plugin
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.14.0</span>
 
-The plugin needs the first Proqi release that includes `proqi herdr toggle`,
-Herdr 0.8.0 or newer, and macOS or Linux. Until that release is published, a
-fresh install receives the latest published Proqi, and the toggle reports that
-Proqi as too old instead of running.
+The plugin needs Proqi 0.14.0 or newer, Herdr 0.8.0 or newer, and macOS or
+Linux. If an older Proqi is already installed, upgrade it through its existing
+installation channel before using the toggle.
 
 Proqi is an agent-optimized terminal scratchpad for follow-up prompts next to
 coding-agent sessions. The Herdr plugin adds one action that opens Proqi to the
