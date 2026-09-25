@@ -53,8 +53,8 @@ fn pending_external_restart_blocks_installer_before_participant_preparation() {
 }
 
 #[test]
-fn one_ten_and_fifteen_participants_install_and_restart_once() {
-    for count in [1_usize, 10, 15] {
+fn one_ten_fifteen_and_twenty_five_participants_install_and_restart_once() {
+    for count in [1_usize, 10, 15, 25] {
         let mut ids = TestIds::new(1_800_000_000_000);
         let identity = InstallationIdentity::from_digest([31; 32]);
         let participants = participants(&mut ids, identity, count);
@@ -92,6 +92,11 @@ fn one_ten_and_fifteen_participants_install_and_restart_once() {
         assert_eq!(gateway.released.len(), count);
         assert_eq!(gateway.restarted.len(), count);
         assert_eq!(gateway.restarted.last(), Some(&initiating));
+        assert!(matches!(
+            result.status,
+            UpdateExecutionStatus::Installed { ref version }
+                if version == &super::version("0.2.0")
+        ));
         assert!(state.cache.borrow().restart_needed);
         assert_eq!(&*state.restart_writes.borrow(), &[true]);
     }

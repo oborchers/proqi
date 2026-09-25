@@ -207,7 +207,7 @@ pub enum ControlMutation {
         /// Shared all-session readiness request.
         request: UpdatePrepareRequest,
     },
-    /// Release a previously prepared owner after cancellation or failure.
+    /// Release a reversible preparation barrier without declaring the update outcome.
     UpdateRelease {
         /// Shared attempt identity.
         operation_id: RequestId,

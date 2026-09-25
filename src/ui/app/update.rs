@@ -238,7 +238,7 @@ impl BoardApp {
             return false;
         }
         self.update_barrier = None;
-        self.set_info("Update cancelled. Session is ready.");
+        self.set_info("Session is ready.");
         true
     }
 
