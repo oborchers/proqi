@@ -3,8 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    BoardItemId, ContentAnnotation, ContentAnnotationKind, OperationId, RequestId, RevisionId,
-    SeparatorId, ThoughtId, ThoughtName, UndoScope,
+    BoardItemId, ContentAnnotation, ContentAnnotationKind, ExportDisposition, OperationId,
+    RequestId, RevisionId, SeparatorId, ThoughtId, ThoughtName, UndoScope,
 };
 
 use super::super::store::DurableIdentity;
@@ -168,6 +168,21 @@ pub enum ControlMutation {
         /// Exact content inserted between source bodies.
         separator: String,
     },
+    /// Remove or replace exported thoughts after the caller's file became durable.
+    ExportThoughts {
+        /// Durable Board operation identity.
+        operation_id: OperationId,
+        /// Exported thoughts in their exact Board order.
+        thought_ids: Vec<ThoughtId>,
+        /// Required SHA-256 values of the exported content, paired with the thoughts.
+        expected_digests: Vec<[u8; 32]>,
+        /// Removal or replacement. Keeping the board unchanged is never forwarded.
+        disposition: ExportDisposition,
+        /// Deterministic identity of the reference thought, present only for replacement.
+        reference_thought_id: Option<ThoughtId>,
+        /// Absolute exported file path, present only for replacement.
+        reference_path: Option<String>,
+    },
     /// Clean one exact thought with Proqi's canonical spacing policy.
     ReflowThought {
         /// Durable board operation identity.
@@ -250,6 +265,7 @@ impl ControlMutation {
             | Self::SplitThought { operation_id, .. }
             | Self::ExtractThought { operation_id, .. }
             | Self::MergeThoughts { operation_id, .. }
+            | Self::ExportThoughts { operation_id, .. }
             | Self::ReflowThought { operation_id, .. }
             | Self::Delete { operation_id, .. }
             | Self::Move { operation_id, .. }
@@ -297,6 +313,7 @@ impl ControlMutation {
             | Self::MoveItem { .. }
             | Self::DuplicateItems { .. }
             | Self::MergeThoughts { .. }
+            | Self::ExportThoughts { .. }
             | Self::History { .. }
             | Self::RenameSession { .. }
             | Self::Sync
@@ -336,6 +353,16 @@ impl ControlMutation {
                 .map(BoardItemId::Thought)
                 .collect(),
             Self::ReflowThought { thought_id, .. } => vec![(*thought_id).into()],
+            Self::ExportThoughts {
+                thought_ids,
+                reference_thought_id,
+                ..
+            } => reference_thought_id
+                .iter()
+                .chain(thought_ids)
+                .copied()
+                .map(BoardItemId::Thought)
+                .collect(),
             _ => Vec::new(),
         }
     }
@@ -363,7 +390,9 @@ impl ControlMutation {
     /// Oldest control protocol capable of representing this request.
     #[must_use]
     pub fn minimum_protocol(&self) -> u32 {
-        if matches!(self, Self::PreserveAddMany { .. }) {
+        if matches!(self, Self::ExportThoughts { .. }) {
+            13
+        } else if matches!(self, Self::PreserveAddMany { .. }) {
             12
         } else if matches!(
             self,

@@ -134,4 +134,10 @@ impl Environment for SystemEnvironment {
     fn current_executable(&self) -> Result<PathBuf, PathError> {
         std::env::current_exe().map_err(|_| PathError::Unavailable("current executable"))
     }
+
+    fn home_directory(&self) -> Option<PathBuf> {
+        directories::BaseDirs::new()
+            .map(|directories| directories.home_dir().to_path_buf())
+            .filter(|home| home.is_absolute())
+    }
 }

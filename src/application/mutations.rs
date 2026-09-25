@@ -1,6 +1,7 @@
 //! Focused domain mutations used by the reducer router.
 
 pub(super) mod bulk;
+pub(super) mod export;
 mod history;
 mod separator;
 mod session_metadata;
@@ -10,7 +11,7 @@ pub(super) use separator::{insert_separator, move_item, move_items};
 pub(super) use session_metadata::rename_session;
 
 use super::error::{ApplicationError, ApplicationResult, FailureCode};
-use super::{mutations::bulk::delete_thoughts, prompt::MULTI_THOUGHT_SEPARATOR};
+use super::{mutations::bulk::delete_thoughts, prompt::copy_payload};
 use crate::{
     application::model::{
         AppState, ClipboardIntent, Effect, InteractionMode,
@@ -20,7 +21,7 @@ use crate::{
         BoardItemId, BoardMutation, BoardOperation, BoardOperationKind, ContentAnnotation,
         DomainError, OperationId, RequestId, RevisionId, TextPosition, Thought, ThoughtId,
         ThoughtName, ThoughtPosition, ThoughtPresentation, ThoughtRevision, Timestamp,
-        merge_annotations, validate_annotations,
+        validate_annotations,
     },
 };
 
@@ -238,17 +239,7 @@ pub(super) fn request_clipboard(
         .iter()
         .map(|thought| ClipboardSource::capture(thought))
         .collect::<Vec<_>>();
-    let content = selected
-        .iter()
-        .map(|thought| thought.content.as_str())
-        .collect::<Vec<_>>()
-        .join(MULTI_THOUGHT_SEPARATOR);
-    let annotations = merge_annotations(
-        selected
-            .iter()
-            .map(|thought| (thought.content.as_str(), thought.annotations.as_slice())),
-        MULTI_THOUGHT_SEPARATOR,
-    )?;
+    let (content, annotations) = copy_payload(&selected)?;
     let thought_id = sources[0].thought_id;
     state
         .pending_clipboard
@@ -357,6 +348,7 @@ pub(super) fn build_delete_thought_operation(
             | BoardOperationKind::Cut
             | BoardOperationKind::SubmitAndRemove
             | BoardOperationKind::TransferAndRemove
+            | BoardOperationKind::ExportAndRemove
     ) {
         return Err(ApplicationError::InvalidState);
     }

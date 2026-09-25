@@ -3,8 +3,8 @@
 use crate::cli::error_code::ErrorCode;
 mod board;
 pub(super) use board::{
-    extract_thought, insert_separator, merge_thoughts, move_item, mutate_items, reflow_thought,
-    split_thought,
+    export_thoughts, extract_thought, insert_separator, merge_thoughts, move_item, mutate_items,
+    reflow_thought, split_thought,
 };
 
 use serde_json::json;
@@ -367,6 +367,7 @@ fn send_control(
             | ControlMutation::ExtractThought { .. }
             | ControlMutation::MergeThoughts { .. }
             | ControlMutation::ReflowThought { .. }
+            | ControlMutation::ExportThoughts { .. }
     );
     let protocol = required_protocol(owner, &mutation)?;
     let request = ControlRequest {
@@ -469,7 +470,53 @@ fn map_error(error: ControlError, owner: &InstanceInfo, reports_invalid_state: b
 
 #[cfg(test)]
 mod tests {
-    use super::sync_protocol;
+    use super::{required_protocol, sync_protocol};
+    use crate::{
+        cli::error_code::ErrorCode,
+        domain::{ExportDisposition, InstanceId, OperationId, SessionId, ThoughtId, Timestamp},
+        ports::{control::ControlMutation, runtime::InstanceInfo},
+    };
+
+    #[test]
+    fn export_completion_refuses_owners_older_than_protocol_thirteen() {
+        let identity = "06g30t8fudrq55fdkjqr6mpe44";
+        let owner = |control_protocol| InstanceInfo {
+            instance_id: format!("ins_{identity}")
+                .parse::<InstanceId>()
+                .expect("instance"),
+            session_id: format!("ses_{identity}")
+                .parse::<SessionId>()
+                .expect("session"),
+            pid: 1,
+            version: "0.14.0".to_owned(),
+            storage_protocol: 20,
+            control_protocol: Some(control_protocol),
+            control_endpoint: None,
+            update: None,
+            launch_directory: "/work".to_owned(),
+            started_at: Timestamp::from_millis(1),
+        };
+        let mutation = ControlMutation::ExportThoughts {
+            operation_id: format!("op_{identity}")
+                .parse::<OperationId>()
+                .expect("operation"),
+            thought_ids: vec![
+                format!("tht_{identity}")
+                    .parse::<ThoughtId>()
+                    .expect("thought"),
+            ],
+            expected_digests: vec![[0; 32]],
+            disposition: ExportDisposition::Remove,
+            reference_thought_id: None,
+            reference_path: None,
+        };
+        let refused = required_protocol(&owner(12), &mutation).expect_err("old owner");
+        assert_eq!(refused.code(), ErrorCode::ProtocolMismatch);
+        assert_eq!(
+            required_protocol(&owner(13), &mutation).expect("current owner"),
+            13
+        );
+    }
 
     #[test]
     fn read_sync_degrades_for_legacy_owners_but_rejects_newer_protocols() {

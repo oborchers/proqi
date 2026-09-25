@@ -157,6 +157,8 @@ pub struct FakeEnvironment {
     pub current_directory: Result<PathBuf, PathError>,
     /// Current-executable result returned by every call.
     pub current_executable: Result<PathBuf, PathError>,
+    /// Home directory returned by every call.
+    pub home_directory: Option<PathBuf>,
 }
 
 impl Environment for FakeEnvironment {
@@ -166,6 +168,10 @@ impl Environment for FakeEnvironment {
 
     fn current_executable(&self) -> Result<PathBuf, PathError> {
         self.current_executable.clone()
+    }
+
+    fn home_directory(&self) -> Option<PathBuf> {
+        self.home_directory.clone()
     }
 }
 

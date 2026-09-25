@@ -64,6 +64,7 @@ pub(super) fn handle(
             Ok(queue_restart(app, lanes, pending, envelope, request))
         }
         ControlMutation::Add { .. }
+        | ControlMutation::ExportThoughts { .. }
         | ControlMutation::PreserveAdd { .. }
         | ControlMutation::PreserveAddMany { .. }
         | ControlMutation::RenameSession { .. }

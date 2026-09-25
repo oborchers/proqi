@@ -31,3 +31,10 @@ pub(in crate::adapters::sqlite) const MIGRATION_21: &str = r"
 UPDATE schema_meta SET schema_version = 21, storage_protocol = 20;
 INSERT INTO migration_history(version, applied_at) VALUES (21, 0);
 ";
+
+// Register the ExportAndRemove and ExportAndReplace operation kinds so an older
+// writer cannot misread durable export history.
+pub(in crate::adapters::sqlite) const MIGRATION_22: &str = r"
+UPDATE schema_meta SET schema_version = 22, storage_protocol = 21;
+INSERT INTO migration_history(version, applied_at) VALUES (22, 0);
+";

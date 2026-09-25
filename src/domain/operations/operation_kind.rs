@@ -34,6 +34,10 @@ pub enum BoardOperationKind {
     Reflow,
     /// Merge a contiguous board selection into its first thought.
     Merge,
+    /// Deleted after the exported text file became durable.
+    ExportAndRemove,
+    /// Replaced by one file-reference thought after the exported file became durable.
+    ExportAndReplace,
 }
 
 impl BoardOperationKind {
@@ -55,6 +59,8 @@ impl BoardOperationKind {
                 | Self::Extract
                 | Self::Reflow
                 | Self::Merge
+                | Self::ExportAndRemove
+                | Self::ExportAndReplace
         )
     }
 }

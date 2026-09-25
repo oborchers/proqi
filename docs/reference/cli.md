@@ -294,6 +294,7 @@ proqi thoughts split <session> <thought> <at-byte> --expected-sha256 HEX [--oper
 proqi thoughts extract <session> <thought> <start-byte> <end-byte> --expected-sha256 HEX [--operation-id OP_ID]
 proqi thoughts merge <session> <thought> <thought>... --expected-sha256 HEX --expected-sha256 HEX... [--operation-id OP_ID]
 proqi thoughts reflow <session> <thought> --expected-sha256 HEX [--operation-id OP_ID]
+proqi thoughts export <session> <thought>... --output PATH [--remove | --replace-with-reference] [--replace-existing] [--operation-id OP_ID]
 proqi thoughts send <source> <thought> <destination> [--remove] [--operation-id OP_ID] [--remove-operation-id OP_ID]
 proqi thoughts undo <session> [--thought THOUGHT] [--operation-id OP_ID]
 proqi thoughts redo <session> [--thought THOUGHT] [--operation-id OP_ID]
@@ -324,6 +325,54 @@ rules: it must be nonblank, single-line, and at most 80 characters after
 surrounding whitespace is trimmed. An invalid name fails with `invalid_input`
 before any write. The name is part of the operation identity, so the same
 `--operation-id` with a different name fails with `idempotency_conflict`.
+
+### Export thoughts to a file
+
+<span class="version-scope">Next release</span>
+
+`thoughts export` writes the listed thoughts to one plain-text file. The file
+holds exactly the text that copying the same thoughts produces: their content
+in Board order, joined by one blank line (`"\n\n"`), with no names, headings,
+or other added formatting. The separator is always this fixed copy separator.
+The `merge_separator` configuration applies only to merging and never changes
+an export. Any file name is accepted and the extension never changes the
+content.
+
+```sh
+proqi --json thoughts export <session> <thought> <thought> --output notes.txt
+proqi --json thoughts export <session> <thought> --output ~/notes.txt --replace-with-reference
+```
+
+- `--output` resolves a relative path from the current directory of the
+  `proqi` process and `~/` from the home directory. A missing parent folder
+  fails with `export_directory_missing` and is never created.
+- An existing file fails with `export_target_exists` unless you pass
+  `--replace-existing`. An existing symbolic link, folder, or other non-regular
+  entry always fails with `export_target_invalid`; name the file the link
+  points to instead.
+- The file is written to a temporary file in the destination folder, synchronized,
+  and then atomically moved into place, so readers never see a partial file.
+  New files follow your umask like any saved file.
+- `--remove` deletes the thoughts after the file is durable. `--replace-with-reference`
+  replaces them with one thought holding the file's absolute path followed by
+  one space, shown as `[File N]`. Either change is one Board operation, so one
+  `thoughts undo` restores the thoughts (and removes the reference). The file
+  stays.
+- A write failure fails with `export_write_failed` and `details.reason`
+  `permission_denied`, `read_only`, `storage_full`, or `io`, and changes nothing
+  on the Board. If the thoughts change or the owner rejects the Board step after
+  the file was written, the error keeps its own code and adds
+  `details.file_written: true`.
+- With `--operation-id`, an exact retry after a completed Board change returns
+  the original receipt with `idempotent_replay: true` and does not rewrite the
+  file. A retry also accepts an existing file that already holds exactly the
+  exported bytes, so an interruption between writing and the Board change
+  converges without `--replace-existing`.
+
+The result reports `output`, `bytes`, `disposition` (`keep`, `remove`, or
+`replace_with_reference`), `thought_ids` in Board order, `written`, `replaced`,
+`reference_thought_id`, `item_ids`, and the Board `receipt`, which is `null` when
+the Board is unchanged.
 
 ### Bounded lists
 
@@ -390,7 +439,9 @@ whose advertised control protocol cannot represent a request now reports
 `protocol_mismatch` instead of the retryable `session_busy`. A lease holder
 that advertises no protocol yet, such as another command in progress, still
 reports `session_busy`. Proqi 0.14.0 adds `companion_session_active`,
-`herdr_failed`, and `plugin_state_failed` for the Herdr plugin toggle.
+`herdr_failed`, and `plugin_state_failed` for the Herdr plugin toggle. The next
+release adds `export_target_invalid`, `export_directory_missing`,
+`export_target_exists`, and `export_write_failed` for `thoughts export`.
 
 With `--json`, every failure writes
 `{"schema_version": 1, "ok": false, "error": {"code", "message", "details"}}` to
@@ -420,10 +471,12 @@ any other failure.
 | `config_invalid` | 2 | No | `{}` |
 | `invalid_shortcut_context` | 2 | No | `{}` |
 | `unsafe_state_path` | 2 | No | `{}` |
+| `export_target_invalid` | 2 | No | `{"output", "reason"}` |
 | `session_not_found` | 3 | After change | `{}` |
 | `thought_not_found` | 3 | After change | `{}` |
 | `not_found` | 3 | After change | `{}` |
 | `cursor_not_found` | 3 | After change | `{}` |
+| `export_directory_missing` | 3 | After change | `{"output", "reason"}` |
 | `ambiguous_session` | 4 | After change | `{"matches": [session_id]}` |
 | `session_busy` | 5 | Yes | `{}`, or `{"session_id", "holder"}` when the active owner is known |
 | `companion_session_active` | 5 | After change | `{"session_id", "name"}`; `name` is null when a recorded session was reopened |
@@ -444,6 +497,7 @@ any other failure.
 | `invariant_violation` | 7 | No | `{}` |
 | `conflict` | 7 | After change | `{}` |
 | `mutation_rejected` | 7 | After change | `{}` |
+| `export_target_exists` | 7 | After change | `{"output"}` |
 | `operation_indeterminate` | 8 | Same identity | `{"session_id", "holder"}` |
 | `storage_failed` | 1 | After change | `{}` |
 | `storage_full` | 1 | After change | `{}` |
@@ -458,6 +512,7 @@ any other failure.
 | `herdr_failed` | 1 | After change | `{}` |
 | `plugin_state_failed` | 1 | Yes | `{}` |
 | `output_failed` | 1 | After change | `{}` |
+| `export_write_failed` | 1 | After change | `{"output", "reason"}` |
 | `clipboard_failed` | 1 | After change | `{}` |
 | `environment_failed` | 1 | After change | `{}` |
 | `diagnostics_failed` | 1 | After change | `{}` |

@@ -12,7 +12,7 @@ mod mutation;
 pub use mutation::ControlMutation;
 
 /// Current local owner-control protocol.
-pub const CONTROL_PROTOCOL_VERSION: u32 = 12;
+pub const CONTROL_PROTOCOL_VERSION: u32 = 13;
 /// Current compatible screenshot takeover protocol.
 pub const CAPTURE_CONTROL_PROTOCOL_VERSION: u32 = 1;
 /// Oldest owner-control protocol accepted for plain-text mutations.

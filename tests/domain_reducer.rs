@@ -103,6 +103,8 @@ fn move_history(fixture: &mut Fixture, scope: UndoScope, undo: bool) {
 
 #[path = "domain_reducer/clipboard.rs"]
 mod clipboard;
+#[path = "domain_reducer/export.rs"]
+mod export;
 #[path = "domain_reducer/history.rs"]
 mod history;
 #[path = "domain_reducer/locks.rs"]

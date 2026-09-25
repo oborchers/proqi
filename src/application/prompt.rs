@@ -1,7 +1,7 @@
 //! Exact outbound prompt assembly independent of terminal presentation.
 
 use crate::{
-    domain::ThoughtId,
+    domain::{ContentAnnotation, DomainError, Thought, ThoughtId, merge_annotations},
     ports::agent::{AgentTarget, CLAUDE_AGENT_KIND, CODEX_AGENT_KIND},
 };
 
@@ -54,6 +54,34 @@ const fn stripped(token: &'static str) -> SharedHarnessCommand {
 }
 
 pub(crate) const MULTI_THOUGHT_SEPARATOR: &str = "\n\n";
+
+/// Exact copy text of thoughts in the given order, shared by clipboard copy and file export.
+///
+/// Content is joined with [`MULTI_THOUGHT_SEPARATOR`] and never gains names or labels.
+pub(crate) fn copy_text<'a>(thoughts: impl IntoIterator<Item = &'a Thought>) -> String {
+    thoughts
+        .into_iter()
+        .map(|thought| thought.content.as_str())
+        .collect::<Vec<_>>()
+        .join(MULTI_THOUGHT_SEPARATOR)
+}
+
+/// Exact copy text plus its concatenated presentation annotations.
+///
+/// # Errors
+///
+/// Returns a domain error when a source carries malformed annotations.
+pub(crate) fn copy_payload(
+    thoughts: &[&Thought],
+) -> Result<(String, Vec<ContentAnnotation>), DomainError> {
+    let annotations = merge_annotations(
+        thoughts
+            .iter()
+            .map(|thought| (thought.content.as_str(), thought.annotations.as_slice())),
+        MULTI_THOUGHT_SEPARATOR,
+    )?;
+    Ok((copy_text(thoughts.iter().copied()), annotations))
+}
 
 pub(crate) fn join_prompt_for_target(
     target: &AgentTarget,

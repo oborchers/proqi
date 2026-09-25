@@ -5,7 +5,7 @@ mod protocol_stamps;
 
 pub(super) use late::{MIGRATION_17, MIGRATION_18, MIGRATION_19, MIGRATION_20};
 pub(super) use protocol_stamps::{
-    MIGRATION_9, MIGRATION_10, MIGRATION_12, MIGRATION_15, MIGRATION_21,
+    MIGRATION_9, MIGRATION_10, MIGRATION_12, MIGRATION_15, MIGRATION_21, MIGRATION_22,
 };
 
 pub(super) const MIGRATION_1: &str = r"
@@ -250,6 +250,7 @@ INSERT INTO migration_history(version, applied_at) VALUES (18, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (19, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (20, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (21, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (22, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"

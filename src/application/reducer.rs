@@ -73,7 +73,8 @@ pub fn reduce(state: &mut AppState, action: Action) -> ApplicationResult<Vec<Eff
         | Action::SetPresentationMany { .. }
         | Action::DuplicateThoughts { .. }
         | Action::DuplicateItems { .. }
-        | Action::MergeThoughts { .. } => reduce_board(state, &action),
+        | Action::MergeThoughts { .. }
+        | Action::CompleteExport(_) => reduce_board(state, &action),
         Action::Undo { .. } | Action::Redo { .. } => reduce_history(state, &action),
         Action::PersistenceCommitted(_)
         | Action::PersistenceFailed { .. }

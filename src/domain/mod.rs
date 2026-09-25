@@ -4,6 +4,7 @@ mod annotation;
 mod attachment_numbering;
 mod board_item;
 mod browser_history;
+mod export;
 mod identifiers;
 mod model;
 mod operations;
@@ -22,6 +23,10 @@ pub use attachment_numbering::{
 };
 pub use board_item::{BoardItemId, BoardItemRef, Separator};
 pub use browser_history::{BrowserMutation, BrowserOperation, BrowserOperationKind};
+pub use export::{
+    EXPORT_EXTENSION, EXPORT_STEM_MAX_BYTES, ExportDisposition, ExportPathError,
+    default_export_file_name, resolve_export_path, sanitize_file_stem, utc_file_timestamp,
+};
 pub use identifiers::{
     InstanceId, OperationId, RequestId, RevisionId, SeparatorId, SessionId, SubmissionId, ThoughtId,
 };

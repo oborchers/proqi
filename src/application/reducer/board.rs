@@ -8,7 +8,9 @@ use crate::application::mutations::{
         delete_items, delete_thoughts, duplicate_items, duplicate_thoughts, set_presentation_many,
         stage_submission_removal,
     },
-    delete_thought, move_item, move_items, move_thought, rename_thought, set_presentation,
+    delete_thought,
+    export::complete_export,
+    move_item, move_items, move_thought, rename_thought, set_presentation,
     transform::merge_thoughts,
 };
 
@@ -108,6 +110,7 @@ fn reduce_board_bulk(state: &mut AppState, action: &Action) -> ApplicationResult
             separator,
             *at,
         ),
+        Action::CompleteExport(completion) => complete_export(state, completion),
         _ => Err(ApplicationError::InvalidState),
     }
 }

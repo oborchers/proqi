@@ -8,6 +8,7 @@ pub mod companion;
 pub mod control;
 pub mod editor;
 pub mod environment;
+pub mod export;
 pub mod invocation;
 pub mod recovery;
 pub mod runtime;

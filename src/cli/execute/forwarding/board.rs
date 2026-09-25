@@ -195,6 +195,14 @@ pub(in crate::cli::execute) fn reflow_thought(
     )
 }
 
+pub(in crate::cli::execute) fn export_thoughts(
+    context: &mut RuntimeContext,
+    session_id: SessionId,
+    request: ControlMutation,
+) -> Result<Option<BoardItemMutation>, CliError> {
+    forward_items(context, session_id, request)
+}
+
 fn forward_items(
     context: &mut RuntimeContext,
     session_id: SessionId,
