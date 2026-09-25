@@ -360,7 +360,8 @@ proqi --json thoughts export <session> <thought> --output ~/notes.txt --replace-
   `thoughts undo` restores the thoughts (and removes the reference). The file
   stays.
 - A write failure fails with `export_write_failed` and `details.reason`
-  `permission_denied`, `read_only`, `storage_full`, or `io`, and changes nothing
+  `permission_denied`, `read_only`, `storage_full`, `replace_unsupported` (the
+  file system cannot replace a file atomically), or `io`, and changes nothing
   on the Board. If the thoughts change or the owner rejects the Board step after
   the file was written, the error keeps its own code and adds
   `details.file_written: true`.

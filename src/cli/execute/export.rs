@@ -291,6 +291,8 @@ fn write_error(output: &str, error: &ExportWriteError) -> CliError {
         | ExportWriteError::TargetIsSymlink
         | ExportWriteError::TargetNotRegular => ErrorCode::ExportTargetInvalid,
         ExportWriteError::Changed
+        | ExportWriteError::ReplaceUnsupported
+        | ExportWriteError::Displaced(_)
         | ExportWriteError::PermissionDenied
         | ExportWriteError::ReadOnly
         | ExportWriteError::StorageFull

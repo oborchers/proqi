@@ -484,9 +484,12 @@ and modification time), or replace any regular file for an explicit CLI flag.
 Replacement is an atomic exchange (`renameat` with `RENAME_EXCHANGE` or
 `RENAME_SWAP`). The displaced entry is then verified as the confirmed regular
 file and is exchanged back when it is not, so an entry that appeared after the
-last check is never overwritten. File systems without an atomic exchange fall
-back to a recheck followed by an ordinary rename. A replacement keeps the
-replaced file's permission bits. The identity is content-free, so a same-length
+last check is never overwritten. The temporary guard is disarmed at the
+exchange, so no failure path deletes the displaced entry; if it cannot be
+exchanged back, it is kept at the temporary name and reported. File systems
+without an atomic exchange refuse replacement (`replace_unsupported`) instead of
+racing a check against a rename. A replacement takes the displaced file's
+permission bits and is synchronized again. The identity is content-free, so a same-length
 rewrite within the file system's timestamp granularity is not detected.
 The adapter requires an existing parent folder and never creates one, refuses
 symbolic links, folders, and other non-regular targets, writes a `tempfile`

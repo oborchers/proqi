@@ -81,6 +81,12 @@ pub enum ExportWriteError {
     /// The confirmed file changed or disappeared before replacement.
     #[error("the file changed after confirmation; nothing was replaced")]
     Changed,
+    /// The file system cannot exchange files atomically, so replacement is refused.
+    #[error("this file system cannot replace a file safely; choose a new name")]
+    ReplaceUnsupported,
+    /// An unexpected entry could not be restored and was kept at this path.
+    #[error("an unexpected entry could not be restored and was kept as {0}")]
+    Displaced(String),
     /// The operating system denied access.
     #[error("permission denied")]
     PermissionDenied,
@@ -108,6 +114,8 @@ impl ExportWriteError {
             Self::TargetIsSymlink => "target_is_symlink",
             Self::TargetNotRegular => "target_not_regular",
             Self::Changed => "changed",
+            Self::ReplaceUnsupported => "replace_unsupported",
+            Self::Displaced(_) => "displaced",
             Self::PermissionDenied => "permission_denied",
             Self::ReadOnly => "read_only",
             Self::StorageFull => "storage_full",

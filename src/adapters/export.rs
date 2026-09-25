@@ -34,7 +34,6 @@ impl ExportWriter for FileExport {
         injected_test_failure()?;
         let temporary = temporary_file(parent, request.content.as_bytes())?;
         if existing.is_some() {
-            keep_permissions(&temporary, path)?;
             replace(temporary, request)?;
         } else {
             persist_new(temporary, path)?;
@@ -80,8 +79,10 @@ fn authorize(
 /// The exchange moves the displaced entry to the temporary name, where it is
 /// verified: it must be a regular file and, after a confirmation, the exact file
 /// the user confirmed. Anything else is exchanged back, so a file or link that
-/// appeared after the last check is never overwritten. File systems without an
-/// atomic exchange fall back to a recheck followed by an ordinary rename.
+/// appeared after the last check is never overwritten. From the moment of the
+/// exchange the temporary guard is disarmed, so no failure path can delete the
+/// displaced entry. A file system without an atomic exchange refuses replacement
+/// instead of racing a check against a rename.
 fn replace(
     temporary: tempfile::NamedTempFile,
     request: &ExportWriteRequest,
@@ -93,60 +94,64 @@ fn replace(
             return Err(ExportWriteError::Io);
         }
     };
-    let staged = temporary.path().to_path_buf();
-    match exchange(&staged, &request.path) {
+    match exchange(temporary.path(), &request.path) {
         Ok(()) => {}
         Err(rustix::io::Errno::NOENT) => return Err(ExportWriteError::Changed),
         Err(rustix::io::Errno::NOSYS | rustix::io::Errno::INVAL | rustix::io::Errno::NOTSUP) => {
-            return replace_by_rename(temporary, request, expected);
+            return Err(ExportWriteError::ReplaceUnsupported);
         }
         Err(error) => return Err(map_io(&io::Error::from(error))),
     }
-    let displaced = fs::symlink_metadata(&staged).map_err(|error| map_io(&error))?;
-    let verdict = if displaced.file_type().is_symlink() {
-        Err(ExportWriteError::TargetIsSymlink)
-    } else if displaced.is_dir() {
-        Err(ExportWriteError::TargetIsDirectory)
-    } else if !displaced.is_file() {
-        Err(ExportWriteError::TargetNotRegular)
-    } else if expected.is_some_and(|expected| expected != existing_file(&displaced)) {
-        Err(ExportWriteError::Changed)
-    } else {
-        Ok(())
+    let (file, staged) = match temporary.keep() {
+        Ok(kept) => kept,
+        Err(error) => return Err(map_io(&error.error)),
     };
-    if let Err(error) = verdict {
-        exchange(&staged, &request.path).map_err(|swap| map_io(&io::Error::from(swap)))?;
-        return Err(match error {
-            ExportWriteError::TargetIsSymlink
-            | ExportWriteError::TargetIsDirectory
-            | ExportWriteError::TargetNotRegular
-                if expected.is_some() =>
-            {
-                ExportWriteError::Changed
+    match verify_displaced(&staged, expected) {
+        Ok(permissions) => {
+            file.set_permissions(permissions)
+                .and_then(|()| file.sync_all())
+                .map_err(|error| map_io(&error))?;
+            // The temporary name now holds the replaced file.
+            let _removed = fs::remove_file(&staged);
+            Ok(())
+        }
+        Err(error) => {
+            if exchange(&staged, &request.path).is_err() {
+                return Err(ExportWriteError::Displaced(
+                    staged.to_string_lossy().into_owned(),
+                ));
             }
-            other => other,
-        });
+            // The temporary name holds this export's own bytes again.
+            let _removed = fs::remove_file(&staged);
+            Err(error)
+        }
     }
-    // The temporary name now holds the replaced file; dropping the guard removes it.
-    drop(temporary);
-    Ok(())
 }
 
-/// Give the replacement the permission bits of the file it replaces, as editors do,
-/// so replacing never widens access to a private file.
-fn keep_permissions(
-    temporary: &tempfile::NamedTempFile,
-    path: &Path,
-) -> Result<(), ExportWriteError> {
-    let mode = fs::symlink_metadata(path)
-        .map_err(|error| map_io(&error))?
-        .permissions()
-        .mode()
-        & 0o7777;
-    temporary
-        .as_file()
-        .set_permissions(Permissions::from_mode(mode))
-        .map_err(|error| map_io(&error))
+/// Accept only the regular file the request authorized, and return its permissions
+/// so the replacement keeps them, as editors do.
+fn verify_displaced(
+    staged: &Path,
+    expected: Option<ExistingFile>,
+) -> Result<Permissions, ExportWriteError> {
+    let displaced = fs::symlink_metadata(staged).map_err(|error| map_io(&error))?;
+    let unexpected = if expected.is_some() {
+        ExportWriteError::Changed
+    } else if displaced.file_type().is_symlink() {
+        ExportWriteError::TargetIsSymlink
+    } else if displaced.is_dir() {
+        ExportWriteError::TargetIsDirectory
+    } else {
+        ExportWriteError::TargetNotRegular
+    };
+    if !displaced.is_file()
+        || expected.is_some_and(|expected| expected != existing_file(&displaced))
+    {
+        return Err(unexpected);
+    }
+    Ok(Permissions::from_mode(
+        displaced.permissions().mode() & 0o7777,
+    ))
 }
 
 fn exchange(left: &Path, right: &Path) -> Result<(), rustix::io::Errno> {
@@ -157,21 +162,6 @@ fn exchange(left: &Path, right: &Path) -> Result<(), rustix::io::Errno> {
         right,
         rustix::fs::RenameFlags::EXCHANGE,
     )
-}
-
-fn replace_by_rename(
-    temporary: tempfile::NamedTempFile,
-    request: &ExportWriteRequest,
-    expected: Option<ExistingFile>,
-) -> Result<(), ExportWriteError> {
-    let current = inspect_target(&request.path)?;
-    if current.is_none() || expected.is_some_and(|expected| current != Some(expected)) {
-        return Err(ExportWriteError::Changed);
-    }
-    temporary
-        .persist(&request.path)
-        .map(|_file| ())
-        .map_err(|error| map_io(&error.error))
 }
 
 /// Install the synchronized temporary file only if the target is still absent.

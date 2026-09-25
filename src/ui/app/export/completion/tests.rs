@@ -19,13 +19,13 @@ fn listing(entries: &[(&str, bool)]) -> DirectoryListing {
 #[test]
 fn requests_list_the_folder_named_by_the_typed_prefix() {
     let base = Path::new("/work/repo");
-    let home = Some(Path::new("/Users/me"));
+    let home = Some(Path::new("/home/tester"));
     let cases = [
         ("no", "/work/repo", "", "no"),
         ("docs/re", "/work/repo/docs/", "docs/", "re"),
         ("/tmp/x", "/tmp/", "/tmp/", "x"),
-        ("~/Desk", "/Users/me/", "~/", "Desk"),
-        ("~/a b/", "/Users/me/a b/", "~/a b/", ""),
+        ("~/Desk", "/home/tester/", "~/", "Desk"),
+        ("~/a b/", "/home/tester/a b/", "~/a b/", ""),
     ];
     for (text, directory, prefix, partial) in cases {
         let request = completion_request(text, base, home).expect(text);

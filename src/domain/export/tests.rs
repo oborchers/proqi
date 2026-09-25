@@ -9,7 +9,7 @@ use crate::domain::{ThoughtName, Timestamp};
 #[test]
 fn relative_and_home_paths_resolve_from_their_owners() {
     let base = Path::new("/work/repo");
-    let home = Path::new("/Users/me");
+    let home = Path::new("/home/tester");
     assert_eq!(
         resolve_export_path("notes.txt", base, Some(home)),
         Ok(PathBuf::from("/work/repo/notes.txt"))
@@ -24,7 +24,7 @@ fn relative_and_home_paths_resolve_from_their_owners() {
     );
     assert_eq!(
         resolve_export_path("~/Desktop/x.md", base, Some(home)),
-        Ok(PathBuf::from("/Users/me/Desktop/x.md"))
+        Ok(PathBuf::from("/home/tester/Desktop/x.md"))
     );
     assert_eq!(
         resolve_export_path("/abs/Grüße 第二.txt", base, None),

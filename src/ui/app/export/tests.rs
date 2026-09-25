@@ -54,7 +54,7 @@ impl Fixture {
             .collect();
         let board = SessionBoard::new(session, thoughts).expect("board");
         let mut app = BoardApp::new(AppState::new(board), RopeEditorFactory);
-        app.set_home_directory(Some(PathBuf::from("/Users/me")));
+        app.set_home_directory(Some(PathBuf::from("/home/tester")));
         Self {
             app,
             ids,
@@ -180,7 +180,7 @@ fn keep_writes_exact_copy_text_and_leaves_the_board_unchanged() {
     fixture.begin(ExportDisposition::Keep);
     fixture.set_field("~/notes.md");
     let (request_id, request) = fixture.submit();
-    assert_eq!(request.path, PathBuf::from("/Users/me/notes.md"));
+    assert_eq!(request.path, PathBuf::from("/home/tester/notes.md"));
     assert_eq!(request.content, "first\r\n\n\n  second ü");
     assert_eq!(request.overwrite, ExportOverwrite::Refuse);
     assert!(
