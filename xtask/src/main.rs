@@ -22,6 +22,7 @@ mod dev_gates;
 mod documentation;
 mod gate_lock;
 mod herdr_compatibility;
+mod herdr_plugin;
 mod homebrew;
 mod installer;
 mod instructions;

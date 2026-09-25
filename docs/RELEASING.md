@@ -5,7 +5,9 @@ authority by itself.
 
 ## Release invariants
 
-- `Cargo.toml` is the only version source.
+- `Cargo.toml` is the only version source. The Herdr plugin manifest
+  `herdr-plugin.toml` restates it as its `version`; `cargo xtask quality` and
+  `release-plan` fail when they diverge. See [Herdr plugin](#herdr-plugin).
 - Stable tags use exact `vX.Y.Z` syntax and must equal the Cargo version.
 - Every `.github/release-notes/vX.Y.Z.md` has one exact matching version in
   `release-highlights.json`, with three to six jointly reviewed user-facing
@@ -51,6 +53,12 @@ Routine preparation validates reviewed release inputs and repository hygiene:
 cargo xtask release-plan <vX.Y.Z>
 git diff --check
 ```
+
+The same preparation commit replaces every `Next release` and next-release
+scope marker in `README.md` and `docs/` with the new version. Wording that
+avoids a version until release, such as the Herdr plugin's "first Proqi release
+that includes `proqi herdr toggle`" in `README.md` and
+`docs/guides/herdr-plugin.md`, names that version from then on.
 
 `release-plan` checks the Cargo version, canonical absent tag, matching release
 notes, bounded reviewed `release-highlights.json`, exact locally known `main`
@@ -139,6 +147,20 @@ dependency derivation, binary identity, and install, remove, state-preservation,
 and reinstall behavior in pinned Ubuntu 22.04, Ubuntu 24.04, and Debian
 bookworm containers.
 
+## Herdr plugin
+
+`herdr-plugin.toml` at the repository root publishes Proqi as a Herdr plugin,
+installed from the default branch with `herdr plugin install oborchers/proqi`.
+Release preparation sets its `version` to the new Cargo version in the same
+commit. The Herdr marketplace shows that version, and `cargo xtask quality` and
+`release-plan` reject any other value.
+
+The plugin runs the installed `proqi herdr toggle`, so it needs the first
+release that includes that command. When a release changes the command's
+contract, confirm that the default-branch launcher and the released binary
+still agree before tagging; the launcher checks the `herdr_companion_toggle`
+capability and reports an older binary instead of running it.
+
 ## Claude Code plugin marketplace
 
 `.claude-plugin/marketplace.json` publishes the `skills/` tree as the
@@ -192,7 +214,7 @@ The public repository metadata is reviewed as one unit:
 ```text
 Description: An agent-optimized terminal scratchpad for capturing, editing, and submitting follow-up prompts beside coding-agent sessions.
 Website after first release: https://github.com/oborchers/proqi/releases/latest
-Topics: rust, terminal, tui, cli, ratatui, developer-tools, ai-agents, coding-agents, prompt-management, scratchpad, local-first, sqlite, productivity, herdr
+Topics: rust, terminal, tui, cli, ratatui, developer-tools, ai-agents, coding-agents, prompt-management, scratchpad, local-first, sqlite, productivity, herdr, herdr-plugin
 Social preview: assets/proqi-social-preview.png
 ```
 
@@ -204,7 +226,7 @@ gh repo edit oborchers/proqi \
   --enable-issues \
   --enable-discussions=false \
   --description "An agent-optimized terminal scratchpad for capturing, editing, and submitting follow-up prompts beside coding-agent sessions." \
-  --add-topic rust,terminal,tui,cli,ratatui,developer-tools,ai-agents,coding-agents,prompt-management,scratchpad,local-first,sqlite,productivity,herdr
+  --add-topic rust,terminal,tui,cli,ratatui,developer-tools,ai-agents,coding-agents,prompt-management,scratchpad,local-first,sqlite,productivity,herdr,herdr-plugin
 ```
 
 After the first release exists, add the website separately:

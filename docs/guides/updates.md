@@ -88,6 +88,26 @@ During the pre-1.0 series, only the latest stable release is supported. Drafts,
 prereleases, malformed tags, and older or equal versions never produce an
 update prompt.
 
+## Herdr plugin
+
+<span class="version-scope">Next release</span>
+
+The [Herdr plugin](herdr-plugin.md) and Proqi update separately.
+
+- **Proqi itself** keeps the update route of its installation. When the plugin
+  installed Proqi, it used the standalone installer, so the in-app update above
+  applies. When Proqi was already installed, the plugin installed nothing and
+  that installation keeps its own channel.
+- **The plugin files** do not update by themselves, because Herdr has no plugin
+  update command. Run `herdr plugin install oborchers/proqi` again to refresh
+  them. The plugin only locates `proqi` and runs `proqi herdr toggle`, so a new
+  Proqi release rarely needs a plugin refresh.
+
+The in-app update restarts each session in its existing pane, so a Proqi pane
+the plugin opened stays recognized and closable after the update. If the
+installed Proqi is too old for the plugin, the toggle reports that instead of
+running it.
+
 See [Configuration](configuration.md#core-settings) for the startup setting,
 [Privacy and diagnostics](../reference/privacy-and-diagnostics.md) for the
 network and support-data boundary, and [Sessions and recovery](organization-and-recovery.md)

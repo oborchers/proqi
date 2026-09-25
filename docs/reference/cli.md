@@ -103,7 +103,7 @@ Read only fields that the installed response actually contains.
 
 <span class="version-scope">Next release</span>
 
-Next-release main also adds three discovery fields:
+Next-release main also adds these discovery fields:
 
 - `options` lists the long options that each `sessions`, `items`, and
   `thoughts` operation accepts, derived from the installed parser. For example,
@@ -119,6 +119,9 @@ Next-release main also adds three discovery fields:
   `idempotent_session_trash` (repeated trash succeeds),
   `bounded_lists` (`--limit`, `--after`, `total`, and `next_after`), and
   `json_help_and_version` (successful JSON help and version output).
+- `herdr_companion_toggle` reports `proqi herdr toggle`, and
+  `operations.herdr` lists `toggle`. The Herdr plugin's launcher checks this
+  flag before it runs the toggle.
 
 ## Generate shell completions
 
@@ -389,7 +392,8 @@ The complete table, `capabilities.error_codes`, and the codes
 whose advertised control protocol cannot represent a request now reports
 `protocol_mismatch` instead of the retryable `session_busy`. A lease holder
 that advertises no protocol yet, such as another command in progress, still
-reports `session_busy`.
+reports `session_busy`. The Herdr plugin toggle adds
+`companion_session_active`, `herdr_failed`, and `plugin_state_failed`.
 
 With `--json`, every failure writes
 `{"schema_version": 1, "ok": false, "error": {"code", "message", "details"}}` to
@@ -425,6 +429,7 @@ any other failure.
 | `cursor_not_found` | 3 | After change | `{}` |
 | `ambiguous_session` | 4 | After change | `{"matches": [session_id]}` |
 | `session_busy` | 5 | Yes | `{}`, or `{"session_id", "holder"}` when the active owner is known |
+| `companion_session_active` | 5 | After change | `{"session_id", "name"}`; `name` is null when a recorded session was reopened |
 | `schema_busy` | 5 | Yes | `{}` |
 | `storage_busy` | 5 | Yes | `{}` |
 | `unsupported` | 6 | No | `{}` |
@@ -453,6 +458,8 @@ any other failure.
 | `terminal_worker_failed` | 1 | After change | `{}` |
 | `terminal_cleanup_failed` | 1 | After change | `{}` |
 | `control_failed` | 1 | After change | `{}` |
+| `herdr_failed` | 1 | After change | `{}` |
+| `plugin_state_failed` | 1 | Yes | `{}` |
 | `output_failed` | 1 | After change | `{}` |
 | `clipboard_failed` | 1 | After change | `{}` |
 | `environment_failed` | 1 | After change | `{}` |
@@ -475,6 +482,75 @@ any other failure.
 | `update_state_failed` | 1 | After change | `{}` |
 | `update_coordination_failed` | 1 | After change | `{}` |
 | `update_installation_failed` | 1 | After change | `{}` |
+
+## Toggle Proqi beside a Herdr agent
+
+<span class="version-scope">Next release</span>
+
+```text
+proqi herdr toggle
+```
+
+This command is the action of the [Herdr plugin](../guides/herdr-plugin.md).
+Herdr runs it with the plugin environment (`HERDR_ENV=1`, `HERDR_PLUGIN_ID`,
+`HERDR_PLUGIN_CONTEXT_JSON`, and `HERDR_PLUGIN_STATE_DIR`). Anywhere else it
+fails with `unsupported` and changes nothing.
+
+It acts only on the tab that had focus:
+
+- The plugin records one session per tab in its private state. When the tab
+  has a recorded session, the toggle reopens it in a new pane to the right of
+  the focused pane, whichever pane is focused.
+- For a tab's first companion, it runs the same get-or-create as
+  `sessions ensure`. The name is the Herdr name of the tab's agent when exactly
+  one agent in the tab has a name. Otherwise it is the tab label; a numeric
+  default label, which Herdr derives from the tab's position, is replaced by
+  the stable tab identity, so tab `w1:t4` in workspace `demo` uses
+  `demo-w1-t4`. When Herdr cannot list the tab's agents, the toggle fails with
+  `herdr_failed` and opens nothing. The origin is the
+  Herdr worktree checkout, else the Git repository root containing the focused
+  pane's directory, else that directory.
+- When the tab already shows a Proqi pane, it focuses that pane.
+- When the focused pane is the Proqi pane the plugin opened, it asks that Proqi
+  to make pending edits durable and closes the pane only after Proqi confirms.
+  Without that confirmation, for example while Proqi is still starting, it fails
+  with `session_busy` and keeps the pane. The session stays recorded.
+- When the focused pane runs a Proqi that the plugin did not open, or a recorded
+  pane that Herdr cannot classify in time, it returns focus to the tab's only
+  agent pane and never closes that pane.
+- When a recorded Proqi pane survived a Herdr restart as an idle shell, it
+  opens the same session in a new pane and then closes the old pane only if it
+  is still an idle shell. A recorded pane that now runs anything else is never
+  touched.
+
+When the session is already open in another pane, for example because another
+workspace has a tab with the same label, or an agent with the same name, in the
+same repository, the toggle fails with `companion_session_active` instead of
+starting a second Proqi. When the derived name already belongs to a session
+from another directory, for example two repositories that both have a tab
+labeled `main`, it fails with `session_name_conflict`; rename the tab or agent
+that named the session, or the other session. Failures are also
+shown as a Herdr notification.
+
+A successful JSON response has one of these shapes:
+
+```json
+{"action": "opened", "tab_id": "w1:t1", "pane_id": "w1:p3", "session_id": "ses_...", "replaced_pane_id": null}
+{"action": "focused", "pane_id": "w1:p3"}
+{"action": "returned", "pane_id": "w1:p1"}
+{"action": "closed", "pane_id": "w1:p3", "session_id": "ses_..."}
+```
+
+Exit status 0 is success. Other statuses follow [Errors](#errors):
+`unsupported` (6) outside the plugin, `invalid_input` (2) when the focused
+pane's directory no longer exists, `ambiguous_session` (4) when several live
+sessions share the tab's name and directory, `companion_session_active` or
+`session_busy` (5), `session_name_conflict` or `invalid_state` (7),
+`herdr_failed` (1) when Herdr rejects or cannot answer a request, including a
+pane whose process Herdr cannot report in time, which blocks opening because it
+might hide a Proqi, and
+`plugin_state_failed` (1) when the plugin's private state or its toggle lock is
+unavailable.
 
 ## Check updates
 

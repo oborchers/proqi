@@ -4,7 +4,10 @@ use clap::CommandFactory as _;
 use serde_json::{Map, Value, json};
 
 use super::{Outcome, helpers::MAX_THOUGHT_STDIN_BYTES};
-use crate::cli::{args::Cli, error_code::ErrorCode};
+use crate::{
+    adapters::herdr::TOGGLE_CAPABILITY,
+    cli::{args::Cli, error_code::ErrorCode},
+};
 
 /// Families whose operations and options form the scriptable mutation surface.
 const OPTION_FAMILIES: &[&str] = &["sessions", "items", "thoughts"];
@@ -18,53 +21,56 @@ pub(super) fn outcome() -> Outcome {
     } else {
         "unavailable on this platform"
     };
-    Outcome {
-        data: json!({
-            "cli_schema_version": 1,
-            "identifier_encoding": "prefix_base32hex_uuidv7",
-            "commands": [
-                "capabilities", "completions", "update", "diagnostics", "doctor",
-                "sessions", "items", "thoughts"
+    let mut data = json!({
+        "cli_schema_version": 1,
+        "identifier_encoding": "prefix_base32hex_uuidv7",
+        "commands": [
+            "capabilities", "completions", "update", "diagnostics", "doctor",
+            "sessions", "items", "thoughts", "herdr"
+        ],
+        "operations": {
+            "diagnostics": ["collect", "keypress"],
+            "sessions": [
+                "list", "ensure", "create", "rename", "trash", "restore", "undo", "redo",
+                "prune"
             ],
-            "operations": {
-                "diagnostics": ["collect", "keypress"],
-                "sessions": [
-                    "list", "ensure", "create", "rename", "trash", "restore", "undo", "redo",
-                    "prune"
-                ],
-                "items": ["insert-separator", "move", "delete", "duplicate"],
-                "thoughts": [
-                    "list", "inspect", "add", "delete", "rename", "replace", "collapse",
-                    "move", "split", "extract", "merge", "reflow", "send", "undo", "redo"
-                ],
-                "update": ["check"],
-                "history_scopes": ["board", "editor", "browser"]
-            },
-            "options": option_inventory(),
-            "error_codes": error_codes(),
-            "explicit_update_check": true,
-            "active_session_control": active_control,
-            "active_session_read_sync": active_control,
-            "control_protocol": crate::ports::control::CONTROL_PROTOCOL_VERSION,
-            "cross_session_transfer": true,
-            "exact_thought_replacement": true,
-            "replacement_sha256_precondition": true,
-            "durable_thought_collapse": true,
-            "durable_visual_separators": true,
-            "semantic_separator_mutations": true,
-            "mixed_board_item_mutations": true,
-            "exact_text_transformations": true,
-            "durable_browser_history": true,
-            "atomic_named_sessions": true,
-            "named_thought_creation": true,
-            "session_operation_identity": true,
-            "idempotent_session_trash": true,
-            "bounded_lists": true,
-            "json_help_and_version": true,
-            "max_thought_stdin_bytes": MAX_THOUGHT_STDIN_BYTES,
-            "herdr_submission": true,
-            "herdr_managed_pane_required": true,
-        }),
+            "items": ["insert-separator", "move", "delete", "duplicate"],
+            "thoughts": [
+                "list", "inspect", "add", "delete", "rename", "replace", "collapse",
+                "move", "split", "extract", "merge", "reflow", "send", "undo", "redo"
+            ],
+            "update": ["check"],
+            "herdr": ["toggle"],
+            "history_scopes": ["board", "editor", "browser"]
+        },
+        "options": option_inventory(),
+        "error_codes": error_codes(),
+        "explicit_update_check": true,
+        "active_session_control": active_control,
+        "active_session_read_sync": active_control,
+        "control_protocol": crate::ports::control::CONTROL_PROTOCOL_VERSION,
+        "cross_session_transfer": true,
+        "exact_thought_replacement": true,
+        "replacement_sha256_precondition": true,
+        "durable_thought_collapse": true,
+        "durable_visual_separators": true,
+        "semantic_separator_mutations": true,
+        "mixed_board_item_mutations": true,
+        "exact_text_transformations": true,
+        "durable_browser_history": true,
+        "atomic_named_sessions": true,
+        "named_thought_creation": true,
+        "session_operation_identity": true,
+        "idempotent_session_trash": true,
+        "bounded_lists": true,
+        "json_help_and_version": true,
+        "max_thought_stdin_bytes": MAX_THOUGHT_STDIN_BYTES,
+        "herdr_submission": true,
+        "herdr_managed_pane_required": true,
+    });
+    data[TOGGLE_CAPABILITY] = json!(true);
+    Outcome {
+        data,
         human: format!(
             "CLI schema 1\nSessions, board items, and thoughts are available\nActive control: {active_control_summary}\nHerdr submission: supported in a managed Herdr pane"
         ),

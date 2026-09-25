@@ -4,6 +4,7 @@ pub mod agent;
 pub mod attachment;
 pub mod attachment_accessibility;
 pub mod clipboard;
+pub mod companion;
 pub mod control;
 pub mod editor;
 pub mod environment;

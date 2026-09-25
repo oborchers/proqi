@@ -34,8 +34,13 @@ Never advertise, install, or publish this skill as an end-user Proqi skill.
    update one exact matching entry with three to six concise user-facing items
    in `release-highlights.json`. GitHub notes remain the only changelog. The
    manifest is the bounded in-product projection of those reviewed notes. Set
-   the `proqi` plugin `version` in `.claude-plugin/marketplace.json` to the
-   same version so Claude Code announces the updated skills.
+   the `version` in `herdr-plugin.toml` and the `proqi` plugin `version` in
+   `.claude-plugin/marketplace.json` to the same version so Claude Code
+   announces the updated skills; `release-plan` rejects a Herdr plugin version
+   that differs from Cargo. Replace every `Next release` and next-release scope
+   marker in `README.md` and `docs/` with the new version, and rewrite
+   version-free wording such as the Herdr plugin's "first Proqi release that
+   includes `proqi herdr toggle`" to name it.
 4. Run focused checks appropriate to the changed code. Routine release
    preparation then runs the cheap `cargo xtask release-plan vX.Y.Z` contract
    and Git diff hygiene. Run workflow lint only when workflows changed. Full

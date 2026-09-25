@@ -74,7 +74,8 @@ fn assert_capability_manifest(root: &std::path::Path) {
             "doctor",
             "sessions",
             "items",
-            "thoughts"
+            "thoughts",
+            "herdr"
         ])
     );
     assert_eq!(
@@ -93,5 +94,10 @@ fn assert_capability_manifest(root: &std::path::Path) {
     assert_eq!(capabilities["max_thought_stdin_bytes"], 131_072);
     assert_eq!(capabilities["herdr_submission"], true);
     assert_eq!(capabilities["herdr_managed_pane_required"], true);
+    assert_eq!(capabilities["herdr_companion_toggle"], true);
+    assert_eq!(
+        capabilities["operations"]["herdr"],
+        serde_json::json!(["toggle"])
+    );
     assert_eq!(capabilities["explicit_update_check"], true);
 }

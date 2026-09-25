@@ -220,6 +220,7 @@ fn insert_if(classes: &mut BTreeSet<ChangeClass>, class: ChangeClass, condition:
 
 fn is_known(path: &str) -> bool {
     has_extension(path, "md")
+        || is_herdr_plugin(path)
         || path.starts_with("src/")
         || path.starts_with("tests/")
         || path.starts_with(SHIPPED_SKILLS)
@@ -317,8 +318,14 @@ fn is_dependency(path: &str) -> bool {
         || path.starts_with(".config/nextest")
 }
 
+/// The Herdr plugin manifest and its runtime scripts ship from the repository root.
+fn is_herdr_plugin(path: &str) -> bool {
+    path == "herdr-plugin.toml" || path.starts_with("herdr-plugin/")
+}
+
 fn is_packaging(path: &str) -> bool {
-    path.starts_with("tools/ci-linux/")
+    is_herdr_plugin(path)
+        || path.starts_with("tools/ci-linux/")
         || path.starts_with(CLAUDE_PLUGIN)
         || path.starts_with("tests/package_contract")
         || matches!(path, "about.toml" | "about.hbs" | "dist-workspace.toml")

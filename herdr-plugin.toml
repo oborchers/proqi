@@ -1,0 +1,31 @@
+# Proqi as a Herdr plugin: herdr plugin install oborchers/proqi
+#
+# The manifest lives at the repository root so the shorthand without a
+# subdirectory installs it. Runtime files live in herdr-plugin/. The version
+# equals Cargo.toml and `cargo xtask quality` enforces the whole contract.
+
+id = "proqi"
+name = "Proqi"
+version = "0.13.0"
+min_herdr_version = "0.8.0"
+description = "An agent-optimized terminal scratchpad for follow-up prompts next to coding-agent sessions. One action opens, focuses, or closes one Proqi pane per tab."
+platforms = ["linux", "macos"]
+
+# Runs only during `herdr plugin install`, after the preview. It installs Proqi
+# with the checksum-verified standalone installer when no Proqi exists.
+[[build]]
+command = ["sh", "herdr-plugin/install.sh"]
+
+[[actions]]
+id = "toggle"
+title = "Toggle Proqi"
+description = "Open Proqi beside the focused agent, focus it, or close it when focused."
+command = ["sh", "herdr-plugin/proqi.sh", "toggle"]
+
+# Opened only by the toggle, which passes PROQI_HERDR_SESSION. Pane commands
+# run in the agent's directory, so the launcher is addressed from the root.
+[[panes]]
+id = "board"
+title = "Proqi"
+placement = "split"
+command = ["sh", "-c", "exec sh \"$HERDR_PLUGIN_ROOT/herdr-plugin/proqi.sh\" board"]

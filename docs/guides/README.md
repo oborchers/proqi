@@ -19,6 +19,7 @@ Start with the workflow you need:
 | Turn new macOS screenshots into thoughts | [Use Screenshot Inbox](paste-and-attachments.md#screenshot-inbox-on-macos) |
 | Find Proqi actions, skills, commands, or collaborators | [Discover commands, skills, and collaborators](discovery-and-invocations.md) |
 | Send a prompt to a verified coding agent | [Deliver prompts to agents](agent-delivery.md) |
+| Open Proqi beside a Herdr agent with one key | [Use Proqi as a Herdr plugin](herdr-plugin.md) |
 | Name, separate, resume, or recover work | [Organize sessions and recover work](organization-and-recovery.md) |
 | Check for updates or restart safely | [Update Proqi and active sessions](updates.md) |
 | Change themes, list behavior, density, or mouse capture | [Configure appearance and behavior](configuration.md) |

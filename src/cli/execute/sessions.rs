@@ -16,6 +16,7 @@ use super::{
 };
 
 pub(super) use listing::list_sessions;
+pub(super) use named::existing_directory;
 
 pub(super) fn browse_for_session(
     context: &mut RuntimeContext,
