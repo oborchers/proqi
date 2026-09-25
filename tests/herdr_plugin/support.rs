@@ -2,7 +2,6 @@
 
 use std::{
     fs,
-    os::unix::fs::PermissionsExt as _,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
@@ -84,8 +83,19 @@ impl Sandbox {
 pub fn write_tool(directory: &Path, name: &str, body: &str) -> PathBuf {
     fs::create_dir_all(directory).expect("tool directory");
     let path = directory.join(name);
-    fs::write(&path, format!("#!/bin/sh\n{body}")).expect("tool");
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("mode");
+    let source = directory.join(format!(".{name}.source"));
+    fs::write(&source, format!("#!/bin/sh\n{body}")).expect("tool source");
+    // A separate process writes the executable. Under `cargo test`, a test
+    // thread that forks while this process still holds a write handle to the
+    // tool would make executing it fail with ETXTBSY on Linux.
+    let installed = Command::new("install")
+        .args(["-m", "755"])
+        .arg(&source)
+        .arg(&path)
+        .status()
+        .expect("run install");
+    assert!(installed.success(), "install {}", path.display());
+    fs::remove_file(&source).expect("remove tool source");
     path
 }
 
