@@ -145,7 +145,8 @@ fn a_starting_launcher_counts_as_the_live_companion() {
 
 #[test]
 fn a_trashed_recorded_session_falls_back_to_the_named_session() {
-    let mut host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)]);
+    let mut host =
+        FakeHost::new("w1:p1", vec![agent("w1:p1", true)]).with_agent_names(&["agent-tab"]);
     let mut records = FakeRecords(vec![record(None, OTHER)]);
     let mut sessions = FakeSessions::with_named("agent-tab", OWN)
         .with_state(OTHER, CompanionSessionState::Unavailable);
@@ -155,6 +156,10 @@ fn a_trashed_recorded_session_falls_back_to_the_named_session() {
         CompanionToggleOutcome::Opened { session_id, .. } if session_id == session(OWN)
     ));
     assert_eq!(records.0, vec![record(Some("w1:p10"), OWN)]);
+    assert_eq!(
+        host.agent_queries, 1,
+        "the replacement name asks for agents"
+    );
 }
 
 #[test]

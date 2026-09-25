@@ -524,11 +524,12 @@ It acts only on the tab that had focus:
   touched.
 
 When the session is already open in another pane, for example because another
-workspace has a tab with the same label in the same repository, the toggle fails with
-`companion_session_active` instead of starting a second Proqi. When the tab's
-name already belongs to a session from another directory, for example two
-repositories that both have a tab labeled `main`, it fails with
-`session_name_conflict`; rename the tab or the other session. Failures are also
+workspace has a tab with the same label, or an agent with the same name, in the
+same repository, the toggle fails with `companion_session_active` instead of
+starting a second Proqi. When the derived name already belongs to a session
+from another directory, for example two repositories that both have a tab
+labeled `main`, it fails with `session_name_conflict`; rename the tab or agent
+that named the session, or the other session. Failures are also
 shown as a Herdr notification.
 
 A successful JSON response has one of these shapes:

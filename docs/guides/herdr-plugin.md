@@ -107,7 +107,8 @@ same get-or-create rule as `proqi sessions ensure`:
   `w2:t4` in workspace `api`.
 - If Herdr cannot list the tab's agents, the toggle opens nothing and shows a
   notification; try again. It does not fall back to the tab label, because the
-  plugin remembers the first session it picks.
+  plugin remembers the session it picks. The same rule picks a new session
+  when the remembered one was trashed or deleted.
 - The origin is the Herdr worktree checkout for a worktree workspace, else the
   Git repository root containing the focused pane's directory, else that
   directory itself. Splits in subdirectories of one repository therefore share
@@ -119,14 +120,16 @@ name and origin. It does not adopt sessions named by other tools. A Proqi that
 another tool keeps open in the tab is recognized and focused instead.
 
 If the session is already open in another pane, for example because two
-workspaces have tabs with the same label in the same repository, the toggle shows a
-Herdr notification and does not start a second Proqi. Rename one of the tabs,
-or close the other pane first.
+workspaces have tabs with the same label or agents with the same name in the
+same repository, the toggle shows a Herdr notification and does not start a
+second Proqi. Rename the tab or its agent, whichever named the session, or
+close the other pane first.
 
 If the tab's name already belongs to a Proqi session from a different
-directory, for example two repositories that both have a tab labeled `main`,
-the toggle reports a name conflict instead of guessing. Rename one of the tabs,
-or rename the other session with `proqi sessions rename`.
+directory, for example two repositories that both have a tab labeled `main` or
+an agent named `main`, the toggle reports a name conflict instead of guessing.
+Rename the tab, or the agent with `herdr agent rename`, whichever named the
+session, or rename the other session with `proqi sessions rename`.
 
 ### Closing and recovery
 

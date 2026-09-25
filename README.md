@@ -192,9 +192,10 @@ The toggle opens one Proqi pane to the right of the focused pane, focuses it
 when it is already open, and closes it once Proqi confirms its edits are saved
 when it is focused. Each tab keeps one Proqi session, whichever pane is
 focused. A tab's first session is named after the tab's agent when exactly one
-agent there has a Herdr name, else after the tab label. Herdr does not restore plugin panes after a cold server restart; the
-next toggle reopens the same session and closes the leftover shell if it is
-still idle. See the [Herdr plugin guide](docs/guides/herdr-plugin.md).
+agent there has a Herdr name, else after the tab label, or after the stable tab
+identity when that label is only Herdr's position number. Herdr does not
+restore plugin panes after a cold server restart; the next toggle reopens the
+same session and closes the leftover shell if it is still idle. See the [Herdr plugin guide](docs/guides/herdr-plugin.md).
 
 ## Start and resume
 
