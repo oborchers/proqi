@@ -65,6 +65,70 @@ fn update_snapshot(width: u16, height: u16) -> String {
         .join("\n")
 }
 
+fn rendered_board(app: &mut BoardApp) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(80, 12)).expect("terminal");
+    terminal
+        .draw(|frame| {
+            let layout = app.prepare_frame(frame.area());
+            render(
+                frame,
+                app,
+                &layout,
+                &Theme::resolve(ThemePreference::Dark, true),
+            );
+        })
+        .expect("draw");
+    let buffer = terminal.backend().buffer();
+    (0..buffer.area.height)
+        .map(|row| {
+            let content = (0..buffer.area.width)
+                .map(|column| buffer[(column, row)].symbol())
+                .collect::<String>();
+            format!("{row:02}│{}│", content.trim_end_matches(' '))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn successful_cohort_release_never_reports_cancellation_to_any_session() {
+    let mut ids = FakeIdGenerator::new(1_800_000_000_000);
+    let operation = ids.request_id();
+    for _ in 0..25 {
+        let (mut app, _, _) = app();
+        assert!(app.begin_update_barrier(operation, version(), Timestamp::from_millis(10)));
+        assert!(app.release_update_barrier(operation));
+        assert_eq!(app.update_barrier_operation(), None);
+        assert_eq!(app.status_text(), Some("Session is ready."));
+        let rendered = rendered_board(&mut app);
+        assert!(rendered.contains("Session is ready."));
+        assert!(!rendered.contains("cancelled"));
+        assert!(app.begin_update_barrier(operation, version(), Timestamp::from_millis(20)));
+    }
+}
+
+#[test]
+fn update_release_status_has_a_complete_board_buffer() {
+    let (mut app, mut ids, _) = app();
+    let operation = ids.request_id();
+    assert!(app.begin_update_barrier(operation, version(), Timestamp::from_millis(10)));
+    assert!(app.release_update_barrier(operation));
+
+    insta::with_settings!({snapshot_path => "../snapshots"}, {
+        insta::assert_snapshot!("update_release_status_wide", rendered_board(&mut app));
+    });
+}
+
+#[test]
+fn aborted_preflight_releases_barrier_and_allows_retry() {
+    let (mut app, mut ids, _) = app();
+    let aborted = ids.request_id();
+    assert!(app.begin_update_barrier(aborted, version(), Timestamp::from_millis(10)));
+    assert!(app.release_update_barrier(aborted));
+    assert_eq!(app.status_text(), Some("Session is ready."));
+    assert!(app.begin_update_barrier(ids.request_id(), version(), Timestamp::from_millis(20)));
+}
+
 #[test]
 fn barrier_blocks_competing_attempts_and_expires_safely() {
     let (mut app, mut ids, _) = app();
