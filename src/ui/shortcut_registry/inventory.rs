@@ -117,6 +117,8 @@ pub(super) const ESCAPE_CONTEXTS: &[Context] = &[
     Context::BrowserQuery,
     Context::Rename,
     Context::BrowserRename,
+    Context::ExportPath,
+    Context::ExportReplace,
     Context::Update,
     Context::Screenshot,
     Context::Direction,

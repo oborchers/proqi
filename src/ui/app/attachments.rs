@@ -29,6 +29,7 @@ impl BoardApp {
                 | crate::application::Action::SplitThought { .. }
                 | crate::application::Action::ExtractThought { .. }
                 | crate::application::Action::MergeThoughts { .. }
+                | crate::application::Action::CompleteExport(_)
                 | crate::application::Action::Undo { .. }
                 | crate::application::Action::Redo { .. }
         )

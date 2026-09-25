@@ -20,6 +20,8 @@ pub(super) enum ActiveInputOwner {
     Rename,
     ThoughtRename,
     Transfer,
+    ExportPath,
+    ExportReplace,
     Invocation,
     InvocationQuery,
     GlobalDeliveryQuery,
@@ -43,6 +45,8 @@ impl ActiveInputOwner {
             Self::Search => ShortcutContext::Search,
             Self::Rename | Self::ThoughtRename => ShortcutContext::Rename,
             Self::Transfer => ShortcutContext::Transfer,
+            Self::ExportPath => ShortcutContext::ExportPath,
+            Self::ExportReplace => ShortcutContext::ExportReplace,
             Self::Invocation => ShortcutContext::Invocation,
             Self::InvocationQuery => ShortcutContext::InvocationQuery,
             Self::GlobalDeliveryQuery => ShortcutContext::GlobalDeliveryQuery,
@@ -62,6 +66,8 @@ impl ActiveInputOwner {
                 | Self::Search
                 | Self::Rename
                 | Self::Transfer
+                | Self::ExportPath
+                | Self::ExportReplace
                 | Self::Invocation
                 | Self::InvocationQuery
                 | Self::GlobalDeliveryQuery
@@ -101,6 +107,8 @@ impl ActiveInputOwner {
             | Self::Search
             | Self::Rename
             | Self::Transfer
+            | Self::ExportPath
+            | Self::ExportReplace
             | Self::Invocation
             | Self::InvocationQuery
             | Self::GlobalDeliveryQuery
@@ -165,6 +173,9 @@ impl BoardApp {
         }
         if self.transfer.is_some() {
             owners.push(ActiveInputOwner::Transfer);
+        }
+        if let Some(owner) = self.export_input_owner() {
+            owners.push(owner);
         }
         if self.invocation_popup.is_some() {
             owners.push(if self.manual_invocation_query_active() {

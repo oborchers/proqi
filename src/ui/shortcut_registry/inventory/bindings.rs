@@ -275,6 +275,7 @@ fn owner_navigation(
             | Context::Screenshot
             | Context::ReleaseHighlights
             | Context::GlobalDeliveryDisposition
+            | Context::ExportReplace
     ) {
         match key {
             LogicalKey::Character('j' | 'J') => return Some(Action::FocusNext),

@@ -140,6 +140,20 @@ pub enum Effect {
         /// External request identity.
         request_id: RequestId,
     },
+    /// Atomically write one plain-text thought export, durable before it reports success.
+    WriteExport {
+        /// External request identity.
+        request_id: RequestId,
+        /// Exact destination, bytes, and replacement policy.
+        request: crate::ports::export::ExportWriteRequest,
+    },
+    /// List one directory for export destination completion.
+    ListExportDirectory {
+        /// Completion generation used to discard a stale listing.
+        generation: u64,
+        /// Absolute directory to list.
+        directory: std::path::PathBuf,
+    },
     /// Atomically export the current in-memory board for recovery.
     ExportRecovery {
         /// External request identity.

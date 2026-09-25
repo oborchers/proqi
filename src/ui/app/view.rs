@@ -393,6 +393,11 @@ impl BoardApp {
     /// UTF-8 byte cursor for the active searchable overlay query.
     #[must_use]
     pub fn overlay_query_cursor(&self) -> Option<usize> {
+        self.export_field_cursor()
+            .or_else(|| self.overlay_picker_query_cursor())
+    }
+
+    fn overlay_picker_query_cursor(&self) -> Option<usize> {
         self.search
             .as_ref()
             .map(search::SearchState::query_cursor)
@@ -413,6 +418,9 @@ impl BoardApp {
     /// Directional selection for the active searchable overlay query.
     #[must_use]
     pub(in crate::ui) fn overlay_query_selection(&self) -> Option<super::query::QuerySelection> {
+        if self.export.active.is_some() {
+            return self.export_field_selection();
+        }
         self.search
             .as_ref()
             .and_then(search::SearchState::query_selection)

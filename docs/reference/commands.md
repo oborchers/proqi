@@ -1,6 +1,6 @@
 # Commands palette reference
 
-<span class="version-scope">59 actions in Proqi 0.14.0</span>
+<span class="version-scope">62 actions in the next release (59 in Proqi 0.14.0)</span>
 
 Press `:` in Board mode to open Commands. Search, use the arrow keys or pointer
 to choose a result, then press `Enter` or click. The same canonical
@@ -72,6 +72,9 @@ available actions below.
 | **Submit all and keep** | Delivers every live thought and retains the Board. | Separators and names are omitted from payload. |
 | **Send to another Proqi session** | Copies eligible selected thoughts in order into another durable Proqi session. | The selected destination cohort commits as one unit; separators stay in the source. |
 | **Send to another Proqi session and remove thought** | Copies the complete selected cohort, then removes its sources after destination durability. | Source removal is one undoable unit; undo leaves destination copies intact. |
+| **Export to file...** | Writes the focused thought or selected thoughts to one plain-text file, exactly as copying them would. | Next release. Opens a path field; the Board is unchanged. |
+| **Export to file and remove...** | Writes the file, then removes the exported thoughts. | Next release. Removal happens only after the file is durable and is one undoable unit; undo keeps the file. |
+| **Export to file and replace with reference...** | Writes the file, then replaces the exported thoughts with one thought holding the file path, shown as `[File N]`. | Next release. One undoable unit; undo restores the thoughts and keeps the file. |
 | **Refresh adjacent agents** | Rediscovers eligible Herdr targets. | Does not send a prompt. |
 
 ## Sessions

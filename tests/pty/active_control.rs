@@ -8,6 +8,8 @@ use super::support::{
     wait_for_path,
 };
 
+#[path = "active_control/export.rs"]
+mod export;
 #[path = "active_control/named_requests.rs"]
 mod named_requests;
 #[path = "active_control/semantic.rs"]

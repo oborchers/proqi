@@ -18,6 +18,7 @@ collaboration service, or content upload.
 | Attachment path | The path stays in prompt content; the receiving agent may read it after delivery. |
 | Diagnostics collect | Writes a new redacted local file only. Nothing is uploaded. |
 | Recovery export | Writes a new private local recovery file only. |
+| Thought export | Writes the chosen plain-text file only, after confirmation when it replaces an existing file. |
 
 Proqi never reads an agent conversation, waits for its response, injects raw
 keys as delivery fallback, or requests an iCloud attachment download.

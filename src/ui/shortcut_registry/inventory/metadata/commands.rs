@@ -78,9 +78,12 @@ const fn command_applicability(action: Action) -> CommandApplicability {
         Action::ReflowThought
         | Action::Collapse
         | Action::InsertInvocation
-        | Action::SubmitToAgent => CommandApplicability::MutableThought,
+        | Action::SubmitToAgent
+        | Action::ExportRemove
+        | Action::ExportReplace => CommandApplicability::MutableThought,
         Action::SendSession => CommandApplicability::TransferKeep,
         Action::SendSessionRemove => CommandApplicability::TransferRemove,
+        Action::ExportThoughts => CommandApplicability::Export,
         Action::MoveUp => CommandApplicability::ReorderUp,
         Action::MoveDown => CommandApplicability::ReorderDown,
         _ => CommandApplicability::Always,
@@ -150,6 +153,9 @@ const fn command_category(action: Action) -> CommandCategory {
         | Action::SubmitAllKeep
         | Action::SendSession
         | Action::SendSessionRemove
+        | Action::ExportThoughts
+        | Action::ExportRemove
+        | Action::ExportReplace
         | Action::RefreshAgents => CommandCategory::Delivery,
         Action::RenameSession | Action::CopySessionId | Action::CopyResume => {
             CommandCategory::Session

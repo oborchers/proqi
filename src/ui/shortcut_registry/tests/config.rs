@@ -228,6 +228,8 @@ fn every_eligible_action_context_pair_is_configurable_and_resolves_its_identity(
     }
 }
 
+#[path = "config/export.rs"]
+mod export;
 #[path = "config/footer_visibility.rs"]
 mod footer_visibility;
 

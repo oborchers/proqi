@@ -174,6 +174,7 @@ impl BoardApp {
             });
         let search_items = self.search_match_count();
         let transfer_items = self.transfer_match_count();
+        let export_items = self.export_row_count();
         let preferred_rows = if self.screenshot.takeover.is_some() {
             2
         } else if self.update_prompt.is_some() {
@@ -185,6 +186,8 @@ impl BoardApp {
             crate::ui::shortcuts::row_count(self, content_width)
         } else if self.rename.is_some() {
             2
+        } else if self.export.active.is_some() {
+            export_items.max(2)
         } else if self.invocation_popup.is_some() {
             invocation_groups
                 .iter()
@@ -215,6 +218,7 @@ impl BoardApp {
                     .max(global_delivery_items)
                     .max(search_items)
                     .max(transfer_items)
+                    .max(export_items)
                     .max(invocation_items)
                     .max(update_items),
                 preferred_rows,

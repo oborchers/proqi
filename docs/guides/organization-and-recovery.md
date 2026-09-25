@@ -32,6 +32,57 @@ Separators participate in focus, selection, duplicate, delete, movement,
 session persistence, and Board undo. Copy, cut, cleanup, collapse, and agent
 delivery omit them. A recovery export retains their identity and Board order.
 
+## Export thoughts to a text file
+
+<span class="version-scope">Next release</span>
+
+Focus a thought or select several, open Commands, and choose one of three
+actions:
+
+- **Export to file...** writes the file and leaves the Board unchanged.
+- **Export to file and remove...** writes the file, then removes the exported
+  thoughts.
+- **Export to file and replace with reference...** writes the file, then
+  replaces the exported thoughts with one thought that holds the file's
+  absolute path followed by one space. It appears as `[File N]`, like a
+  Screenshot Inbox capture, and is ready to deliver to an agent.
+
+A path field opens with a suggested destination. Edit it freely, press `Tab` to
+complete a folder or file name (press it again to cycle through several
+matches, `Shift+Tab` goes back), then press `Enter` or click the save row.
+`Escape` cancels. With a mouse, click a completion row to use it and click the
+save row to write.
+
+- **Where it goes.** The suggestion is the session's folder: the directory
+  where the session was most recently opened. A relative path you type also
+  resolves from there, and `~/` resolves from your home folder. A missing folder
+  is reported and never created. When that folder is a Git working tree, the
+  file lands in the working tree, like any file you save there.
+- **Default name.** One selected thought with a name uses that name. Otherwise
+  the name is the session name plus a UTC timestamp, such as
+  `research-2026-09-25-132012.txt`. Characters that are unsafe in file names
+  become `-`.
+- **What it contains.** Exactly the text that copying the same thoughts
+  produces: their bodies in Board order, separated by one blank line, with no
+  names or headings. Separators are skipped. The separator between thoughts is
+  always this copy separator; the `merge_separator` setting affects only
+  merging. Attached files are referenced by the same paths as in the copy text,
+  never copied.
+- **Existing files.** If the file exists, Proqi asks before replacing it, with
+  **Cancel** preselected. If the file changes while you decide, nothing is
+  replaced. An existing symbolic link is never replaced; type the path it
+  points to instead.
+- **Safety.** The text is written to a temporary file in the same folder,
+  synchronized to disk, and then moved into place, so the file is complete or
+  absent. The Board changes only after that. Removing or replacing is one undo
+  step; undo restores the thoughts and removes the reference, and the file
+  stays. If a write fails, for example on a read-only folder or a full disk,
+  the Board is left unchanged. New files follow your umask like any saved file.
+
+The same export is available from scripts with
+[`proqi thoughts export`](../reference/cli.md#export-thoughts-to-a-file). The CLI
+resolves a relative `--output` from its own current directory.
+
 ## Start, continue, and resume sessions
 
 ```sh
@@ -63,6 +114,7 @@ cover rename, trash, and restore across sessions.
 | Session rename, trash, restore | Yes | Persistent Browser undo |
 | Accepted submit with local removal | Local removal only | Undo restores the source but cannot recall the delivery |
 | Cross-session send and remove | Source removal only | Undo does not retract the destination copy |
+| Export and remove, or replace with reference | The Board change only | Undo restores the thoughts; the exported file stays |
 | Clipboard write | No external recall | Local cut removal is still undoable |
 | Session prune | No | Requires a previously trashed session and `--yes` |
 

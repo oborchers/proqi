@@ -52,6 +52,7 @@ surface.
 | Extract selection | Shipped | Move exact selected text into a neighboring thought atomically. | [Transform and organize](../guides/edit-and-transform.md#extract-selected-text) |
 | Merge thoughts | Shipped | Join a contiguous thought range with the configured exact separator. | [Transform and organize](../guides/edit-and-transform.md#merge-a-contiguous-range) |
 | Existing-thought cleanup | Shipped | Clean prose spacing while preserving protected structures and annotations. | [Transform and organize](../guides/edit-and-transform.md#clean-existing-spacing) |
+| Export to a text file | Next release | Write selected thoughts to a plain-text file exactly as copied, optionally removing them or replacing them with a `[File N]` reference, as one undo step. | [Sessions and recovery](../guides/organization-and-recovery.md#export-thoughts-to-a-text-file) |
 | Scriptable exact transformations | Shipped since 0.12.0 | Split, extract, merge, and reflow with content digests, UTF-8 byte boundaries, and idempotent retry identities. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Persistent contextual undo and redo | Shipped | Separate Board, editor, and Browser histories survive restart and never claim to recall external effects. | [Undo and redo](undo-redo.md) |
 
@@ -137,6 +138,7 @@ surface.
 | JSON help and version | Shipped since 0.13.0 | `--json --help` and `--json --version` succeed with structured data and exit 0. | [CLI](cli.md#common-options) |
 | Documented error codes | Shipped since 0.13.0 | Every JSON error code, exit status, retry class, and `details` shape, also published in `capabilities`. | [CLI](cli.md#errors) |
 | Human and JSON Board-item commands | Shipped since 0.12.0 | Insert separators and move, duplicate, or delete typed thoughts and separators. | [CLI](cli.md#change-board-items) |
+| Scriptable thought export | Next release | `thoughts export` writes exact copy text atomically, with `--remove`, `--replace-with-reference`, `--replace-existing`, and retry-safe `--operation-id`. | [CLI](cli.md#export-thoughts-to-a-file) |
 | Human and JSON thought commands | Shipped | List, inspect, add, rename, replace, collapse, move, send, delete, undo, and redo; split, extract, merge, and reflow have been available since 0.12.0. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Typed canonical identifiers | Shipped | Prefixes identify resource kinds and retain complete UUIDv7 values. | [CLI](cli.md) |
 | Idempotent mutations | Shipped | Matching operation identities return the original receipt; divergent semantic reuse is rejected. | [CLI](cli.md#inspect-and-change-thoughts) |

@@ -151,6 +151,10 @@ mod top_boundary;
 mod terminal_safe_navigation;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/thought_export.rs"]
+mod thought_export;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/thought_names.rs"]
 mod thought_names;
 

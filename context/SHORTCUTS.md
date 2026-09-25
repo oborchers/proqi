@@ -46,6 +46,8 @@ last item dispatches a stroke.
 | BrowserQuery | Nonempty session-browser query | Query text |
 | Rename | Board session-name or focused thought-name editor | Name text |
 | BrowserRename | Session Browser name editor | Name text |
+| ExportPath | Plain-text export destination field; Tab and BackTab complete paths | Path text |
+| ExportReplace | Confirmation before an export replaces an existing file | None, modal navigation wins |
 | Update | Update choice | None, modal navigation wins |
 | Screenshot | Screenshot takeover and quit choice | None, modal navigation wins |
 | Recovery | Failed-durability recovery | None, recovery routes remain reachable |
@@ -81,7 +83,7 @@ Every semantic action has one stable `ShortcutActionId`. Its descriptor owns:
 - one content-free diagnostics identity;
 - the mapping into an established typed UI intention or application action.
 
-The closed action inventory covers all 59 current Commands actions plus direct
+The closed action inventory covers all 62 current Commands actions plus direct
 close, confirm, text editing, navigation, selection, clipboard, history,
 submission, Board, Browser management, recovery, and direction actions. The
 source of truth is `ShortcutActionId::COMMANDS` plus the registry's

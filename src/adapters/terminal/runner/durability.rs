@@ -72,6 +72,8 @@ pub(super) fn enqueue_effects(
             | Effect::SubmitAgent(_)
             | Effect::WriteClipboard { .. }
             | Effect::ReadClipboard { .. }
+            | Effect::WriteExport { .. }
+            | Effect::ListExportDirectory { .. }
             | Effect::ExportRecovery { .. } => {
                 if !lanes.external.send(&effect)? {
                     return Err(TerminalError::Worker(
