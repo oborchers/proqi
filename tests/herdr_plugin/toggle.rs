@@ -31,7 +31,9 @@ printf 'herdr %s\n' "$*" >> '{log}'
 case "$1 $2" in
   "pane list") cat "$dir/panes.json" ;;
   "agent list")
-    if [ -f "$dir/agents.json" ]; then cat "$dir/agents.json"; else
+    if [ -f "$dir/agents-fail" ]; then
+      printf '%s\n' '{{"error":{{"code":"server_busy","message":"busy"}}}}' >&2; exit 1
+    elif [ -f "$dir/agents.json" ]; then cat "$dir/agents.json"; else
       printf '%s\n' '{{"id":"x","result":{{"type":"agent_list","agents":[]}}}}'; fi ;;
   "pane process-info")
     if [ -f "$dir/process-$4.json" ]; then cat "$dir/process-$4.json"; else
@@ -307,6 +309,28 @@ fn the_first_open_names_the_session_after_the_tabs_only_named_agent() {
     let opened = data(&herdr.toggle("w1:p1", true));
     let session = opened["session_id"].as_str().expect("session");
     assert_named_session(&herdr, session, "api-claude");
+}
+
+#[test]
+fn a_failed_agent_query_reports_herdr_failed_and_opens_nothing() {
+    let herdr = FakeHerdr::new();
+    herdr.panes(&[agent()]);
+    fs::write(herdr.sandbox.path().join("herdr").join("agents-fail"), "").expect("marker");
+    herdr.opens("w1:p2");
+    let output = herdr.toggle("w1:p1", true);
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    let envelope: Value = serde_json::from_slice(&output.stdout).expect("JSON error");
+    assert_eq!(envelope["error"]["code"], "herdr_failed");
+    assert_eq!(herdr.opened_calls(), 0);
+    assert!(
+        !herdr
+            .sandbox
+            .path()
+            .join("plugin-state")
+            .join("companions.json")
+            .exists(),
+        "no record is written"
+    );
 }
 
 #[test]
