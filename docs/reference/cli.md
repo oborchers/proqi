@@ -344,8 +344,10 @@ proqi --json thoughts export <session> <thought> --output ~/notes.txt --replace-
 ```
 
 - `--output` resolves a relative path from the current directory of the
-  `proqi` process and `~/` from the home directory. A missing parent folder
-  fails with `export_directory_missing` and is never created.
+  `proqi` process and `~/` from the home directory. `.` and `..` are resolved
+  as text before writing, so `../out.txt` names the clean absolute path, and
+  that exact path is what the result and a reference thought report. A missing
+  parent folder fails with `export_directory_missing` and is never created.
 - An existing file fails with `export_target_exists` unless you pass
   `--replace-existing`. An existing symbolic link, folder, or other non-regular
   entry always fails with `export_target_invalid`; name the file the link
@@ -353,7 +355,11 @@ proqi --json thoughts export <session> <thought> --output ~/notes.txt --replace-
   `export_target_invalid` and `details.reason` `not_utf8`.
 - The file is written to a temporary file in the destination folder, synchronized,
   and then atomically moved into place, so readers never see a partial file.
-  New files follow your umask; replacing a file keeps its permissions.
+  New files follow your umask. A replacement takes the replaced file's read,
+  write, and execute bits before it is moved into place; set-user-ID and
+  set-group-ID bits, the owner and group, access control lists, and extended
+  attributes are not carried over. With `--replace-existing`, a file that
+  disappears just before the replacement is simply created.
 - `--remove` deletes the thoughts after the file is durable. `--replace-with-reference`
   replaces them with one thought holding the file's absolute path followed by
   one space, shown as `[File N]`. Either change is one Board operation, so one
@@ -361,15 +367,29 @@ proqi --json thoughts export <session> <thought> --output ~/notes.txt --replace-
   stays.
 - A write failure fails with `export_write_failed` and `details.reason`
   `permission_denied`, `read_only`, `storage_full`, `replace_unsupported` (the
-  file system cannot replace a file atomically), `displaced`,
-  `written_unconfirmed`, or `io`, and changes nothing on the Board.
+  file system cannot replace a file atomically), `install_unsupported` (the
+  file system cannot create a file without risking an existing one),
+  `displaced`, `written_unconfirmed`, or `io`, and changes nothing on the Board.
   `details.file_written` is `true` only for `displaced`, where a replacement left
   an entry under the temporary name given in the message and the destination
   may already hold the export, and for `written_unconfirmed`, where the file is
   in place but its permissions or durability could not be confirmed. Check the
-  files before retrying. If the thoughts change or the owner rejects the Board step after
-  the file was written, the error keeps its own code and adds
-  `details.file_written: true`.
+  files before retrying. If the thoughts change or the Board step fails after
+  the file was written, the error keeps its own code and details (for example
+  `session_id` and `holder` for `session_busy`) and adds `output`,
+  `file_written: true`, and the `operation_id` of the Board step, including one
+  the CLI generated. Retrying with that `--operation-id` accepts the identical
+  file and commits only the Board step.
+- Before writing, `--remove` and `--replace-with-reference` confirm that an
+  active Proqi owning the session supports control protocol 13. An older owner
+  fails with `protocol_mismatch` and no file is written.
+- If Proqi stops between replacing a file and removing the replaced copy, a
+  hidden `.proqi-export-*.tmp` file in the destination folder holds the
+  replaced file's previous contents. It is safe to delete once you have
+  checked it.
+- `--operation-id` requires `--remove` or `--replace-with-reference`; a plain
+  export changes nothing on the Board and has no identity to replay, so the
+  combination fails with `invalid_arguments` before anything is written.
 - With `--operation-id`, an exact retry after a completed Board change returns
   the original receipt with `idempotent_replay: true` and does not rewrite the
   file, even if the thoughts were restored and edited since. Reusing the

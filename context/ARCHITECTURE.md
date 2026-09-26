@@ -491,14 +491,31 @@ exchange back, the temporary name is removed only when it provably holds this
 export's own file (same device and inode as the open handle); any other entry
 is kept and reported. Every removal of a temporary name is checked: when the
 old file or this export's own file cannot be removed, the leftover is reported
-as `displaced` with its path instead of being ignored. A replacement is staged with mode `0600` and receives the
-displaced file's permission bits only after verification, so it is never
-published with wider access. Failures after the file is in place are reported
-as `written_unconfirmed` rather than as an ordinary write failure. File systems
+as `displaced` with its path instead of being ignored. A crash between the
+exchange and that removal leaves a `.proqi-export-*.tmp` file in the
+destination folder holding the replaced file's previous contents. A replacement
+is created with mode `0600` and receives the inspected file's `0777` permission
+bits before the exchange, so it is never published with wider access than the
+file it replaces and never stays private; set-user-ID and set-group-ID bits,
+owner, group, access control lists, and extended attributes are not copied. If
+the displaced file's bits changed concurrently, they are copied again after
+verification. Failures after the file is in place, including a failed folder
+synchronization on the identical-bytes retry path, are reported as
+`written_unconfirmed` rather than as an ordinary write failure. File systems
 without an atomic exchange refuse replacement (`replace_unsupported`) instead of
-racing a check against a rename. A replacement takes the displaced file's
-permission bits and is synchronized again. The identity is content-free, so a same-length
-rewrite within the file system's timestamp granularity is not detected.
+racing a check against a rename. Under an explicit replace-any policy, a target
+that disappeared before the exchange is created as a new file. When
+`persist_noclobber` reports a denial or unsupported operation after the
+temporary file was created in the same folder, the cause is the file system's
+missing no-replace rename (tempfile falls back to a hard link), reported as
+`install_unsupported` rather than `permission_denied`. The identical-bytes check
+opens the target with `O_NONBLOCK | O_NOFOLLOW` and reads only when the open
+handle is still the inspected regular file (same device and inode), so a FIFO,
+device, or link swapped in after inspection is never read or waited on. The
+identity is content-free, so a same-length rewrite within the file system's
+timestamp granularity is not detected. The terminal composition root decides a
+deterministic qualification fault once and passes it to `FileExport`; the
+adapter reads no environment.
 The adapter requires an existing parent folder and never creates one, refuses
 symbolic links, folders, and other non-regular targets, writes a `tempfile`
 temporary in the destination folder with mode `0666` before the umask, flushes
@@ -509,13 +526,20 @@ Failures are typed as missing folder, invalid or unsafe target, existing file,
 changed after confirmation, permission, read-only, storage full, or I/O, and no
 partial destination file remains.
 
-`DirectoryLister` returns at most 4,096 UTF-8 entries of one absolute folder,
+`DirectoryLister` returns at most 4,096 UTF-8 entries of one absolute folder
+whose names start with the typed name, inspecting at most 65,536 entries,
 sorted by name, with folder status following links, for destination completion.
+A listing that stopped at either bound is marked truncated, and completion then
+claims neither a unique match nor no match. Matching and the shared prefix use
+every listed match; only the 64 offered rows are capped.
 Both ports run on the existing bounded external lane. The UI owns the field,
 generation-tagged listings, and the pure completion policy; the reducer and
 render path perform no filesystem work. The pure path policy in
 `domain::export` resolves `~/` and relative destinations against an injected
-base and home directory, names default files, and sanitizes stems.
+base and home directory, resolves `.` and `..` lexically so the written path,
+the reference thought, and the receipt agree, names default files, and
+sanitizes stems. The CLI resolves the home directory once when it opens its
+runtime context, beside the working directory.
 
 Export content comes from `application::prompt::copy_text`, the same owner as
 Board copy, so a file is byte-identical to the copy text of its selection. The

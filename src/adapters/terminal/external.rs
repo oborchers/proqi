@@ -130,6 +130,10 @@ struct ExternalDirectories {
 }
 
 impl ExternalLane {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the composition root passes each external adapter input explicitly"
+    )]
     pub(super) fn spawn_with_invocation_roots(
         recovery_directory: PathBuf,
         recovery_fallback_directory: PathBuf,
@@ -138,6 +142,7 @@ impl ExternalLane {
         presentation_source: String,
         cancellation: CancellationFlag,
         invocation_roots: Vec<AdditionalInvocationRoot>,
+        export: crate::adapters::export::FileExport,
     ) -> Self {
         let (request_sender, request_receiver) = sync_channel(32);
         let (result_sender, result_receiver) = sync_channel(32);
@@ -158,6 +163,7 @@ impl ExternalLane {
                     presentation_source,
                     cancellation,
                     invocation_roots,
+                    export,
                 );
             });
         });
@@ -214,9 +220,11 @@ impl ExternalLane {
             Effect::ListExportDirectory {
                 generation,
                 directory,
+                prefix,
             } => ExternalRequest::ThoughtExport(ThoughtExportRequest::List {
                 generation: *generation,
                 directory: directory.clone(),
+                prefix: prefix.clone(),
             }),
             _ => return Ok(false),
         };
@@ -314,6 +322,7 @@ fn external_loop(
     presentation_source: String,
     cancellation: CancellationFlag,
     invocation_roots: Vec<AdditionalInvocationRoot>,
+    mut export: crate::adapters::export::FileExport,
 ) {
     let ExternalDirectories {
         recovery,
@@ -389,7 +398,7 @@ fn external_loop(
                 request_id,
                 result: recovery.export(request_id, &document),
             },
-            ExternalRequest::ThoughtExport(request) => run_thought_export(request),
+            ExternalRequest::ThoughtExport(request) => run_thought_export(&mut export, request),
         };
         if results.send(outcome).is_err() {
             return;

@@ -63,6 +63,27 @@ impl CliError {
         self.details = details;
         self
     }
+
+    /// Add `extra` fields to the existing details, keeping every field already there.
+    pub(super) fn with_merged_details(mut self, extra: Value) -> Self {
+        let Value::Object(extra) = extra else {
+            return self;
+        };
+        match &mut self.details {
+            Value::Object(details) => {
+                for (key, value) in extra {
+                    details.entry(key).or_insert(value);
+                }
+            }
+            Value::Null => self.details = Value::Object(extra),
+            other => {
+                let mut merged = extra;
+                merged.insert("cause".to_owned(), other.take());
+                self.details = Value::Object(merged);
+            }
+        }
+        self
+    }
 }
 
 impl std::fmt::Display for CliError {
@@ -232,4 +253,37 @@ fn write_json(value: &Value) -> Result<(), String> {
     let mut output = std::io::stdout().lock();
     serde_json::to_writer(&mut output, value).map_err(|error| error.to_string())?;
     writeln!(output).map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod merged_details_tests {
+    use serde_json::json;
+
+    use super::{CliError, ErrorCode};
+
+    #[test]
+    fn merged_details_keep_every_existing_field() {
+        let busy = CliError::new(ErrorCode::SessionBusy, "busy".to_owned())
+            .with_details(json!({ "session_id": "ses_x", "holder": { "pid": 1 } }))
+            .with_merged_details(json!({ "output": "/o.txt", "file_written": true }));
+        assert_eq!(
+            busy.details(),
+            &json!({
+                "session_id": "ses_x",
+                "holder": { "pid": 1 },
+                "output": "/o.txt",
+                "file_written": true,
+            })
+        );
+        let plain = CliError::new(ErrorCode::StorageFailed, "failed".to_owned())
+            .with_merged_details(json!({ "file_written": true }));
+        assert_eq!(plain.details(), &json!({ "file_written": true }));
+        let odd = CliError::new(ErrorCode::StorageFailed, "failed".to_owned())
+            .with_details(json!("cause"))
+            .with_merged_details(json!({ "file_written": true }));
+        assert_eq!(
+            odd.details(),
+            &json!({ "file_written": true, "cause": "cause" })
+        );
+    }
 }

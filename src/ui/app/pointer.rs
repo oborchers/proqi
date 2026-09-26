@@ -227,7 +227,9 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         self.begin_overlay_activation(pointer, clock.now());
-        if self.export.active.is_some() {
+        // The topmost owner is the overlay on screen; an owner beneath it never
+        // receives a row activation meant for the visible one.
+        if self.topmost_owner_is_export() {
             self.activate_export_row(index, ids)
         } else if self.screenshot.takeover.is_some() {
             self.screenshot.takeover_selected = index.min(1);

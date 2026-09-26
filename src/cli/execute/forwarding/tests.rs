@@ -1,6 +1,6 @@
 //! Owner-protocol negotiation for forwarded mutations and read synchronization.
 
-use super::{required_protocol, sync_protocol};
+use super::{owner_supports, required_protocol, sync_protocol};
 use crate::{
     cli::error_code::ErrorCode,
     domain::{ExportDisposition, InstanceId, OperationId, SessionId, ThoughtId, Timestamp},
@@ -42,6 +42,14 @@ fn export_completion_refuses_owners_older_than_protocol_thirteen() {
     };
     let refused = required_protocol(&owner(12), &mutation).expect_err("old owner");
     assert_eq!(refused.code(), ErrorCode::ProtocolMismatch);
+    // The export preflight runs before any file is written.
+    let refused = owner_supports(Some(&owner(12)), &mutation).expect_err("preflight");
+    assert_eq!(refused.code(), ErrorCode::ProtocolMismatch);
+    assert!(owner_supports(Some(&owner(13)), &mutation).is_ok());
+    assert!(
+        owner_supports(None, &mutation).is_ok(),
+        "without an owner the CLI commits under its own lease"
+    );
     assert_eq!(
         required_protocol(&owner(13), &mutation).expect("current owner"),
         13

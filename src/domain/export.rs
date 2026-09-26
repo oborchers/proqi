@@ -70,8 +70,10 @@ pub enum ExportPathError {
 /// Resolve a typed destination against a base directory.
 ///
 /// `~` and `~/…` resolve from `home`. Other relative paths resolve from `base`.
-/// Current-directory components are dropped; parent components are kept so the
-/// operating system, not a lexical guess, decides where they lead.
+/// `.` and `..` are resolved lexically, so the written path, the reference
+/// thought, and the receipt all name the same clean absolute path. As in the
+/// shell's logical view, `..` after a symbolic link returns to the folder that
+/// named the link.
 ///
 /// # Errors
 ///
@@ -102,10 +104,28 @@ pub fn resolve_export_path(
     } else {
         base.join(input)
     };
-    let normalized = joined
-        .components()
-        .filter(|component| !matches!(component, Component::CurDir))
-        .collect::<PathBuf>();
+    // The typed value must itself end in a file name, not in `.` or `..`.
+    // `Path::components` drops a trailing `.`, so that case is checked on the text.
+    if input == "."
+        || input.ends_with("/.")
+        || !matches!(
+            Path::new(input).components().next_back(),
+            Some(Component::Normal(_))
+        )
+    {
+        return Err(ExportPathError::MissingFileName);
+    }
+    let mut normalized = PathBuf::new();
+    for component in joined.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                // The root's parent is the root.
+                let _popped = normalized.pop();
+            }
+            component => normalized.push(component),
+        }
+    }
     match normalized.components().next_back() {
         Some(Component::Normal(_)) => Ok(normalized),
         _ => Err(ExportPathError::MissingFileName),

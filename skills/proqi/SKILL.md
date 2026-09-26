@@ -250,7 +250,10 @@ proqi --json thoughts export ses_06g30t7dv5qv55n1ppn3clis3k tht_06g30t8fudrq55fd
 ```
 
 On `export_target_exists`, report the existing file and ask before retrying with
-`--replace-existing`.
+`--replace-existing`. Pass `--operation-id` only with `--remove` or
+`--replace-with-reference`. When an error reports `details.file_written: true`,
+the file is saved; retry only the Board step with the reported
+`details.operation_id`.
 
 Use `--thought tht_06g30t8fudrq55fdkk348i7388` with undo or redo only when
 the user explicitly requests that thought's editor history instead of board

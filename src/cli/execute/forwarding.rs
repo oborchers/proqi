@@ -331,6 +331,25 @@ pub(super) fn history(
     send(context, &owner, session_id, mutation).map(Some)
 }
 
+/// Refuse early when an active owner cannot represent `mutation`, so no side
+/// effect happens before a request that the owner would reject.
+pub(super) fn ensure_owner_supports(
+    context: &RuntimeContext,
+    session_id: SessionId,
+    mutation: &ControlMutation,
+) -> Result<(), CliError> {
+    owner_supports(owner(context, session_id)?.as_ref(), mutation)
+}
+
+fn owner_supports(
+    owner: Option<&InstanceInfo>,
+    mutation: &ControlMutation,
+) -> Result<(), CliError> {
+    owner.map_or(Ok(()), |owner| {
+        required_protocol(owner, mutation).map(|_| ())
+    })
+}
+
 fn owner(
     context: &RuntimeContext,
     session_id: SessionId,

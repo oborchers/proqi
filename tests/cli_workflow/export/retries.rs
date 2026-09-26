@@ -118,3 +118,31 @@ fn non_utf8_destinations_are_refused_before_writing() {
     assert_eq!(fs::read_dir(&odd).expect("list").count(), 0);
     assert_eq!(live_contents(root, &session), ["body"]);
 }
+
+#[test]
+fn a_plain_export_refuses_an_operation_identity_before_writing() {
+    let state = tempfile::tempdir().expect("state");
+    let files = tempfile::tempdir().expect("files");
+    let root = state.path();
+    let session = create_session(root);
+    let thought = add(root, &session, "body");
+    let output = files.path().join("kept.txt");
+    let operation = operation_id();
+    let (code, error) = failure(
+        root,
+        &[
+            "thoughts",
+            "export",
+            &session,
+            &thought,
+            "--output",
+            output.to_str().expect("UTF-8"),
+            "--operation-id",
+            &operation,
+        ],
+    );
+    assert_eq!(code, 2);
+    assert_eq!(error["code"], "invalid_arguments");
+    assert!(!output.exists(), "nothing is written");
+    assert_eq!(live_contents(root, &session), ["body"]);
+}

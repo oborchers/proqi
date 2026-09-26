@@ -13,9 +13,9 @@ pub(in crate::ui) enum ExportView {
         title: &'static str,
         /// Current field text.
         query: String,
-        /// Save row followed by completion choices.
+        /// Save row followed by completion choices, from the first scrolled row.
         entries: Vec<String>,
-        /// Highlighted row.
+        /// Highlighted row among `entries`.
         selected: usize,
     },
     /// Confirmation before replacing an existing file.
@@ -64,8 +64,7 @@ impl ExportState {
                 selected: *selected,
             };
         }
-        let mut entries = vec![self.save_label()];
-        entries.extend(
+        let rows = std::iter::once(self.save_label()).chain(
             self.candidates
                 .iter()
                 .map(|candidate| candidate.label.clone()),
@@ -73,12 +72,12 @@ impl ExportState {
         ExportView::Path {
             title: self.title(),
             query: self.field.text().to_owned(),
-            entries,
-            selected: self.cycled.map_or(0, |index| index + 1),
+            entries: rows.skip(self.scroll).collect(),
+            selected: self.highlighted_row().saturating_sub(self.scroll),
         }
     }
 
-    const fn row_count(&self) -> usize {
+    pub(super) const fn row_count(&self) -> usize {
         match self.stage {
             ExportStage::Confirm { .. } => 2,
             ExportStage::Path | ExportStage::Writing { .. } => 1 + self.candidates.len(),

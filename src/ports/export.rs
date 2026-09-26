@@ -84,6 +84,9 @@ pub enum ExportWriteError {
     /// The file system cannot exchange files atomically, so replacement is refused.
     #[error("this file system cannot replace a file safely; choose a new name")]
     ReplaceUnsupported,
+    /// The file system cannot install a new file without risking an existing one.
+    #[error("this file system cannot create the file safely")]
+    InstallUnsupported,
     /// The exported file is in place, but its permissions or durability could not be
     /// confirmed; the destination may already hold the export.
     #[error("the file was written but could not be confirmed on disk; check it before retrying")]
@@ -120,6 +123,7 @@ impl ExportWriteError {
             Self::TargetNotRegular => "target_not_regular",
             Self::Changed => "changed",
             Self::ReplaceUnsupported => "replace_unsupported",
+            Self::InstallUnsupported => "install_unsupported",
             Self::WrittenUnconfirmed => "written_unconfirmed",
             Self::Displaced(_) => "displaced",
             Self::PermissionDenied => "permission_denied",
@@ -153,9 +157,9 @@ pub struct DirectoryEntry {
 /// Bounded result of listing one directory.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct DirectoryListing {
-    /// Entries sorted by name.
+    /// Matching entries sorted by name.
     pub entries: Vec<DirectoryEntry>,
-    /// Whether the listing stopped at the entry bound.
+    /// Whether the listing stopped at a bound, so matching entries may be missing.
     pub truncated: bool,
 }
 
@@ -172,7 +176,8 @@ pub enum DirectoryListingError {
 
 /// Lists directory entries for destination completion.
 pub trait DirectoryLister {
-    /// List at most a bounded number of UTF-8 entries of one absolute directory.
+    /// List a bounded number of UTF-8 entries of one absolute directory whose
+    /// names start with `prefix`, inspecting a bounded number of entries.
     ///
     /// # Errors
     ///
@@ -180,5 +185,6 @@ pub trait DirectoryLister {
     fn list(
         &mut self,
         directory: &std::path::Path,
+        prefix: &str,
     ) -> Result<DirectoryListing, DirectoryListingError>;
 }

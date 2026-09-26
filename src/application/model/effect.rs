@@ -153,6 +153,8 @@ pub enum Effect {
         generation: u64,
         /// Absolute directory to list.
         directory: std::path::PathBuf,
+        /// Typed start of the entry name; only matching entries are listed.
+        prefix: String,
     },
     /// Atomically export the current in-memory board for recovery.
     ExportRecovery {

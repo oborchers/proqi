@@ -272,9 +272,18 @@ impl BoardApp {
     }
 
     pub(super) fn close_overlay(&mut self) {
-        if self.export.active.is_some() {
-            self.cancel_export();
-            return;
+        // Close only the visible owner. The replacement confirmation closes like
+        // Escape, back to the destination field.
+        match self.active_input_route().1 {
+            super::input_dispatch::ActiveInputOwner::ExportPath => {
+                self.cancel_export();
+                return;
+            }
+            super::input_dispatch::ActiveInputOwner::ExportReplace => {
+                self.return_to_export_path();
+                return;
+            }
+            _ => {}
         }
         self.cancel_screenshot_takeover();
         self.palette = None;

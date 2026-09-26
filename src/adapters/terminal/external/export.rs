@@ -22,6 +22,7 @@ pub(super) enum ThoughtExportRequest {
     List {
         generation: u64,
         directory: PathBuf,
+        prefix: String,
     },
 }
 
@@ -37,21 +38,25 @@ pub(in crate::adapters::terminal) enum ThoughtExportResult {
     },
 }
 
-pub(super) fn run_thought_export(request: ThoughtExportRequest) -> ExternalResult {
+pub(super) fn run_thought_export(
+    export: &mut FileExport,
+    request: ThoughtExportRequest,
+) -> ExternalResult {
     ExternalResult::ThoughtExport(match request {
         ThoughtExportRequest::Write {
             request_id,
             request,
         } => ThoughtExportResult::Written {
             request_id,
-            result: FileExport.write(&request),
+            result: export.write(&request),
         },
         ThoughtExportRequest::List {
             generation,
             directory,
+            prefix,
         } => ThoughtExportResult::Listed {
             generation,
-            result: FileExport.list(&directory),
+            result: export.list(&directory, &prefix),
         },
     })
 }

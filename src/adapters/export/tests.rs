@@ -6,6 +6,7 @@ use std::{
 };
 
 use super::{FileExport, MAX_LISTED_ENTRIES, map_io};
+
 use crate::ports::export::{
     DirectoryLister as _, DirectoryListingError, ExportOverwrite, ExportWriteError,
     ExportWriteRequest, ExportWriter as _,
@@ -36,7 +37,7 @@ fn new_files_are_exact_durable_and_follow_the_umask() {
     let temporary = tempfile::tempdir().expect("directory");
     let path = temporary.path().join("Grüße 👩‍💻.txt");
     let content = "line one\r\n\n\ttabs  and spaces \u{0301}\n";
-    let written = FileExport
+    let written = FileExport::default()
         .write(&request(&path, content, ExportOverwrite::Refuse))
         .expect("write");
     assert_eq!(fs::read(&path).expect("read"), content.as_bytes());
@@ -54,14 +55,14 @@ fn existing_files_are_never_replaced_without_authority() {
     let path = temporary.path().join("notes.txt");
     fs::write(&path, "original").expect("original");
     let Err(ExportWriteError::Exists(existing)) =
-        FileExport.write(&request(&path, "new", ExportOverwrite::Refuse))
+        FileExport::default().write(&request(&path, "new", ExportOverwrite::Refuse))
     else {
         panic!("existing file must be reported");
     };
     assert_eq!(existing.length, 8);
     assert_eq!(fs::read_to_string(&path).expect("read"), "original");
 
-    let replaced = FileExport
+    let replaced = FileExport::default()
         .write(&request(&path, "new", ExportOverwrite::Confirmed(existing)))
         .expect("confirmed replacement");
     assert!(replaced.replaced);
@@ -75,13 +76,13 @@ fn a_file_changed_or_removed_after_confirmation_is_not_replaced() {
     let path = temporary.path().join("notes.txt");
     fs::write(&path, "original").expect("original");
     let Err(ExportWriteError::Exists(existing)) =
-        FileExport.write(&request(&path, "new", ExportOverwrite::Refuse))
+        FileExport::default().write(&request(&path, "new", ExportOverwrite::Refuse))
     else {
         panic!("exists");
     };
     fs::write(&path, "someone else wrote a longer file").expect("concurrent edit");
     assert_eq!(
-        FileExport.write(&request(&path, "new", ExportOverwrite::Confirmed(existing))),
+        FileExport::default().write(&request(&path, "new", ExportOverwrite::Confirmed(existing))),
         Err(ExportWriteError::Changed)
     );
     assert_eq!(
@@ -90,7 +91,7 @@ fn a_file_changed_or_removed_after_confirmation_is_not_replaced() {
     );
     fs::remove_file(&path).expect("remove");
     assert_eq!(
-        FileExport.write(&request(&path, "new", ExportOverwrite::Confirmed(existing))),
+        FileExport::default().write(&request(&path, "new", ExportOverwrite::Confirmed(existing))),
         Err(ExportWriteError::Changed)
     );
     assert!(!path.exists());
@@ -102,7 +103,7 @@ fn identical_retries_converge_and_always_replaces_regular_files() {
     let temporary = tempfile::tempdir().expect("directory");
     let path = temporary.path().join("notes.txt");
     fs::write(&path, "same").expect("original");
-    let unchanged = FileExport
+    let unchanged = FileExport::default()
         .write(&request(
             &path,
             "same",
@@ -111,14 +112,14 @@ fn identical_retries_converge_and_always_replaces_regular_files() {
         .expect("identical");
     assert!(unchanged.unchanged && !unchanged.replaced);
     assert!(matches!(
-        FileExport.write(&request(
+        FileExport::default().write(&request(
             &path,
             "diff",
             ExportOverwrite::RefuseUnlessIdentical
         )),
         Err(ExportWriteError::Exists(_))
     ));
-    let replaced = FileExport
+    let replaced = FileExport::default()
         .write(&request(&path, "diff", ExportOverwrite::Always))
         .expect("always");
     assert!(replaced.replaced);
@@ -134,7 +135,7 @@ fn symlinks_directories_and_missing_parents_are_refused() {
     symlink(&target, &link).expect("symlink");
     for overwrite in [ExportOverwrite::Refuse, ExportOverwrite::Always] {
         assert_eq!(
-            FileExport.write(&request(&link, "x", overwrite)),
+            FileExport::default().write(&request(&link, "x", overwrite)),
             Err(ExportWriteError::TargetIsSymlink)
         );
     }
@@ -147,28 +148,28 @@ fn symlinks_directories_and_missing_parents_are_refused() {
     );
 
     assert_eq!(
-        FileExport.write(&request(Path::new("/"), "x", ExportOverwrite::Always)),
+        FileExport::default().write(&request(Path::new("/"), "x", ExportOverwrite::Always)),
         Err(ExportWriteError::InvalidPath)
     );
     let folder = temporary.path().join("folder");
     fs::create_dir(&folder).expect("folder");
     assert_eq!(
-        FileExport.write(&request(&folder, "x", ExportOverwrite::Always)),
+        FileExport::default().write(&request(&folder, "x", ExportOverwrite::Always)),
         Err(ExportWriteError::TargetIsDirectory)
     );
     let missing = temporary.path().join("missing/child.txt");
     assert_eq!(
-        FileExport.write(&request(&missing, "x", ExportOverwrite::Refuse)),
+        FileExport::default().write(&request(&missing, "x", ExportOverwrite::Refuse)),
         Err(ExportWriteError::DirectoryMissing)
     );
     assert!(!temporary.path().join("missing").exists(), "never created");
     let under_file = target.join("child.txt");
     assert_eq!(
-        FileExport.write(&request(&under_file, "x", ExportOverwrite::Refuse)),
+        FileExport::default().write(&request(&under_file, "x", ExportOverwrite::Refuse)),
         Err(ExportWriteError::ParentNotDirectory)
     );
     assert_eq!(
-        FileExport.write(&request(
+        FileExport::default().write(&request(
             Path::new("relative.txt"),
             "x",
             ExportOverwrite::Refuse
@@ -183,7 +184,7 @@ fn read_only_directories_fail_without_partial_files() {
     let locked = temporary.path().join("locked");
     fs::create_dir(&locked).expect("locked");
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).expect("read only");
-    let result = FileExport.write(&request(
+    let result = FileExport::default().write(&request(
         &locked.join("notes.txt"),
         "x",
         ExportOverwrite::Refuse,
@@ -225,7 +226,9 @@ fn listings_are_sorted_utf8_and_mark_directories_through_links() {
         temporary.path().join("c-link"),
     )
     .expect("link");
-    let listing = FileExport.list(temporary.path()).expect("list");
+    let listing = FileExport::default()
+        .list(temporary.path(), "")
+        .expect("list");
     let names = listing
         .entries
         .iter()
@@ -234,7 +237,7 @@ fn listings_are_sorted_utf8_and_mark_directories_through_links() {
     assert_eq!(names, [("a dir", true), ("b.txt", false), ("c-link", true)]);
     assert!(!listing.truncated);
     assert_eq!(
-        FileExport.list(&temporary.path().join("absent")),
+        FileExport::default().list(&temporary.path().join("absent"), ""),
         Err(DirectoryListingError::Missing)
     );
 }
@@ -245,9 +248,26 @@ fn listings_stop_at_their_bound() {
     for index in 0..=MAX_LISTED_ENTRIES {
         fs::write(temporary.path().join(format!("{index:05}")), "").expect("file");
     }
-    let listing = FileExport.list(temporary.path()).expect("list");
+    let listing = FileExport::default()
+        .list(temporary.path(), "")
+        .expect("list");
     assert_eq!(listing.entries.len(), MAX_LISTED_ENTRIES);
     assert!(listing.truncated);
+    // Typing more of the name lists only matching entries, within the bound.
+    let listing = FileExport::default()
+        .list(temporary.path(), "0409")
+        .expect("list");
+    assert!(!listing.truncated);
+    assert_eq!(
+        listing
+            .entries
+            .iter()
+            .map(|entry| entry.name.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "04090", "04091", "04092", "04093", "04094", "04095", "04096"
+        ]
+    );
 }
 
 #[test]
@@ -256,7 +276,7 @@ fn an_entry_swapped_in_after_the_last_check_is_exchanged_back_untouched() {
     let path = temporary.path().join("notes.txt");
     fs::write(&path, "confirmed").expect("original");
     let Err(ExportWriteError::Exists(confirmed)) =
-        FileExport.write(&request(&path, "new", ExportOverwrite::Refuse))
+        FileExport::default().write(&request(&path, "new", ExportOverwrite::Refuse))
     else {
         panic!("exists");
     };
@@ -301,7 +321,7 @@ fn a_confirmed_exchange_replaces_the_file_and_removes_the_displaced_copy() {
     let path = temporary.path().join("notes.txt");
     fs::write(&path, "confirmed").expect("original");
     let Err(ExportWriteError::Exists(confirmed)) =
-        FileExport.write(&request(&path, "new", ExportOverwrite::Refuse))
+        FileExport::default().write(&request(&path, "new", ExportOverwrite::Refuse))
     else {
         panic!("exists");
     };
@@ -311,7 +331,7 @@ fn a_confirmed_exchange_replaces_the_file_and_removes_the_displaced_copy() {
             staged,
             &request(&path, "exchanged", ExportOverwrite::Confirmed(confirmed))
         ),
-        Ok(())
+        Ok(true)
     );
     assert_eq!(fs::read_to_string(&path).expect("file"), "exchanged");
     assert!(
@@ -326,7 +346,7 @@ fn replacing_keeps_the_permission_bits_of_the_replaced_file() {
     let path = temporary.path().join("private.txt");
     fs::write(&path, "secret").expect("original");
     fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).expect("private");
-    FileExport
+    FileExport::default()
         .write(&request(&path, "replaced", ExportOverwrite::Always))
         .expect("replace");
     let mode = fs::metadata(&path).expect("metadata").permissions().mode() & 0o777;
@@ -371,3 +391,6 @@ fn restore_keeps_an_entry_that_is_not_this_exports_own_file() {
     );
     assert_eq!(fs::read_to_string(&staged).expect("kept"), "newcomer");
 }
+
+#[path = "tests/replacement.rs"]
+mod replacement;

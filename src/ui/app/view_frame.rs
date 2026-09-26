@@ -231,7 +231,9 @@ impl BoardApp {
             return;
         };
         let visible = overlay.items.len().max(1);
-        if self.palette.is_some() {
+        if self.export.active.is_some() {
+            self.ensure_export_visible(visible);
+        } else if self.palette.is_some() {
             self.ensure_palette_visible(visible);
         } else if self.global_delivery.is_some() {
             self.ensure_global_delivery_visible(visible);

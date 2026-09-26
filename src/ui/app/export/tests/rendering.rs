@@ -14,7 +14,7 @@ use crate::{
     },
 };
 
-fn snapshot(fixture: &mut Fixture, width: u16, height: u16) -> String {
+pub(super) fn snapshot(fixture: &mut Fixture, width: u16, height: u16) -> String {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("terminal");
     terminal
         .draw(|frame| {
@@ -39,7 +39,7 @@ fn snapshot(fixture: &mut Fixture, width: u16, height: u16) -> String {
         .join("\n")
 }
 
-fn path_stage() -> Fixture {
+pub(super) fn path_stage() -> Fixture {
     let mut fixture = Fixture::new(&[("Grüße 👩‍💻 first", None), ("second", None)]);
     fixture.select_all();
     fixture.begin(ExportDisposition::ReplaceWithReference);
@@ -71,7 +71,7 @@ fn completion_stage() -> Fixture {
     fixture
 }
 
-fn confirm_stage() -> Fixture {
+pub(super) fn confirm_stage() -> Fixture {
     let mut fixture = path_stage();
     let (request_id, _) = fixture.submit();
     fixture.complete(request_id, Err(ExportWriteError::Exists(EXISTING)));
@@ -91,7 +91,7 @@ fn destination_field_has_standard_narrow_and_shallow_snapshots() {
 }
 
 /// Click one rendered overlay row, later than the multi-click window of the previous click.
-fn click(fixture: &mut Fixture, target: HitTarget) -> Vec<Effect> {
+pub(super) fn click(fixture: &mut Fixture, target: HitTarget) -> Vec<Effect> {
     let later = fixture.clock.now().as_millis() + 1_000;
     fixture
         .clock

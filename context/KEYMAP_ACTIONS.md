@@ -115,8 +115,8 @@ factory labels without requiring another presentation table.
 | `thought.insert_below` | `board`, `commands`, `insertion_boundary` | Ordinary | yes |
 | `selection.select_all` | `board`, `compose`, `edit`, `commands`, `invocation`, `export_path`, `insertion_boundary` | Ordinary | yes |
 | `board.duplicate` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
-| `history.undo` | `board`, `compose`, `edit`, `commands`, `invocation`, `export_path`, `export_replace`, `insertion_boundary` | Ordinary | yes |
-| `history.redo` | `board`, `compose`, `edit`, `commands`, `invocation`, `export_path`, `export_replace`, `insertion_boundary` | Ordinary | yes |
+| `history.undo` | `board`, `compose`, `edit`, `commands`, `invocation`, `export_path`, `insertion_boundary` | Ordinary | yes |
+| `history.redo` | `board`, `compose`, `edit`, `commands`, `invocation`, `export_path`, `insertion_boundary` | Ordinary | yes |
 | `submission.submit_keep` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `editor.delete_logical_line` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | TextEditing | yes |
 | `editor.delete_sentence` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | TextEditing | yes |

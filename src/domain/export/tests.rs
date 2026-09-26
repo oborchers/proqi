@@ -20,7 +20,16 @@ fn relative_and_home_paths_resolve_from_their_owners() {
     );
     assert_eq!(
         resolve_export_path("../up.txt", base, Some(home)),
-        Ok(PathBuf::from("/work/repo/../up.txt"))
+        Ok(PathBuf::from("/work/up.txt"))
+    );
+    assert_eq!(
+        resolve_export_path("sub/../../../../../x.txt", base, Some(home)),
+        Ok(PathBuf::from("/x.txt")),
+        "the root's parent is the root"
+    );
+    assert_eq!(
+        resolve_export_path("/a/./b/../c.txt", base, None),
+        Ok(PathBuf::from("/a/c.txt"))
     );
     assert_eq!(
         resolve_export_path("~/Desktop/x.md", base, Some(home)),
@@ -47,7 +56,7 @@ fn unusable_destinations_are_typed_errors() {
         resolve_export_path("~/x.txt", base, None),
         Err(ExportPathError::HomeUnavailable)
     );
-    for value in ["dir/", "~", "..", "/", "a/.."] {
+    for value in ["dir/", "~", "..", "/", "a/..", "a/.", "~/.."] {
         assert_eq!(
             resolve_export_path(value, base, Some(Path::new("/h"))),
             Err(ExportPathError::MissingFileName),

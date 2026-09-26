@@ -64,16 +64,12 @@ impl BoardApp {
             UiInput::PasteAnnotated(payload) => {
                 self.update_export_field(|value| value.paste(&payload.content));
             }
-            UiInput::Pointer(pointer)
-                if !matches!(
-                    pointer.kind,
-                    PointerKind::ScrollUp | PointerKind::ScrollDown
-                ) =>
-            {
-                return self.handle_pointer(*pointer, ids, clock);
-            }
-            UiInput::Pointer(_)
-            | UiInput::Resize { .. }
+            UiInput::Pointer(pointer) => match pointer.kind {
+                PointerKind::ScrollUp => self.scroll_export_choices(true),
+                PointerKind::ScrollDown => self.scroll_export_choices(false),
+                _ => return self.handle_pointer(*pointer, ids, clock),
+            },
+            UiInput::Resize { .. }
             | UiInput::HostFocusGained
             | UiInput::HostFocusLost
             | UiInput::KeyStroke(_)
@@ -112,12 +108,13 @@ impl BoardApp {
         Vec::new()
     }
 
-    /// Activate one visible overlay row: the save row, a completion, or a confirmation choice.
+    /// Activate one rendered overlay row: the save row, a completion, or a confirmation choice.
     pub(in crate::ui::app) fn activate_export_row(
         &mut self,
-        index: usize,
+        visible_index: usize,
         ids: &mut impl IdGenerator,
     ) -> Vec<Effect> {
+        let index = self.export_row_at(visible_index);
         let Some(state) = self.export.active.as_mut() else {
             return Vec::new();
         };
@@ -135,7 +132,8 @@ impl BoardApp {
         }
     }
 
-    fn return_to_export_path(&mut self) {
+    /// Leave the replacement confirmation for the path field, keeping the file.
+    pub(in crate::ui::app) fn return_to_export_path(&mut self) {
         if let Some(state) = self.export.active.as_mut() {
             state.stage = ExportStage::Path;
         }

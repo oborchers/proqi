@@ -1,10 +1,12 @@
 //! `thoughts export`: durable plain-text file first, then one optional Board operation.
 
+use std::path::PathBuf;
+
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 
 use crate::{
-    adapters::{export::FileExport, runtime::SystemEnvironment},
+    adapters::export::FileExport,
     application::{
         BoardItemMutation, ControlReplay, copy_text, export_reference_thought_id,
         match_control_replay,
@@ -15,7 +17,7 @@ use crate::{
     },
     ports::{
         control::ControlMutation,
-        environment::{Environment as _, IdGenerator as _},
+        environment::IdGenerator as _,
         export::{ExportOverwrite, ExportWriteError, ExportWriteRequest, ExportWriter as _},
         store::Store as _,
     },
@@ -42,23 +44,14 @@ pub(super) fn export(
     arguments: &ExportArguments<'_>,
 ) -> Result<Outcome, CliError> {
     let thought_ids = parse_unique_thoughts(arguments.thoughts)?;
+    if arguments.operation.is_some() && !arguments.disposition.changes_board() {
+        // A plain export changes nothing durable, so it has no identity to replay.
+        return Err(CliError::arguments(
+            "--operation-id requires --remove or --replace-with-reference".to_owned(),
+        ));
+    }
     let operation = parse_operation_id(arguments.operation)?;
-    let path = resolve_export_path(
-        arguments.output,
-        &context.cwd,
-        SystemEnvironment.home_directory().as_deref(),
-    )
-    .map_err(|error| invalid_output(arguments.output, error))?;
-    let output = path
-        .to_str()
-        .ok_or_else(|| {
-            CliError::new(
-                ErrorCode::ExportTargetInvalid,
-                "the destination path must be valid UTF-8".to_owned(),
-            )
-            .with_details(json!({ "output": arguments.output, "reason": "not_utf8" }))
-        })?
-        .to_owned();
+    let (path, output) = destination(context, arguments.output)?;
     let session_id = session_service(context)?.resolve_session(arguments.session, false)?;
     forwarding::sync(context, session_id)?;
     let sources = ordered_sources(context, session_id, &thought_ids)?;
@@ -90,6 +83,9 @@ pub(super) fn export(
             format!("thought not found: {missing}"),
         ));
     }
+    if let Some(request) = &request {
+        forwarding::ensure_owner_supports(context, session_id, request)?;
+    }
     let overwrite = if arguments.replace_existing {
         ExportOverwrite::Always
     } else if operation.is_some() {
@@ -97,7 +93,7 @@ pub(super) fn export(
     } else {
         ExportOverwrite::Refuse
     };
-    let written = FileExport
+    let written = FileExport::default()
         .write(&ExportWriteRequest {
             path,
             content: text.clone(),
@@ -106,7 +102,12 @@ pub(super) fn export(
         .map_err(|error| write_error(&output, &error))?;
     let receipt = match &request {
         Some(request) => Some(commit(context, session_id, request).map_err(|error| {
-            error.with_details(json!({ "output": output, "file_written": true }))
+            // The file is durable; the same operation ID retries only the Board step.
+            error.with_merged_details(json!({
+                "output": output,
+                "file_written": true,
+                "operation_id": operation_id,
+            }))
         })?),
         None => None,
     };
@@ -119,6 +120,20 @@ pub(super) fn export(
         written.replaced,
         receipt.as_ref(),
     ))
+}
+
+/// Resolve `--output` to a clean absolute UTF-8 path.
+fn destination(context: &RuntimeContext, value: &str) -> Result<(PathBuf, String), CliError> {
+    let path = resolve_export_path(value, &context.cwd, context.home.as_deref())
+        .map_err(|error| invalid_output(value, error))?;
+    let output = path.to_str().map(str::to_owned).ok_or_else(|| {
+        CliError::new(
+            ErrorCode::ExportTargetInvalid,
+            "the destination path must be valid UTF-8".to_owned(),
+        )
+        .with_details(json!({ "output": value, "reason": "not_utf8" }))
+    })?;
+    Ok((path, output))
 }
 
 fn parse_unique_thoughts(values: &[String]) -> Result<Vec<ThoughtId>, CliError> {
@@ -292,6 +307,7 @@ fn write_error(output: &str, error: &ExportWriteError) -> CliError {
         | ExportWriteError::TargetNotRegular => ErrorCode::ExportTargetInvalid,
         ExportWriteError::Changed
         | ExportWriteError::ReplaceUnsupported
+        | ExportWriteError::InstallUnsupported
         | ExportWriteError::WrittenUnconfirmed
         | ExportWriteError::Displaced(_)
         | ExportWriteError::PermissionDenied

@@ -116,29 +116,8 @@ fn relative_output_resolves_from_the_process_directory() {
     let root = state.path();
     let session = create_session(root);
     let thought = add(root, &session, "relative");
-    let output = Command::new(env!("CARGO_BIN_EXE_proqi"))
-        .current_dir(files.path())
-        .args(["--state-dir"])
-        .arg(root)
-        .args([
-            "--json",
-            "thoughts",
-            "export",
-            &session,
-            &thought,
-            "--output",
-            "./sub/../x.txt",
-        ])
-        .env_remove("HERDR_ENV")
-        .stdin(Stdio::null())
-        .output()
-        .expect("run proqi");
-    let _ = fs::create_dir(files.path().join("sub"));
-    assert!(!output.status.success(), "missing sub directory is refused");
-    let error: Value = serde_json::from_slice(&output.stdout).expect("JSON");
-    assert_eq!(error["error"]["code"], "export_directory_missing");
-    assert!(!files.path().join("x.txt").exists());
-
+    // `.` and `..` resolve lexically, so no `sub` folder is needed and the
+    // reported path is the clean absolute one.
     let output = Command::new(env!("CARGO_BIN_EXE_proqi"))
         .current_dir(files.path())
         .arg("--state-dir")
@@ -160,6 +139,25 @@ fn relative_output_resolves_from_the_process_directory() {
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stdout)
+    );
+    let result: Value = serde_json::from_slice(&output.stdout).expect("JSON");
+    let expected = files
+        .path()
+        .canonicalize()
+        .expect("canonical")
+        .join("x.txt");
+    assert_eq!(
+        Path::new(result["data"]["output"].as_str().expect("output"))
+            .canonicalize()
+            .expect("written"),
+        expected
+    );
+    assert!(
+        !result["data"]["output"]
+            .as_str()
+            .expect("output")
+            .contains(".."),
+        "{result}"
     );
     assert_eq!(
         fs::read_to_string(files.path().join("x.txt")).expect("file"),

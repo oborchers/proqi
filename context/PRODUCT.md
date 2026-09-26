@@ -1346,9 +1346,18 @@ uses that name; otherwise the name is the session label plus a UTC timestamp
 `YYYY-MM-DD-HHMMSS`. Separators, controls, and `:*?"<>|` become `-`, leading
 dots are removed, and `.txt` is appended. The field is fully editable. `~/`
 resolves from the home directory and every other relative path from the
-session directory. `Tab` completes the final path component from one bounded
-listing of its folder, extending to the longest shared prefix and then cycling
-through the remaining choices; `Shift+Tab` cycles back. Hidden entries appear
+session directory. `.` and `..` resolve as text, so the saved path and a
+reference thought name the same clean absolute path. When the session directory
+is not valid UTF-8, the field starts empty with a message asking for an absolute
+destination. `Tab` completes the final path component from one bounded listing
+of the entries in its folder that start with the typed name. Matching and the
+longest shared prefix always consider every listed match, and at most 64
+choices are offered, with a message when more matched. When a folder is too
+large to list completely, completion never claims a single match or no match and
+asks for more of the name instead. Completion extends to the longest shared
+prefix and then cycles through the remaining choices; `Shift+Tab` cycles back,
+and the wheel moves through them the same way. The list scrolls so the
+highlighted choice stays visible, with overflow markers. Hidden entries appear
 only after a typed leading dot. Every completion is one undo step of the field.
 Completion rows and the save row are pointer targets. A missing parent folder is
 an error and is never created. A Git working tree gets no special treatment, so
@@ -1362,7 +1371,8 @@ changes the content. Attachment paths appear exactly as in the copy text;
 attached files are never copied.
 
 An existing regular file is never replaced silently. Proqi asks with **Cancel**
-preselected and replaces only a file whose content-free identity (device, inode,
+preselected; Cancel, `Escape`, and the close control all return to the path
+field with the typed path kept. It replaces only a file whose content-free identity (device, inode,
 length, and modification time) still matches the one it observed; a file changed
 or removed during the confirmation is reported and nothing is replaced. A
 same-length rewrite within the file system's timestamp granularity is
@@ -1373,24 +1383,32 @@ link is never replaced by a regular file.
 The write goes through a temporary file in the destination folder. The file is
 synchronized, atomically moved into place without replacing an entry that
 appeared meanwhile unless replacement was confirmed, and the folder is
-synchronized. A new file's permissions follow the user's umask; replacing a
-file keeps its permission bits, as text editors do. The written text is read
-from the Board when the user saves, so edits made while the path field was open
-are included, and a selected thought that disappeared meanwhile cancels the
-export without writing. Only
+synchronized. A new file's permissions follow the user's umask. A replacement
+takes the replaced file's read, write, and execute bits before it is moved into
+place, as text editors do; set-user-ID and set-group-ID bits, owner, group,
+access control lists, and extended attributes are not carried over. If Proqi
+stops between replacing a file and removing the replaced copy, a hidden
+`.proqi-export-*.tmp` file in the same folder holds the previous contents. The
+set and order of exported thoughts are fixed when the path field opens; their
+text is read from the Board when the user saves, so edits made while the path
+field was open are included, and a selected thought that disappeared meanwhile
+cancels the export without writing. Only
 after this durable success does the Board change: removal and replacement are
 each one Board operation and one undo step, admitted like other asynchronous
 sequence producers. Undo restores the thoughts and removes the reference; the
-file stays, like a saved file. If the thoughts changed or disappeared while the
-file was written, the file stays and the Board is left unchanged with a warning.
+file stays, like a saved file. If the Board step is rejected after the file was
+written, for example because the thoughts changed, a lock is held, or saving is
+failing, the file stays, the Board is left unchanged, and the message names that
+cause. Remove and replace do not open while saving is failing, so no file is
+written for a Board change that cannot be stored.
 Permission, read-only, full-disk, and other write failures leave the Board
 unchanged with a truthful message. A reference whose file is later moved or
 deleted shows the ordinary inaccessible state, and submission refuses it.
 
 The scriptable CLI exposes the same behavior with `thoughts export`, including
 `--remove`, `--replace-with-reference`, `--replace-existing`, and an operation
-identity for exact replay. A relative `--output` resolves from the CLI process's
-current directory, the usual convention for command-line tools.
+identity for exact replay of the Board step. A relative `--output` resolves from
+the CLI process's current directory, the usual convention for command-line tools.
 
 ### Interaction economy
 

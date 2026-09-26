@@ -439,6 +439,9 @@ impl BoardApp {
     }
 
     pub(in crate::ui) fn picker_overflow(&self, visible: usize) -> (bool, bool) {
+        if self.export.active.is_some() {
+            return self.export_overflow(visible);
+        }
         if self.search.is_some() {
             return self.search_overflow(visible);
         }

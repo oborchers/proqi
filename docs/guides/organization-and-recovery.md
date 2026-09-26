@@ -50,8 +50,10 @@ actions:
 A path field opens with a suggested destination. Edit it freely, press `Tab` to
 complete a folder or file name (press it again to cycle through several
 matches, `Shift+Tab` goes back), then press `Enter` or click the save row.
-`Escape` cancels. With a mouse, click a completion row to use it and click the
-save row to write.
+`Escape` cancels. With a mouse, scroll to move through the matches the same
+way, click a completion row to use it, and click the save row to write. The
+list scrolls to keep the highlighted match visible. In a very large folder,
+type more of the name if Proqi asks for it.
 
 - **Where it goes.** The suggestion is the session's folder: the directory
   where the session was most recently opened. A relative path you type also
@@ -69,16 +71,17 @@ save row to write.
   merging. Attached files are referenced by the same paths as in the copy text,
   never copied.
 - **Existing files.** If the file exists, Proqi asks before replacing it, with
-  **Cancel** preselected. If the file changes while you decide, nothing is
-  replaced. An existing symbolic link is never replaced; type the path it
+  **Cancel** preselected. Cancel, `Escape`, and the close control all return to
+  the path field. If the file changes while you decide, nothing is replaced. An existing symbolic link is never replaced; type the path it
   points to instead.
 - **Safety.** The text is written to a temporary file in the same folder,
   synchronized to disk, and then moved into place, so the file is complete or
   absent. The Board changes only after that. Removing or replacing is one undo
   step; undo restores the thoughts and removes the reference, and the file
   stays. If a write fails, for example on a read-only folder or a full disk,
-  the Board is left unchanged. New files follow your umask; replacing a file
-  keeps its permissions, as text editors do.
+  the Board is left unchanged. If the Board cannot change after the file was
+  saved, the message says why. New files follow your umask; replacing a file
+  keeps its read, write, and execute permissions, as text editors do.
 
 The same export is available from scripts with
 [`proqi thoughts export`](../reference/cli.md#export-thoughts-to-a-file). The CLI

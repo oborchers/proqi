@@ -139,6 +139,14 @@ impl BoardApp {
         }
     }
 
+    /// Whether the export overlay is the topmost, visible input owner.
+    pub(super) fn topmost_owner_is_export(&self) -> bool {
+        matches!(
+            self.active_input_owners().last(),
+            Some(ActiveInputOwner::ExportPath | ActiveInputOwner::ExportReplace)
+        )
+    }
+
     pub(super) fn active_input_route(&self) -> (ShortcutContextStack, ActiveInputOwner) {
         let owners = self.active_input_owners();
         let active = owners.last().copied().unwrap_or(ActiveInputOwner::Board);

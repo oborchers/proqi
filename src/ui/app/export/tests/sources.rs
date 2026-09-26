@@ -36,6 +36,11 @@ fn sources_changed_during_the_write_are_kept_and_reported() {
             .is_empty()
     );
     assert_eq!(fixture.contents(), ["body changed"]);
+    let status = fixture.app.status_text().expect("status");
+    assert!(
+        status.starts_with("file saved, but the board was kept: ") && status.len() > 36,
+        "the reducer's own cause is kept: {status}"
+    );
 }
 
 #[test]

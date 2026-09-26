@@ -343,12 +343,17 @@ fn tab_completion_lists_once_then_cycles_and_ignores_stale_listings() {
         Effect::ListExportDirectory {
             generation,
             directory,
+            prefix,
         },
     ] = effects.as_slice()
     else {
         panic!("listing: {effects:?}");
     };
     assert_eq!(directory, Path::new("/work/project/docs/"));
+    assert_eq!(
+        prefix, "re",
+        "only entries starting with the typed name are listed"
+    );
     let generation = *generation;
     let listing = DirectoryListing {
         entries: ["report-a.txt", "report-b.txt"]
@@ -435,7 +440,11 @@ fn pointer_rows_save_and_complete() {
     assert!(matches!(effects.as_slice(), [Effect::WriteExport { .. }]));
 }
 
+#[path = "tests/owners.rs"]
+mod owners;
 #[path = "tests/rendering.rs"]
 mod rendering;
+#[path = "tests/scrolling.rs"]
+mod scrolling;
 #[path = "tests/sources.rs"]
 mod sources;

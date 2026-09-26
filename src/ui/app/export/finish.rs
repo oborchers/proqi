@@ -110,15 +110,14 @@ impl BoardApp {
         completion: ExportCompletion,
         success: String,
     ) -> Vec<Effect> {
-        let effects = self.reduce_with_empty_transition(
+        let Some(effects) = self.reduce_with_empty_transition_described(
             Action::CompleteExport(completion),
             EmptyBoardTransition::ComposeAfterLocalRemoval,
-        );
-        if effects.is_empty() {
-            self.set_warning("file saved; the thoughts changed, so the board was kept");
-        } else {
-            self.set_success(success);
-        }
+            |cause| format!("file saved, but the board was kept: {cause}"),
+        ) else {
+            return Vec::new();
+        };
+        self.set_success(success);
         effects
     }
 }

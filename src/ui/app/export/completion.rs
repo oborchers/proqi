@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 
 use crate::ports::export::DirectoryListing;
 
-/// Most candidates retained for display and cycling.
+/// Most candidates offered for display and cycling. Matching and the shared
+/// prefix always consider every listed match.
 pub(super) const MAX_CANDIDATES: usize = 64;
 
 /// The directory to list and how its entries complete the typed text.
@@ -36,15 +37,25 @@ pub(super) struct Candidate {
 pub(super) enum CompletionOutcome {
     /// Nothing in the folder starts with the typed name.
     NoMatch,
+    /// The listing stopped at its bound, so neither a unique match nor the
+    /// absence of one is known. More of the name must be typed.
+    TooLarge,
     /// The field text becomes this value. Remaining choices, if any, are offered.
     Completed {
         /// New field text.
         text: String,
-        /// Choices still sharing the completed prefix, empty when unique.
+        /// Offered choices still sharing the completed prefix, empty when unique.
         candidates: Vec<Candidate>,
+        /// Number of matching entries, including any beyond the offered choices.
+        matches: usize,
     },
     /// Several choices share no longer prefix; the caller cycles through them.
-    Ambiguous(Vec<Candidate>),
+    Ambiguous {
+        /// Offered choices.
+        candidates: Vec<Candidate>,
+        /// Number of matching entries, including any beyond the offered choices.
+        matches: usize,
+    },
 }
 
 /// Split the typed text into the folder to list and the partial final name.
@@ -76,42 +87,46 @@ pub(super) fn complete(
     request: &CompletionRequest,
     listing: &DirectoryListing,
 ) -> CompletionOutcome {
+    if listing.truncated {
+        return CompletionOutcome::TooLarge;
+    }
     let show_hidden = request.partial.starts_with('.');
-    let candidates = listing
+    let labels = listing
         .entries
         .iter()
         .filter(|entry| entry.name.starts_with(&request.partial))
         .filter(|entry| show_hidden || !entry.name.starts_with('.'))
-        .take(MAX_CANDIDATES)
         .map(|entry| {
-            let label = if entry.directory {
+            if entry.directory {
                 format!("{}/", entry.name)
             } else {
                 entry.name.clone()
-            };
-            Candidate {
-                text: format!("{}{label}", request.prefix),
-                label,
             }
         })
         .collect::<Vec<_>>();
-    match candidates.as_slice() {
+    let matches = labels.len();
+    let shared = common_prefix(labels.iter().map(String::as_str));
+    let candidate = |label: &String| Candidate {
+        text: format!("{}{label}", request.prefix),
+        label: label.clone(),
+    };
+    let candidates = || labels.iter().take(MAX_CANDIDATES).map(candidate).collect();
+    match labels.as_slice() {
         [] => CompletionOutcome::NoMatch,
         [only] => CompletionOutcome::Completed {
-            text: only.text.clone(),
+            text: candidate(only).text,
             candidates: Vec::new(),
+            matches,
         },
-        _ => {
-            let shared = common_prefix(candidates.iter().map(|candidate| candidate.label.as_str()));
-            if shared.len() > request.partial.len() {
-                CompletionOutcome::Completed {
-                    text: format!("{}{shared}", request.prefix),
-                    candidates,
-                }
-            } else {
-                CompletionOutcome::Ambiguous(candidates)
-            }
-        }
+        _ if shared.len() > request.partial.len() => CompletionOutcome::Completed {
+            text: format!("{}{shared}", request.prefix),
+            candidates: candidates(),
+            matches,
+        },
+        _ => CompletionOutcome::Ambiguous {
+            candidates: candidates(),
+            matches,
+        },
     }
 }
 

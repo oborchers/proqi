@@ -10,24 +10,23 @@ use crate::{
     domain::{ExportDisposition, Thought, default_export_file_name, resolve_export_path},
     ports::{
         environment::{Clock, IdGenerator},
-        export::{
-            DirectoryListing, DirectoryListingError, ExistingFile, ExportOverwrite,
-            ExportWriteRequest,
-        },
+        export::{ExistingFile, ExportOverwrite, ExportWriteRequest},
     },
 };
 
 use super::{BoardApp, pending_types::EditFlush, query::QueryEditor};
-use crate::application::Effect;
+use crate::application::{DurabilityState, Effect};
 use crate::ui::ListNavigation;
 
+#[path = "export/choices.rs"]
+mod choices;
 mod completion;
 mod finish;
 mod input;
 #[path = "export/view.rs"]
 mod view;
 
-use completion::{Candidate, CompletionOutcome, CompletionRequest};
+use completion::{Candidate, CompletionRequest};
 pub(in crate::ui) use view::ExportView;
 
 /// Largest destination text accepted by the field.
@@ -52,6 +51,8 @@ pub(super) struct ExportState {
     anchor: String,
     cycled: Option<usize>,
     pending_listing: Option<PendingListing>,
+    /// First rendered row of the save row and completion choices.
+    scroll: usize,
     stage: ExportStage,
 }
 
@@ -119,6 +120,15 @@ impl BoardApp {
             return Vec::new();
         }
         if disposition.changes_board()
+            && matches!(self.state.durability, DurabilityState::Failed { .. })
+        {
+            // No file is written for a Board change that storage cannot accept.
+            self.set_storage_failure(
+                "saving is failing; the thoughts cannot be removed or replaced now".to_owned(),
+            );
+            return Vec::new();
+        }
+        if disposition.changes_board()
             && (self.state.deferred_board_operation_pending()
                 || thought_ids.iter().any(|id| !self.thought_mutable(*id)))
         {
@@ -146,9 +156,15 @@ impl BoardApp {
             _ => None,
         };
         let name = default_export_file_name(single_name, self.session_display_name(), clock.now());
-        let default = self.export_base_directory().join(name);
         let mut field = QueryEditor::with_limit(MAX_PATH_BYTES);
-        field.paste(&default.to_string_lossy());
+        match self.export_base_directory().join(name).to_str() {
+            Some(default) => field.paste(default),
+            None => {
+                self.set_info(
+                    "the session folder is not valid UTF-8; type an absolute destination",
+                );
+            }
+        }
         self.help = false;
         self.palette = None;
         self.export.active = Some(ExportState {
@@ -159,6 +175,7 @@ impl BoardApp {
             anchor: String::new(),
             cycled: None,
             pending_listing: None,
+            scroll: 0,
             stage: ExportStage::Path,
         });
         self.layout = None;
@@ -272,95 +289,6 @@ impl BoardApp {
         self.request_write(ids, path, ExportOverwrite::Confirmed(existing))
     }
 
-    /// Apply one generation-matched directory listing to the destination field.
-    pub(crate) fn complete_export_listing(
-        &mut self,
-        generation: u64,
-        result: Result<DirectoryListing, DirectoryListingError>,
-    ) {
-        let Some(state) = self.export.active.as_mut() else {
-            return;
-        };
-        let Some(pending) = state
-            .pending_listing
-            .take_if(|pending| pending.generation == generation)
-        else {
-            return;
-        };
-        if state.field.text() != pending.text || !matches!(state.stage, ExportStage::Path) {
-            return;
-        }
-        let listing = match result {
-            Ok(listing) => listing,
-            Err(error) => {
-                self.set_warning(format!("no completions: {error}"));
-                return;
-            }
-        };
-        match completion::complete(&pending.request, &listing) {
-            CompletionOutcome::NoMatch => self.set_info("no matching file or folder"),
-            CompletionOutcome::Completed { text, candidates } => {
-                state.replace_field(&text);
-                state.offer(candidates);
-            }
-            CompletionOutcome::Ambiguous(candidates) => {
-                state.offer(candidates);
-                state.cycle(pending.backward);
-            }
-        }
-    }
-
-    /// Request a listing, or cycle through the choices of the previous listing.
-    fn complete_export_field(&mut self, backward: bool) -> Vec<Effect> {
-        let home = self.export.home_directory.clone();
-        let base = self.export_base_directory();
-        self.export.generation = self.export.generation.wrapping_add(1);
-        let generation = self.export.generation;
-        let Some(state) = self.export.active.as_mut() else {
-            return Vec::new();
-        };
-        if !matches!(state.stage, ExportStage::Path) {
-            return Vec::new();
-        }
-        if state.cycling_matches_field() {
-            state.cycle(backward);
-            return Vec::new();
-        }
-        if state.field.text() == "~" {
-            state.replace_field("~/");
-            return Vec::new();
-        }
-        let Some(request) =
-            completion::completion_request(state.field.text(), &base, home.as_deref())
-        else {
-            self.set_warning("no completions: the home directory is unknown");
-            return Vec::new();
-        };
-        let directory = request.directory.clone();
-        state.pending_listing = Some(PendingListing {
-            generation,
-            text: state.field.text().to_owned(),
-            request,
-            backward,
-        });
-        vec![Effect::ListExportDirectory {
-            generation,
-            directory,
-        }]
-    }
-
-    /// Choose a completion row by pointer.
-    fn apply_export_candidate(&mut self, index: usize) {
-        if let Some(state) = self.export.active.as_mut()
-            && matches!(state.stage, ExportStage::Path)
-            && let Some(candidate) = state.candidates.get(index).cloned()
-        {
-            state.replace_field(&candidate.text);
-            state.candidates.clear();
-            state.cycled = None;
-        }
-    }
-
     fn move_export_choice(&mut self, navigation: ListNavigation) {
         if let Some(ExportState {
             stage: ExportStage::Confirm { selected, .. },
@@ -376,46 +304,6 @@ impl ExportState {
     fn replace_field(&mut self, text: &str) {
         self.field.select_all();
         self.field.paste(text);
-    }
-
-    /// Drop offered choices once the typed text no longer comes from them.
-    fn forget_completion(&mut self) {
-        self.candidates.clear();
-        self.cycled = None;
-        self.pending_listing = None;
-    }
-
-    /// Keep the offered choices together with the text they complete.
-    fn offer(&mut self, candidates: Vec<Candidate>) {
-        self.candidates = candidates;
-        self.anchor = self.field.text().to_owned();
-        self.cycled = None;
-    }
-
-    /// Whether Tab should move through the offered choices instead of listing again.
-    fn cycling_matches_field(&self) -> bool {
-        let current = self.cycled.map_or(self.anchor.as_str(), |index| {
-            self.candidates
-                .get(index)
-                .map_or("", |candidate| candidate.text.as_str())
-        });
-        !self.candidates.is_empty() && self.field.text() == current
-    }
-
-    fn cycle(&mut self, backward: bool) {
-        let count = self.candidates.len();
-        if count == 0 {
-            return;
-        }
-        let next = match (self.cycled, backward) {
-            (None, false) => 0,
-            (None, true) => count - 1,
-            (Some(index), false) => (index + 1) % count,
-            (Some(index), true) => (index + count - 1) % count,
-        };
-        self.cycled = Some(next);
-        let text = self.candidates[next].text.clone();
-        self.replace_field(&text);
     }
 }
 
