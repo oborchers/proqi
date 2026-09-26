@@ -1356,7 +1356,9 @@ choices are offered, with a message when more matched. When a folder is too
 large to list completely, completion never claims a single match or no match and
 asks for more of the name instead. Completion extends to the longest shared
 prefix and then cycles through the remaining choices; `Shift+Tab` cycles back,
-and the wheel moves through them the same way. The list scrolls so the
+and Down and Up and the wheel move through them the same way. PageDown and PageUp
+jump five choices and stop at the first and last. Printable letters, including
+`j` and `k`, always stay text in the field. The list scrolls so the
 highlighted choice stays visible, with overflow markers. Hidden entries appear
 only after a typed leading dot. Every completion is one undo step of the field.
 Completion rows and the save row are pointer targets. A missing parent folder is

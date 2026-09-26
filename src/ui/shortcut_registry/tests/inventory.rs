@@ -274,6 +274,7 @@ fn every_query_cursor_owner_receives_complete_editor_navigation() {
         Context::BrowserQuery,
         Context::Rename,
         Context::BrowserRename,
+        Context::ExportPath,
     ];
     for (platform, primary, word) in [
         (

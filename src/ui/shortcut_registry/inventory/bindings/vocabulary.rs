@@ -125,6 +125,7 @@ pub(super) fn is_list_context(context: Context) -> bool {
             | Context::Transfer
             | Context::GlobalDeliveryQuery
             | Context::GlobalDeliveryDisposition
+            | Context::ExportPath
             | Context::ExportReplace
             | Context::Browser
             | Context::BrowserQuery

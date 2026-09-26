@@ -46,7 +46,7 @@ last item dispatches a stroke.
 | BrowserQuery | Nonempty session-browser query | Query text |
 | Rename | Board session-name or focused thought-name editor | Name text |
 | BrowserRename | Session Browser name editor | Name text |
-| ExportPath | Plain-text export destination field; Tab and BackTab complete paths | Path text |
+| ExportPath | Plain-text export destination field; Tab and BackTab complete paths, Up and Down move through offered choices | Path text |
 | ExportReplace | Confirmation before an export replaces an existing file | None, modal navigation wins |
 | Update | Update choice | None, modal navigation wins |
 | Screenshot | Screenshot takeover and quit choice | None, modal navigation wins |

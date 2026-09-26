@@ -2,6 +2,7 @@
 
 use crate::{
     application::Effect,
+    ports::editor::CursorMovement,
     ports::environment::{Clock, IdGenerator},
     ui::{ListNavigation, PointerKind},
 };
@@ -48,6 +49,13 @@ impl BoardApp {
                 self.update_export_field(|value| value.insert_char(' '));
             }
             UiInput::Key(UiKey::Move {
+                movement: movement @ (CursorMovement::VisualUp | CursorMovement::VisualDown),
+                ..
+            }) => self.step_export_choices(*movement == CursorMovement::VisualUp),
+            UiInput::Key(UiKey::FastNavigation { direction, .. }) => {
+                self.jump_export_choices(direction.delta());
+            }
+            UiInput::Key(UiKey::Move {
                 movement,
                 extend_selection,
             }) => self.update_export_field(|value| {
@@ -65,8 +73,8 @@ impl BoardApp {
                 self.update_export_field(|value| value.paste(&payload.content));
             }
             UiInput::Pointer(pointer) => match pointer.kind {
-                PointerKind::ScrollUp => self.scroll_export_choices(true),
-                PointerKind::ScrollDown => self.scroll_export_choices(false),
+                PointerKind::ScrollUp => self.step_export_choices(true),
+                PointerKind::ScrollDown => self.step_export_choices(false),
                 _ => return self.handle_pointer(*pointer, ids, clock),
             },
             UiInput::Resize { .. }

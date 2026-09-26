@@ -93,3 +93,75 @@ fn the_destination_field_completes_with_tab_and_keeps_letters_as_text() {
         );
     }
 }
+
+#[test]
+fn arrows_move_through_destination_choices_without_taking_text_keys() {
+    let registry = parse("schema_version=1").expect("factory registry");
+    for modifiers in [
+        LogicalModifiers::NONE,
+        LogicalModifiers::SHIFT,
+        LogicalModifiers::CONTROL,
+        LogicalModifiers::SUPER,
+    ] {
+        assert_eq!(
+            action(&registry, Context::ExportPath, LogicalKey::Up, modifiers),
+            Some(Action::FocusPrevious),
+            "{modifiers:?}"
+        );
+        assert_eq!(
+            action(&registry, Context::ExportPath, LogicalKey::Down, modifiers),
+            Some(Action::FocusNext),
+            "{modifiers:?}"
+        );
+    }
+    for (key, modifiers, expected) in [
+        (LogicalKey::Up, LogicalModifiers::ALT, Action::FastPrevious),
+        (LogicalKey::Down, LogicalModifiers::ALT, Action::FastNext),
+        (
+            LogicalKey::PageUp,
+            LogicalModifiers::NONE,
+            Action::FastPrevious,
+        ),
+        (
+            LogicalKey::PageDown,
+            LogicalModifiers::NONE,
+            Action::FastNext,
+        ),
+        (
+            LogicalKey::Left,
+            LogicalModifiers::NONE,
+            Action::MoveGraphemeBack,
+        ),
+        (
+            LogicalKey::Right,
+            LogicalModifiers::NONE,
+            Action::MoveGraphemeForward,
+        ),
+        (
+            LogicalKey::Home,
+            LogicalModifiers::NONE,
+            Action::MoveLineStart,
+        ),
+        (LogicalKey::End, LogicalModifiers::NONE, Action::MoveLineEnd),
+        (LogicalKey::Tab, LogicalModifiers::NONE, Action::Tab),
+        (LogicalKey::BackTab, LogicalModifiers::NONE, Action::BackTab),
+    ] {
+        assert_eq!(
+            action(&registry, Context::ExportPath, key, modifiers),
+            Some(expected),
+            "{key:?} {modifiers:?}"
+        );
+    }
+    for character in ['j', 'k', 'J', 'K', 'n'] {
+        assert_eq!(
+            action(
+                &registry,
+                Context::ExportPath,
+                LogicalKey::Character(character),
+                LogicalModifiers::NONE
+            ),
+            None,
+            "{character} stays text"
+        );
+    }
+}

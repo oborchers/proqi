@@ -120,6 +120,7 @@ fn every_text_owner_reserves_plain_shifted_and_unicode_input() {
         Context::BrowserQuery,
         Context::Rename,
         Context::BrowserRename,
+        Context::ExportPath,
     ] {
         for (character, modifiers) in [
             ('j', LogicalModifiers::NONE),

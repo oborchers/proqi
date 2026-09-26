@@ -50,7 +50,8 @@ actions:
 A path field opens with a suggested destination. Edit it freely, press `Tab` to
 complete a folder or file name (press it again to cycle through several
 matches, `Shift+Tab` goes back), then press `Enter` or click the save row.
-`Escape` cancels. With a mouse, scroll to move through the matches the same
+`Escape` cancels. Down and Up also move through the matches, and PageDown and
+PageUp jump five at a time. With a mouse, scroll to move through the matches the same
 way, click a completion row to use it, and click the save row to write. The
 list scrolls to keep the highlighted match visible. In a very large folder,
 type more of the name if Proqi asks for it.

@@ -70,8 +70,8 @@ factory labels without requiring another presentation table.
 | `text.delete_forward` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | TextEditing |  |
 | `text.tab` | `compose`, `edit`, `export_path` | Ordinary |  |
 | `text.backtab` | `compose`, `edit`, `invocation`, `export_path` | Ordinary |  |
-| `list.previous` | `board`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `export_replace`, `update`, `screenshot`, `release_highlights`, `insertion_boundary` | Ordinary |  |
-| `list.next` | `board`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `export_replace`, `update`, `screenshot`, `release_highlights`, `insertion_boundary` | Ordinary |  |
+| `list.previous` | `board`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `export_path`, `export_replace`, `update`, `screenshot`, `release_highlights`, `insertion_boundary` | Ordinary |  |
+| `list.next` | `board`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `export_path`, `export_replace`, `update`, `screenshot`, `release_highlights`, `insertion_boundary` | Ordinary |  |
 | `board.range_previous` | `board`, `insertion_boundary` | Ordinary |  |
 | `board.range_next` | `board`, `insertion_boundary` | Ordinary |  |
 | `navigation.fast_previous` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `export_path`, `export_replace`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | Ordinary |  |

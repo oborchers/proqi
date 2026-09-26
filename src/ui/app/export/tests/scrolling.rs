@@ -7,8 +7,11 @@ use super::rendering::{click, snapshot};
 use crate::{
     application::Effect,
     domain::ExportDisposition,
-    ports::export::{DirectoryEntry, DirectoryListing},
-    ui::{HitTarget, PointerInput, PointerKind, UiInput, UiKey},
+    ports::{
+        editor::CursorMovement,
+        export::{DirectoryEntry, DirectoryListing},
+    },
+    ui::{FastNavigation, HitTarget, PointerInput, PointerKind, UiInput, UiKey},
 };
 
 fn listing(names: &[String], truncated: bool) -> DirectoryListing {
@@ -146,4 +149,89 @@ fn more_matches_than_offered_rows_are_announced() {
         "{:?}",
         fixture.app.status_text()
     );
+}
+
+fn arrow(fixture: &mut Fixture, up: bool) -> Vec<Effect> {
+    fixture.key(UiKey::Move {
+        movement: if up {
+            CursorMovement::VisualUp
+        } else {
+            CursorMovement::VisualDown
+        },
+        extend_selection: false,
+    })
+}
+
+fn fast(fixture: &mut Fixture, direction: FastNavigation) {
+    fixture.key(UiKey::FastNavigation {
+        direction,
+        extend_selection: false,
+    });
+}
+
+#[test]
+fn arrows_move_through_choices_exactly_like_tab() {
+    let mut keyboard = offered(&names(12), false);
+    let mut arrows = offered(&names(12), false);
+    for _ in 0..7 {
+        keyboard.key(UiKey::Tab);
+        assert!(arrow(&mut arrows, false).is_empty(), "never lists again");
+    }
+    assert_eq!(arrows.field(), "n07.txt");
+    assert_eq!(keyboard.field(), arrows.field());
+    assert_eq!(visible_rows(&mut keyboard), visible_rows(&mut arrows));
+    keyboard.key(UiKey::BackTab);
+    arrow(&mut arrows, true);
+    assert_eq!(arrows.field(), "n06.txt");
+    assert_eq!(keyboard.field(), arrows.field());
+
+    // Both ends wrap, as Tab and Shift+Tab do.
+    for _ in 0..6 {
+        arrow(&mut arrows, true);
+    }
+    assert_eq!(arrows.field(), "n00.txt");
+    arrow(&mut arrows, true);
+    assert_eq!(arrows.field(), "n11.txt");
+    arrow(&mut arrows, false);
+    assert_eq!(arrows.field(), "n00.txt");
+}
+
+#[test]
+fn page_keys_jump_five_choices_and_stop_at_the_ends() {
+    let mut fixture = offered(&names(12), false);
+    assert_eq!(fixture.field(), "n00.txt");
+    fast(&mut fixture, FastNavigation::Next);
+    assert_eq!(fixture.field(), "n05.txt");
+    fast(&mut fixture, FastNavigation::Next);
+    fast(&mut fixture, FastNavigation::Next);
+    assert_eq!(fixture.field(), "n11.txt", "stops at the last choice");
+    fast(&mut fixture, FastNavigation::Previous);
+    assert_eq!(fixture.field(), "n06.txt");
+    fast(&mut fixture, FastNavigation::Previous);
+    fast(&mut fixture, FastNavigation::Previous);
+    assert_eq!(fixture.field(), "n00.txt", "stops at the first choice");
+    let (rows, selected, _) = visible_rows(&mut fixture);
+    assert_eq!(rows[selected], "n00.txt");
+}
+
+#[test]
+fn arrows_without_offered_choices_leave_the_field_alone_and_letters_stay_text() {
+    let mut fixture = Fixture::new(&[("body", None)]);
+    fixture.app.state.focused_item = fixture.app.live_item_ids().first().copied();
+    fixture.begin(ExportDisposition::Keep);
+    fixture.set_field("out");
+    assert!(arrow(&mut fixture, false).is_empty());
+    assert!(arrow(&mut fixture, true).is_empty());
+    fast(&mut fixture, FastNavigation::Next);
+    assert_eq!(fixture.field(), "out");
+    fixture.key(UiKey::Character('j'));
+    fixture.key(UiKey::Character('k'));
+    assert_eq!(fixture.field(), "outjk");
+
+    // Editing the text after a listing retires the offered choices.
+    let mut fixture = offered(&names(3), false);
+    assert_eq!(fixture.field(), "n0", "extended to the shared prefix");
+    fixture.key(UiKey::Character('x'));
+    arrow(&mut fixture, false);
+    assert_eq!(fixture.field(), "n0x");
 }

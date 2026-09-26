@@ -187,7 +187,7 @@ fn assert_screens(screens: &BTreeMap<String, String>, expected: &[(&str, &[&str]
 }
 
 #[test]
-fn keep_completes_the_path_with_tab_and_writes_exact_copy_text() {
+fn keep_completes_the_path_with_tab_and_arrows_and_writes_exact_copy_text() {
     let scenario = Scenario::new(&["first Grüße 👩‍💻\r\n", "\tsecond"]);
     fs::create_dir(scenario.path("docs")).expect("docs");
     fs::create_dir(scenario.path("drafts")).expect("drafts");
@@ -203,6 +203,10 @@ fn keep_completes_the_path_with_tab_and_writes_exact_copy_text() {
         checkpoint listed
         send "\t"
         checkpoint cycled
+        send -- "\x1b\[B"
+        checkpoint arrow_down
+        send -- "\x1b\[A"
+        checkpoint arrow_up
         send -- "\x1b\[Z"
         checkpoint reversed
         send -- "out.txt\r"
@@ -220,6 +224,8 @@ fn keep_completes_the_path_with_tab_and_writes_exact_copy_text() {
             ),
             ("listed", &[">docs/", "drafts/"]),
             ("cycled", &[">drafts/"]),
+            ("arrow_down", &[">docs/"]),
+            ("arrow_up", &[">drafts/"]),
             ("reversed", &[">docs/"]),
             ("saved", &["exported 2 thoughts to out.txt"]),
         ],

@@ -119,13 +119,32 @@ impl BoardApp {
         }]
     }
 
-    /// Move through the offered choices by wheel, exactly as Tab and Shift+Tab do.
-    pub(super) fn scroll_export_choices(&mut self, backward: bool) {
+    /// Move one offered choice, exactly as `Tab` and `Shift+Tab` do. Shared by
+    /// the arrow keys and the wheel; without offered choices nothing happens.
+    pub(super) fn step_export_choices(&mut self, backward: bool) {
         if let Some(state) = self.export.active.as_mut()
-            && matches!(state.stage, ExportStage::Path)
-            && !state.candidates.is_empty()
+            && state.navigable()
         {
             state.cycle(backward);
+            self.layout = None;
+        }
+    }
+
+    /// Move several offered choices at once, stopping at the first and last.
+    pub(super) fn jump_export_choices(&mut self, delta: isize) {
+        if let Some(state) = self.export.active.as_mut()
+            && state.navigable()
+        {
+            let last = state.candidates.len() - 1;
+            let steps = delta.unsigned_abs();
+            // Before any choice is highlighted, the list starts just outside
+            // either end, as it does for the first Tab or Shift+Tab.
+            let target = match state.cycled {
+                Some(index) => index.saturating_add_signed(delta).min(last),
+                None if delta > 0 => steps.saturating_sub(1).min(last),
+                None => (last + 1).saturating_sub(steps),
+            };
+            state.select(target);
             self.layout = None;
         }
     }
@@ -203,6 +222,19 @@ impl ExportState {
         !self.candidates.is_empty() && self.field.text() == current
     }
 
+    /// Whether offered choices can be moved through without listing again.
+    fn navigable(&self) -> bool {
+        matches!(self.stage, ExportStage::Path) && self.cycling_matches_field()
+    }
+
+    fn select(&mut self, index: usize) {
+        if let Some(candidate) = self.candidates.get(index) {
+            let text = candidate.text.clone();
+            self.cycled = Some(index);
+            self.replace_field(&text);
+        }
+    }
+
     fn cycle(&mut self, backward: bool) {
         let count = self.candidates.len();
         if count == 0 {
@@ -214,9 +246,7 @@ impl ExportState {
             (Some(index), false) => (index + 1) % count,
             (Some(index), true) => (index + count - 1) % count,
         };
-        self.cycled = Some(next);
-        let text = self.candidates[next].text.clone();
-        self.replace_field(&text);
+        self.select(next);
     }
 
     /// Highlighted row: the save row, or the cycled choice after it.
