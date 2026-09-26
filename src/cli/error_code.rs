@@ -164,7 +164,12 @@ error_codes! {
     HerdrFailed => ("herdr_failed", 1, AfterChange, "`{}`"),
     PluginStateFailed => ("plugin_state_failed", 1, Yes, "`{}`"),
     OutputFailed => ("output_failed", 1, AfterChange, "`{}`"),
-    ExportWriteFailed => ("export_write_failed", 1, AfterChange, "`{\"output\", \"reason\"}`"),
+    ExportWriteFailed => (
+        "export_write_failed",
+        1,
+        AfterChange,
+        "`{\"output\", \"reason\", \"file_written\"}`"
+    ),
     ClipboardFailed => ("clipboard_failed", 1, AfterChange, "`{}`"),
     EnvironmentFailed => ("environment_failed", 1, AfterChange, "`{}`"),
     DiagnosticsFailed => ("diagnostics_failed", 1, AfterChange, "`{}`"),

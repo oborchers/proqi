@@ -32,13 +32,15 @@ impl ExportWriter for FileExport {
             return Ok(unchanged);
         }
         injected_test_failure()?;
-        let temporary = temporary_file(parent, request.content.as_bytes())?;
+        // A replacement stays private until it takes the replaced file's permissions.
+        let staged_mode = if existing.is_some() { 0o600 } else { 0o666 };
+        let temporary = temporary_file(parent, request.content.as_bytes(), staged_mode)?;
         if existing.is_some() {
             replace(temporary, request)?;
         } else {
             persist_new(temporary, path)?;
         }
-        sync_directory(parent)?;
+        sync_directory(parent).map_err(|_| ExportWriteError::WrittenUnconfirmed)?;
         Ok(written(request, existing.is_some(), false))
     }
 }
@@ -108,24 +110,35 @@ fn replace(
     };
     match verify_displaced(&staged, expected) {
         Ok(permissions) => {
-            file.set_permissions(permissions)
-                .and_then(|()| file.sync_all())
-                .map_err(|error| map_io(&error))?;
             // The temporary name now holds the replaced file.
             let _removed = fs::remove_file(&staged);
-            Ok(())
+            file.set_permissions(permissions)
+                .and_then(|()| file.sync_all())
+                .map_err(|_| ExportWriteError::WrittenUnconfirmed)
         }
-        Err(error) => {
-            if exchange(&staged, &request.path).is_err() {
-                return Err(ExportWriteError::Displaced(
-                    staged.to_string_lossy().into_owned(),
-                ));
-            }
-            // The temporary name holds this export's own bytes again.
-            let _removed = fs::remove_file(&staged);
-            Err(error)
-        }
+        Err(error) => restore(&file, &staged, &request.path, error),
     }
+}
+
+/// Exchange an unexpected entry back into place and discard only this export's own
+/// file. Anything else found at the temporary name is kept and reported.
+fn restore(
+    file: &File,
+    staged: &Path,
+    destination: &Path,
+    error: ExportWriteError,
+) -> Result<(), ExportWriteError> {
+    let displaced = || ExportWriteError::Displaced(staged.to_string_lossy().into_owned());
+    if exchange(staged, destination).is_err() {
+        return Err(displaced());
+    }
+    let own = file.metadata().map_err(|_| displaced())?;
+    let returned = fs::symlink_metadata(staged).map_err(|_| displaced())?;
+    if (own.dev(), own.ino()) != (returned.dev(), returned.ino()) {
+        return Err(displaced());
+    }
+    let _removed = fs::remove_file(staged);
+    Err(error)
 }
 
 /// Accept only the regular file the request authorized, and return its permissions
@@ -277,11 +290,12 @@ fn synchronize(path: &Path, parent: &Path) -> Result<(), ExportWriteError> {
 fn temporary_file(
     parent: &Path,
     content: &[u8],
+    mode: u32,
 ) -> Result<tempfile::NamedTempFile, ExportWriteError> {
     let mut temporary = tempfile::Builder::new()
         .prefix(".proqi-export-")
         .suffix(".tmp")
-        .permissions(Permissions::from_mode(0o666))
+        .permissions(Permissions::from_mode(mode))
         .tempfile_in(parent)
         .map_err(|error| map_io(&error))?;
     temporary

@@ -292,12 +292,17 @@ fn write_error(output: &str, error: &ExportWriteError) -> CliError {
         | ExportWriteError::TargetNotRegular => ErrorCode::ExportTargetInvalid,
         ExportWriteError::Changed
         | ExportWriteError::ReplaceUnsupported
+        | ExportWriteError::WrittenUnconfirmed
         | ExportWriteError::Displaced(_)
         | ExportWriteError::PermissionDenied
         | ExportWriteError::ReadOnly
         | ExportWriteError::StorageFull
         | ExportWriteError::Io => ErrorCode::ExportWriteFailed,
     };
-    CliError::new(code, format!("{error}: {output}"))
-        .with_details(json!({ "output": output, "reason": error.reason() }))
+    let written = matches!(error, ExportWriteError::WrittenUnconfirmed);
+    CliError::new(code, format!("{error}: {output}")).with_details(json!({
+        "output": output,
+        "reason": error.reason(),
+        "file_written": written,
+    }))
 }

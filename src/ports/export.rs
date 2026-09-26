@@ -84,6 +84,10 @@ pub enum ExportWriteError {
     /// The file system cannot exchange files atomically, so replacement is refused.
     #[error("this file system cannot replace a file safely; choose a new name")]
     ReplaceUnsupported,
+    /// The exported file is in place, but its permissions or durability could not be
+    /// confirmed; the destination may already hold the export.
+    #[error("the file was written but could not be confirmed on disk; check it before retrying")]
+    WrittenUnconfirmed,
     /// An unexpected entry could not be restored and was kept at this path.
     #[error("an unexpected entry could not be restored and was kept as {0}")]
     Displaced(String),
@@ -115,6 +119,7 @@ impl ExportWriteError {
             Self::TargetNotRegular => "target_not_regular",
             Self::Changed => "changed",
             Self::ReplaceUnsupported => "replace_unsupported",
+            Self::WrittenUnconfirmed => "written_unconfirmed",
             Self::Displaced(_) => "displaced",
             Self::PermissionDenied => "permission_denied",
             Self::ReadOnly => "read_only",

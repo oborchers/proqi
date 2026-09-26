@@ -264,7 +264,7 @@ fn an_entry_swapped_in_after_the_last_check_is_exchanged_back_untouched() {
     fs::write(&elsewhere, "must survive").expect("link target");
     fs::remove_file(&path).expect("remove");
     symlink(&elsewhere, &path).expect("race: link swapped in");
-    let staged = super::temporary_file(temporary.path(), b"new").expect("staged");
+    let staged = super::temporary_file(temporary.path(), b"new", 0o600).expect("staged");
     assert_eq!(
         super::replace(
             staged,
@@ -286,7 +286,7 @@ fn an_entry_swapped_in_after_the_last_check_is_exchanged_back_untouched() {
 
     fs::remove_file(&path).expect("remove link");
     fs::create_dir(&path).expect("race: folder swapped in");
-    let staged = super::temporary_file(temporary.path(), b"new").expect("staged");
+    let staged = super::temporary_file(temporary.path(), b"new", 0o600).expect("staged");
     assert_eq!(
         super::replace(staged, &request(&path, "new", ExportOverwrite::Always)),
         Err(ExportWriteError::TargetIsDirectory)
@@ -305,7 +305,7 @@ fn a_confirmed_exchange_replaces_the_file_and_removes_the_displaced_copy() {
     else {
         panic!("exists");
     };
-    let staged = super::temporary_file(temporary.path(), b"exchanged").expect("staged");
+    let staged = super::temporary_file(temporary.path(), b"exchanged", 0o600).expect("staged");
     assert_eq!(
         super::replace(
             staged,
@@ -332,4 +332,42 @@ fn replacing_keeps_the_permission_bits_of_the_replaced_file() {
     let mode = fs::metadata(&path).expect("metadata").permissions().mode() & 0o777;
     assert_eq!(mode, 0o600);
     assert_eq!(fs::read_to_string(&path).expect("file"), "replaced");
+}
+
+#[test]
+fn replacements_are_staged_privately_before_they_are_published() {
+    let temporary = tempfile::tempdir().expect("directory");
+    let staged = super::temporary_file(temporary.path(), b"private", 0o600).expect("staged");
+    let mode = staged
+        .as_file()
+        .metadata()
+        .expect("metadata")
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o600);
+}
+
+#[test]
+fn restore_keeps_an_entry_that_is_not_this_exports_own_file() {
+    let temporary = tempfile::tempdir().expect("directory");
+    let staged = temporary.path().join(".proqi-export-staged.tmp");
+    let destination = temporary.path().join("notes.txt");
+    let ours = temporary.path().join("ours.txt");
+    fs::write(&ours, "ours").expect("ours");
+    let own = fs::File::open(&ours).expect("own handle");
+    fs::write(&staged, "unexpected entry").expect("displaced entry");
+    fs::write(&destination, "newcomer").expect("third party replaced ours");
+    let result = super::restore(&own, &staged, &destination, ExportWriteError::Changed);
+    assert_eq!(
+        result,
+        Err(ExportWriteError::Displaced(
+            staged.to_string_lossy().into_owned()
+        ))
+    );
+    assert_eq!(
+        fs::read_to_string(&destination).expect("restored"),
+        "unexpected entry"
+    );
+    assert_eq!(fs::read_to_string(&staged).expect("kept"), "newcomer");
 }

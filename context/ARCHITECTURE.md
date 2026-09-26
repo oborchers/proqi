@@ -486,7 +486,13 @@ Replacement is an atomic exchange (`renameat` with `RENAME_EXCHANGE` or
 file and is exchanged back when it is not, so an entry that appeared after the
 last check is never overwritten. The temporary guard is disarmed at the
 exchange, so no failure path deletes the displaced entry; if it cannot be
-exchanged back, it is kept at the temporary name and reported. File systems
+exchanged back, it is kept at the temporary name and reported. After an
+exchange back, the temporary name is removed only when it provably holds this
+export's own file (same device and inode as the open handle); any other entry
+is kept and reported. A replacement is staged with mode `0600` and receives the
+displaced file's permission bits only after verification, so it is never
+published with wider access. Failures after the file is in place are reported
+as `written_unconfirmed` rather than as an ordinary write failure. File systems
 without an atomic exchange refuse replacement (`replace_unsupported`) instead of
 racing a check against a rename. A replacement takes the displaced file's
 permission bits and is synchronized again. The identity is content-free, so a same-length
