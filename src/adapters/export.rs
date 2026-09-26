@@ -16,7 +16,7 @@ use crate::ports::export::{
 pub const MAX_LISTED_ENTRIES: usize = 4_096;
 
 /// Maximum number of directory entries one completion listing inspects.
-pub const MAX_SCANNED_ENTRIES: usize = 65_536;
+pub const MAX_SCANNED_ENTRIES: usize = 262_144;
 
 /// Permission bits a replacement copies from the replaced file. Set-user-ID,
 /// set-group-ID, and sticky bits are never copied.

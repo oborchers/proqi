@@ -45,7 +45,9 @@ impl BoardApp {
                 return;
             }
             CompletionOutcome::TooLarge => {
-                self.set_info("this folder is too large to complete; type more of the name");
+                self.set_info(
+                    "this folder is too large to complete; type more of the name or all of it",
+                );
                 return;
             }
             CompletionOutcome::Completed {

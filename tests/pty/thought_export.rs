@@ -267,7 +267,7 @@ fn remove_confirms_replacement_with_cancel_first_and_undo_keeps_the_file() {
             ("again", &["replace existing file?"]),
             (
                 "removed",
-                &["exported 1 thought to taken.txt and removed them"],
+                &["exported 1 thought to taken.txt and removed it"],
             ),
         ],
     );
@@ -468,7 +468,7 @@ fn pointer_rows_cancel_save_and_confirm_replacement() {
             ("again", &["replace existing file?"]),
             (
                 "replaced",
-                &["exported 1 thought to taken.txt and removed them"],
+                &["exported 1 thought to taken.txt and removed it"],
             ),
         ],
     );

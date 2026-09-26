@@ -67,7 +67,11 @@ impl BoardApp {
             .file_name()
             .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
         let count = state.sources.len();
-        let noun = if count == 1 { "thought" } else { "thoughts" };
+        let (noun, them) = if count == 1 {
+            ("thought", "it")
+        } else {
+            ("thoughts", "them")
+        };
         let change = match state.disposition {
             ExportDisposition::Keep => {
                 self.set_success(format!("exported {count} {noun} to {file}"));
@@ -88,7 +92,9 @@ impl BoardApp {
                         },
                         at: clock.now(),
                     },
-                    format!("exported {count} {noun} to {file} and replaced them with a reference"),
+                    format!(
+                        "exported {count} {noun} to {file} and replaced {them} with a reference"
+                    ),
                 );
             }
         };
@@ -101,7 +107,7 @@ impl BoardApp {
         };
         self.apply_export_completion(
             completion,
-            format!("exported {count} {noun} to {file} and removed them"),
+            format!("exported {count} {noun} to {file} and removed {them}"),
         )
     }
 

@@ -527,7 +527,7 @@ changed after confirmation, permission, read-only, storage full, or I/O, and no
 partial destination file remains.
 
 `DirectoryLister` returns at most 4,096 UTF-8 entries of one absolute folder
-whose names start with the typed name, inspecting at most 65,536 entries,
+whose names start with the typed name, inspecting at most 262,144 entries,
 sorted by name, with folder status following links, for destination completion.
 A listing that stopped at either bound is marked truncated, and completion then
 claims neither a unique match nor no match. Matching and the shared prefix use
