@@ -111,7 +111,11 @@ fn replace(
     match verify_displaced(&staged, expected) {
         Ok(permissions) => {
             // The temporary name now holds the replaced file.
-            let _removed = fs::remove_file(&staged);
+            if fs::remove_file(&staged).is_err() {
+                return Err(ExportWriteError::Displaced(
+                    staged.to_string_lossy().into_owned(),
+                ));
+            }
             file.set_permissions(permissions)
                 .and_then(|()| file.sync_all())
                 .map_err(|_| ExportWriteError::WrittenUnconfirmed)
@@ -137,7 +141,7 @@ fn restore(
     if (own.dev(), own.ino()) != (returned.dev(), returned.ino()) {
         return Err(displaced());
     }
-    let _removed = fs::remove_file(staged);
+    fs::remove_file(staged).map_err(|_| displaced())?;
     Err(error)
 }
 

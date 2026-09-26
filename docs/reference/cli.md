@@ -361,11 +361,13 @@ proqi --json thoughts export <session> <thought> --output ~/notes.txt --replace-
   stays.
 - A write failure fails with `export_write_failed` and `details.reason`
   `permission_denied`, `read_only`, `storage_full`, `replace_unsupported` (the
-  file system cannot replace a file atomically), `displaced` (an unexpected
-  entry was kept under a temporary name), `written_unconfirmed`, or `io`, and
-  changes nothing on the Board. `details.file_written` is `true` only for
-  `written_unconfirmed`: the file is in place, but its permissions or durability
-  could not be confirmed, so check it before retrying. If the thoughts change or the owner rejects the Board step after
+  file system cannot replace a file atomically), `displaced`,
+  `written_unconfirmed`, or `io`, and changes nothing on the Board.
+  `details.file_written` is `true` only for `displaced`, where a replacement left
+  an entry under the temporary name given in the message and the destination
+  may already hold the export, and for `written_unconfirmed`, where the file is
+  in place but its permissions or durability could not be confirmed. Check the
+  files before retrying. If the thoughts change or the owner rejects the Board step after
   the file was written, the error keeps its own code and adds
   `details.file_written: true`.
 - With `--operation-id`, an exact retry after a completed Board change returns

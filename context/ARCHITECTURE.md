@@ -489,7 +489,9 @@ exchange, so no failure path deletes the displaced entry; if it cannot be
 exchanged back, it is kept at the temporary name and reported. After an
 exchange back, the temporary name is removed only when it provably holds this
 export's own file (same device and inode as the open handle); any other entry
-is kept and reported. A replacement is staged with mode `0600` and receives the
+is kept and reported. Every removal of a temporary name is checked: when the
+old file or this export's own file cannot be removed, the leftover is reported
+as `displaced` with its path instead of being ignored. A replacement is staged with mode `0600` and receives the
 displaced file's permission bits only after verification, so it is never
 published with wider access. Failures after the file is in place are reported
 as `written_unconfirmed` rather than as an ordinary write failure. File systems

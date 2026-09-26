@@ -299,10 +299,40 @@ fn write_error(output: &str, error: &ExportWriteError) -> CliError {
         | ExportWriteError::StorageFull
         | ExportWriteError::Io => ErrorCode::ExportWriteFailed,
     };
-    let written = matches!(error, ExportWriteError::WrittenUnconfirmed);
+    let written = matches!(
+        error,
+        ExportWriteError::WrittenUnconfirmed | ExportWriteError::Displaced(_)
+    );
     CliError::new(code, format!("{error}: {output}")).with_details(json!({
         "output": output,
         "reason": error.reason(),
         "file_written": written,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ExportWriteError, write_error};
+
+    #[test]
+    fn only_a_possibly_installed_export_reports_file_written() {
+        let written = |error: &ExportWriteError| {
+            write_error("/home/tester/out.txt", error).details()["file_written"].as_bool()
+        };
+        assert_eq!(written(&ExportWriteError::WrittenUnconfirmed), Some(true));
+        assert_eq!(
+            written(&ExportWriteError::Displaced(String::from(
+                "/home/tester/.proqi-export-1.tmp"
+            ))),
+            Some(true)
+        );
+        for error in [
+            ExportWriteError::Changed,
+            ExportWriteError::StorageFull,
+            ExportWriteError::ReadOnly,
+            ExportWriteError::ReplaceUnsupported,
+        ] {
+            assert_eq!(written(&error), Some(false), "{error:?}");
+        }
+    }
 }

@@ -88,8 +88,9 @@ pub enum ExportWriteError {
     /// confirmed; the destination may already hold the export.
     #[error("the file was written but could not be confirmed on disk; check it before retrying")]
     WrittenUnconfirmed,
-    /// An unexpected entry could not be restored and was kept at this path.
-    #[error("an unexpected entry could not be restored and was kept as {0}")]
+    /// A replacement left an entry under this temporary path, so the destination
+    /// may already hold the export. Both need checking before a retry.
+    #[error("the replacement left an entry at {0}; check it and the destination")]
     Displaced(String),
     /// The operating system denied access.
     #[error("permission denied")]

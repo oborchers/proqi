@@ -50,6 +50,11 @@ impl CliError {
         self.code
     }
 
+    #[cfg(test)]
+    pub(super) const fn details(&self) -> &Value {
+        &self.details
+    }
+
     pub(super) fn message(&self) -> &str {
         &self.message
     }
