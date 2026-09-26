@@ -52,13 +52,27 @@ fn a_replacement_takes_the_replaced_mode_without_special_bits() {
 fn replace_existing_creates_a_target_that_vanished_before_the_exchange() {
     let temporary = tempfile::tempdir().expect("directory");
     let path = temporary.path().join("gone.txt");
+    let reference = temporary.path().join("umask-reference.txt");
+    super::FileExport::default()
+        .write(&request(&reference, "x", ExportOverwrite::Refuse))
+        .expect("new file");
+    // Staged with the vanished file's broader bits, as a replacement would be.
     let staged = super::super::temporary_file(temporary.path(), b"new", 0o600).expect("staged");
+    staged
+        .as_file()
+        .set_permissions(fs::Permissions::from_mode(0o666))
+        .expect("old mode");
     assert_eq!(
         super::super::replace(staged, &request(&path, "new", ExportOverwrite::Always)),
         Ok(false),
         "created, not replaced"
     );
     assert_eq!(fs::read_to_string(&path).expect("file"), "new");
+    assert_eq!(
+        mode(&path),
+        mode(&reference),
+        "a created file follows the umask, not the vanished file"
+    );
     assert!(leftovers(temporary.path()).is_empty());
 }
 
@@ -69,7 +83,7 @@ fn an_identical_retry_never_reads_or_waits_on_a_swapped_in_fifo() {
     fs::write(&path, "same").expect("original");
     let inspected = identity(&path);
     assert_eq!(
-        super::super::holds_exactly(&path, b"same", inspected),
+        super::super::identical_file(&path, b"same", inspected).map(|file| file.is_some()),
         Ok(true)
     );
     fs::remove_file(&path).expect("remove");
@@ -80,14 +94,14 @@ fn an_identical_retry_never_reads_or_waits_on_a_swapped_in_fifo() {
         .expect("mkfifo");
     assert!(made.success(), "fifo swapped in");
     assert_eq!(
-        super::super::holds_exactly(&path, b"same", inspected),
+        super::super::identical_file(&path, b"same", inspected).map(|file| file.is_some()),
         Ok(false),
         "the FIFO is opened without blocking and rejected by its handle"
     );
     let link = temporary.path().join("link.txt");
     std::os::unix::fs::symlink(&path, &link).expect("link");
     assert_eq!(
-        super::super::holds_exactly(&link, b"same", inspected),
+        super::super::identical_file(&link, b"same", inspected).map(|file| file.is_some()),
         Err(ExportWriteError::TargetIsSymlink)
     );
 }

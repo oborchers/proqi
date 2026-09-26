@@ -504,14 +504,16 @@ synchronization on the identical-bytes retry path, are reported as
 `written_unconfirmed` rather than as an ordinary write failure. File systems
 without an atomic exchange refuse replacement (`replace_unsupported`) instead of
 racing a check against a rename. Under an explicit replace-any policy, a target
-that disappeared before the exchange is created as a new file. When
+that disappeared before the exchange is created as a new file from a fresh
+temporary that follows the umask, never with the vanished file's bits. When
 `persist_noclobber` reports a denial or unsupported operation after the
 temporary file was created in the same folder, the cause is the file system's
 missing no-replace rename (tempfile falls back to a hard link), reported as
 `install_unsupported` rather than `permission_denied`. The identical-bytes check
 opens the target with `O_NONBLOCK | O_NOFOLLOW` and reads only when the open
 handle is still the inspected regular file (same device and inode), so a FIFO,
-device, or link swapped in after inspection is never read or waited on. The
+device, or link swapped in after inspection is never read or waited on; that
+verified handle is then synchronized, and the path is not opened again. The
 identity is content-free, so a same-length rewrite within the file system's
 timestamp granularity is not detected. The terminal composition root decides a
 deterministic qualification fault once and passes it to `FileExport`; the

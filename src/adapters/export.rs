@@ -106,15 +106,18 @@ fn authorize(
             _ => Ok(None),
         };
     };
+    if request.overwrite == ExportOverwrite::RefuseUnlessIdentical
+        && let Some(file) = identical_file(&request.path, request.content.as_bytes(), existing)?
+    {
+        // The identical file is already in place, so an unconfirmed flush is
+        // reported exactly like one after a first write. The verified handle is
+        // synchronized; the path is never opened again.
+        file.sync_all()
+            .map_err(|_| ExportWriteError::WrittenUnconfirmed)?;
+        sync_directory(parent).map_err(|_| ExportWriteError::WrittenUnconfirmed)?;
+        return Ok(Some(written(request, false, true)));
+    }
     match request.overwrite {
-        ExportOverwrite::RefuseUnlessIdentical
-            if holds_exactly(&request.path, request.content.as_bytes(), existing)? =>
-        {
-            // The identical file is already in place, so an unconfirmed flush is
-            // reported exactly like one after a first write.
-            synchronize(&request.path, parent).map_err(|_| ExportWriteError::WrittenUnconfirmed)?;
-            Ok(Some(written(request, false, true)))
-        }
         ExportOverwrite::Refuse | ExportOverwrite::RefuseUnlessIdentical => {
             Err(ExportWriteError::Exists(existing))
         }
@@ -151,7 +154,12 @@ fn replace(
     match exchange(temporary.path(), &request.path) {
         Ok(()) => {}
         Err(rustix::io::Errno::NOENT) if expected.is_none() => {
-            persist_new(temporary, &request.path)?;
+            // The target vanished, so this is a new file: it follows the umask,
+            // not the vanished file's permission bits.
+            drop(temporary);
+            let parent = request.path.parent().ok_or(ExportWriteError::InvalidPath)?;
+            let fresh = temporary_file(parent, request.content.as_bytes(), 0o666)?;
+            persist_new(fresh, &request.path)?;
             return Ok(false);
         }
         Err(rustix::io::Errno::NOENT) => return Err(ExportWriteError::Changed),
@@ -349,16 +357,16 @@ fn existing_file(metadata: &Metadata) -> ExistingFile {
     }
 }
 
-/// Whether the inspected regular file holds exactly `content`.
+/// The open inspected regular file when it holds exactly `content`.
 ///
 /// The file is opened without following a link and without blocking, and the
 /// open handle must still be the inspected regular file, so an entry swapped in
 /// after inspection (a FIFO, device, or link) is never read or waited on.
-fn holds_exactly(
+fn identical_file(
     path: &Path,
     content: &[u8],
     inspected: ExistingFile,
-) -> Result<bool, ExportWriteError> {
+) -> Result<Option<File>, ExportWriteError> {
     use rustix::fs::{Mode, OFlags};
     let descriptor = rustix::fs::open(
         path,
@@ -373,24 +381,14 @@ fn holds_exactly(
     let metadata = file.metadata().map_err(|error| map_io(&error))?;
     if !metadata.is_file()
         || (metadata.dev(), metadata.ino()) != (inspected.device, inspected.inode)
+        || u64::try_from(content.len()).ok() != Some(metadata.len())
     {
-        return Ok(false);
-    }
-    let length = metadata.len();
-    if u64::try_from(content.len()).ok() != Some(length) {
-        return Ok(false);
+        return Ok(None);
     }
     let mut existing = Vec::with_capacity(content.len());
     file.read_to_end(&mut existing)
         .map_err(|error| map_io(&error))?;
-    Ok(existing == content)
-}
-
-fn synchronize(path: &Path, parent: &Path) -> Result<(), ExportWriteError> {
-    File::open(path)
-        .and_then(|file| file.sync_all())
-        .map_err(|error| map_io(&error))?;
-    sync_directory(parent)
+    Ok((existing == content).then_some(file))
 }
 
 fn temporary_file(
