@@ -78,6 +78,8 @@ pub trait Environment {
     ///
     /// Returns a typed error when the process image cannot be resolved.
     fn current_executable(&self) -> Result<PathBuf, PathError>;
+    /// Resolve the user's absolute home directory, used for `~` in typed export paths.
+    fn home_directory(&self) -> Option<PathBuf>;
 }
 
 /// Path resolution failure.

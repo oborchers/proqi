@@ -89,7 +89,7 @@ fn session_request_protocol_stamp_is_authorized_backed_up_and_preserves_receipts
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("metadata");
-    assert_eq!(metadata, (21, 20));
+    assert_eq!(metadata, (22, 21));
     assert_eq!(
         metadata,
         (SUPPORTED_SCHEMA_VERSION, STORAGE_PROTOCOL_VERSION)

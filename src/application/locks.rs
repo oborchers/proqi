@@ -26,6 +26,7 @@ pub(super) fn ensure_action_unlocked(state: &AppState, action: &Action) -> Appli
         | Action::SetPresentationMany { thought_ids, .. }
         | Action::DuplicateThoughts { thought_ids, .. }
         | Action::MergeThoughts { thought_ids, .. } => locked_many(state, thought_ids),
+        Action::CompleteExport(completion) => locked_many(state, &completion.thought_ids),
         Action::DuplicateItems { item_ids, .. } => item_ids
             .iter()
             .filter_map(|id| id.thought())

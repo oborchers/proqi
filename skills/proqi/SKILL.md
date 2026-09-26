@@ -77,7 +77,7 @@ version may expose only a subset.
   "diagnostics": ["collect", "keypress"],
   "sessions": ["list", "ensure", "create", "rename", "trash", "restore", "undo", "redo", "prune"],
   "items": ["insert-separator", "move", "delete", "duplicate"],
-  "thoughts": ["list", "inspect", "add", "delete", "rename", "replace", "collapse", "move", "split", "extract", "merge", "reflow", "send", "undo", "redo"],
+  "thoughts": ["list", "inspect", "add", "delete", "rename", "replace", "collapse", "move", "split", "extract", "merge", "reflow", "export", "send", "undo", "redo"],
   "update": ["check"],
   "herdr": ["toggle"],
   "history_scopes": ["board", "editor", "browser"]
@@ -237,6 +237,23 @@ For remove-after-delivery, obtain a second canonical `op_` identifier for
 If the command reports that destination delivery succeeded but source removal
 failed, surface the structured receipt and do not retry with new identifiers
 without the user's direction.
+
+Write specified thoughts to a plain-text file only when the user asks for it
+and names the destination. The file contains exactly the copy text of those
+thoughts in Board order. Relative `--output` paths resolve from your current
+directory. Never pass `--replace-existing`, `--remove`, or
+`--replace-with-reference` unless the user asked to replace that file or to
+remove or replace the thoughts:
+
+```console
+proqi --json thoughts export ses_06g30t7dv5qv55n1ppn3clis3k tht_06g30t8fudrq55fdkk348i7388 --output notes.txt
+```
+
+On `export_target_exists`, report the existing file and ask before retrying with
+`--replace-existing`. Pass `--operation-id` only with `--remove` or
+`--replace-with-reference`. When an error reports `details.file_written: true`,
+the file is saved; retry only the Board step with the reported
+`details.operation_id`.
 
 Use `--thought tht_06g30t8fudrq55fdkk348i7388` with undo or redo only when
 the user explicitly requests that thought's editor history instead of board

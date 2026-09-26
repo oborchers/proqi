@@ -272,6 +272,19 @@ impl BoardApp {
     }
 
     pub(super) fn close_overlay(&mut self) {
+        // Close only the visible owner. The replacement confirmation closes like
+        // Escape, back to the destination field.
+        match self.active_input_route().1 {
+            super::input_dispatch::ActiveInputOwner::ExportPath => {
+                self.cancel_export();
+                return;
+            }
+            super::input_dispatch::ActiveInputOwner::ExportReplace => {
+                self.return_to_export_path();
+                return;
+            }
+            _ => {}
+        }
         self.cancel_screenshot_takeover();
         self.palette = None;
         self.global_delivery = None;
@@ -404,6 +417,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        use crate::domain::ExportDisposition;
         use crate::ui::shortcut_registry::PaletteBoardCommand as BoardCommand;
         match command {
             BoardCommand::New => {
@@ -421,6 +435,11 @@ impl BoardApp {
             BoardCommand::CopyResume => self.copy_resume_command(ids),
             BoardCommand::SendSession => self.begin_session_transfer(false, ids, clock),
             BoardCommand::SendSessionRemove => self.begin_session_transfer(true, ids, clock),
+            BoardCommand::Export => self.begin_export(ExportDisposition::Keep, ids, clock),
+            BoardCommand::ExportRemove => self.begin_export(ExportDisposition::Remove, ids, clock),
+            BoardCommand::ExportReplace => {
+                self.begin_export(ExportDisposition::ReplaceWithReference, ids, clock)
+            }
             BoardCommand::Delete => self.delete(ids, clock),
             BoardCommand::Copy => self.copy_active(ids),
             BoardCommand::Cut => self.cut_active(ids, clock),

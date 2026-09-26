@@ -178,6 +178,15 @@ impl BoardApp {
     }
 
     fn try_reduce(&mut self, action: Action) -> Option<Vec<Effect>> {
+        self.try_reduce_described(action, |cause| cause)
+    }
+
+    /// Reduce, reporting a rejection as `describe(cause)` with the exact cause.
+    fn try_reduce_described(
+        &mut self,
+        action: Action,
+        describe: impl FnOnce(String) -> String,
+    ) -> Option<Vec<Effect>> {
         let may_change_attachments = Self::may_change_attachments(&action);
         match reduce(&mut self.state, action) {
             Ok(effects) => {
@@ -185,10 +194,11 @@ impl BoardApp {
                 Some(effects)
             }
             Err(error) => {
+                let message = describe(error.to_string());
                 if matches!(self.state.durability, DurabilityState::Failed { .. }) {
-                    self.set_storage_failure(error.to_string());
+                    self.set_storage_failure(message);
                 } else {
-                    self.set_error(error.to_string());
+                    self.set_error(message);
                 }
                 None
             }
@@ -207,10 +217,20 @@ impl BoardApp {
         action: Action,
         transition: EmptyBoardTransition,
     ) -> Vec<Effect> {
+        self.reduce_with_empty_transition_described(action, transition, |cause| cause)
+            .unwrap_or_default()
+    }
+
+    /// Like [`Self::reduce_with_empty_transition`], but distinguishes a rejection
+    /// (`None`, reported as `describe(cause)`) from success.
+    pub(super) fn reduce_with_empty_transition_described(
+        &mut self,
+        action: Action,
+        transition: EmptyBoardTransition,
+        describe: impl FnOnce(String) -> String,
+    ) -> Option<Vec<Effect>> {
         let was_nonempty = !self.state.board.live_items().is_empty();
-        let Some(effects) = self.try_reduce(action) else {
-            return Vec::new();
-        };
+        let effects = self.try_reduce_described(action, describe)?;
         if was_nonempty && self.state.board.live_items().is_empty() {
             self.state.reconcile_empty_board(transition);
             if transition == EmptyBoardTransition::ComposeAfterLocalRemoval
@@ -223,6 +243,6 @@ impl BoardApp {
             }
             self.sync_editor_from_state();
         }
-        effects
+        Some(effects)
     }
 }

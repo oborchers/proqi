@@ -91,6 +91,9 @@ fn text_named_action(
         {
             Some(Action::Confirm)
         }
+        LogicalKey::Tab if context == Context::ExportPath && shifted => Some(Action::BackTab),
+        LogicalKey::Tab if context == Context::ExportPath => Some(Action::Tab),
+        LogicalKey::BackTab if context == Context::ExportPath => Some(Action::BackTab),
         LogicalKey::Tab if is_editor_context(context) && shifted => Some(Action::BackTab),
         LogicalKey::Tab if is_editor_context(context) => Some(Action::Tab),
         LogicalKey::BackTab if is_editor_context(context) => Some(Action::BackTab),
@@ -115,6 +118,8 @@ const fn enter_action(context: Context) -> Option<Action> {
         | Context::BrowserQuery
         | Context::Rename
         | Context::BrowserRename
+        | Context::ExportPath
+        | Context::ExportReplace
         | Context::Update
         | Context::Screenshot
         | Context::Direction => Some(Action::Confirm),

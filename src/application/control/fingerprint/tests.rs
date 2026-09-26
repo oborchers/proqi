@@ -197,3 +197,36 @@ fn hex(bytes: [u8; 32]) -> String {
         output
     })
 }
+
+#[test]
+fn export_identity_ignores_derived_digests_but_binds_path_and_mode() {
+    let export = |digest: u8, path: &str, disposition| ControlMutation::ExportThoughts {
+        operation_id: operation(),
+        thought_ids: vec![thought()],
+        expected_digests: vec![[digest; 32]],
+        disposition,
+        reference_thought_id: None,
+        output_path: path.to_owned(),
+    };
+    let remove = crate::domain::ExportDisposition::Remove;
+    let original = fingerprint(&export(1, "/work/out.txt", remove));
+    assert_eq!(
+        original,
+        fingerprint(&export(2, "/work/out.txt", remove)),
+        "a retry after later edits keeps its identity"
+    );
+    assert_ne!(original, fingerprint(&export(1, "/work/other.txt", remove)));
+    let mut replace = export(
+        1,
+        "/work/out.txt",
+        crate::domain::ExportDisposition::ReplaceWithReference,
+    );
+    if let ControlMutation::ExportThoughts {
+        reference_thought_id,
+        ..
+    } = &mut replace
+    {
+        *reference_thought_id = Some(thought());
+    }
+    assert_ne!(original, fingerprint(&replace));
+}

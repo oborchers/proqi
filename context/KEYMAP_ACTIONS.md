@@ -25,6 +25,9 @@ factory labels without requiring another presentation table.
 | `session.copy_resume` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `session.send` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `session.send_remove` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
+| `thought.export` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
+| `thought.export_remove` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
+| `thought.export_replace` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `thought.edit` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `editor.plain_newline` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `editor.jump_up` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
@@ -60,49 +63,49 @@ factory labels without requiring another presentation table.
 | `thought.select` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `thought.range_select` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `help.open` | `board`, `compose`, `edit`, `commands`, `invocation`, `recovery`, `insertion_boundary` | Ordinary | yes |
-| `application.quit` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | RecoveryCritical | yes |
-| `context.close` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | InvariantClose |  |
-| `context.confirm` | `compose`, `edit`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `update`, `screenshot`, `direction` | Ordinary |  |
-| `text.backspace` | `compose`, `edit`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `browser`, `browser_query`, `rename`, `browser_rename` | TextEditing |  |
-| `text.delete_forward` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | TextEditing |  |
-| `text.tab` | `compose`, `edit` | Ordinary |  |
-| `text.backtab` | `compose`, `edit`, `invocation` | Ordinary |  |
-| `list.previous` | `board`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `update`, `screenshot`, `release_highlights`, `insertion_boundary` | Ordinary |  |
-| `list.next` | `board`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `update`, `screenshot`, `release_highlights`, `insertion_boundary` | Ordinary |  |
+| `application.quit` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `export_path`, `export_replace`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | RecoveryCritical | yes |
+| `context.close` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `export_path`, `export_replace`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | InvariantClose |  |
+| `context.confirm` | `compose`, `edit`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `export_path`, `export_replace`, `update`, `screenshot`, `direction` | Ordinary |  |
+| `text.backspace` | `compose`, `edit`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `browser`, `browser_query`, `rename`, `browser_rename`, `export_path` | TextEditing |  |
+| `text.delete_forward` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | TextEditing |  |
+| `text.tab` | `compose`, `edit`, `export_path` | Ordinary |  |
+| `text.backtab` | `compose`, `edit`, `invocation`, `export_path` | Ordinary |  |
+| `list.previous` | `board`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `export_path`, `export_replace`, `update`, `screenshot`, `release_highlights`, `insertion_boundary` | Ordinary |  |
+| `list.next` | `board`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `export_path`, `export_replace`, `update`, `screenshot`, `release_highlights`, `insertion_boundary` | Ordinary |  |
 | `board.range_previous` | `board`, `insertion_boundary` | Ordinary |  |
 | `board.range_next` | `board`, `insertion_boundary` | Ordinary |  |
-| `navigation.fast_previous` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | Ordinary |  |
-| `navigation.fast_next` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | Ordinary |  |
-| `navigation.fast_extend_previous` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | Ordinary |  |
-| `navigation.fast_extend_next` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | Ordinary |  |
+| `navigation.fast_previous` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `export_path`, `export_replace`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | Ordinary |  |
+| `navigation.fast_next` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `export_path`, `export_replace`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | Ordinary |  |
+| `navigation.fast_extend_previous` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `export_path`, `export_replace`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | Ordinary |  |
+| `navigation.fast_extend_next` | `board`, `compose`, `edit`, `help`, `commands`, `search`, `invocation`, `invocation_query`, `transfer`, `global_delivery_query`, `global_delivery_disposition`, `browser`, `browser_query`, `rename`, `browser_rename`, `export_path`, `export_replace`, `update`, `screenshot`, `recovery`, `direction`, `release_highlights`, `insertion_boundary` | Ordinary |  |
 | `board.first_thought` | `board`, `commands`, `insertion_boundary` | Ordinary | yes |
 | `board.last_thought` | `board`, `commands`, `insertion_boundary` | Ordinary | yes |
 | `board.range_first_thought` | `board`, `insertion_boundary` | Ordinary |  |
 | `board.range_last_thought` | `board`, `insertion_boundary` | Ordinary |  |
-| `editor.grapheme_back` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.grapheme_forward` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.word_back` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.word_forward` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
+| `editor.grapheme_back` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.grapheme_forward` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.word_back` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.word_forward` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
 | `editor.document_start` | `compose`, `edit` | Ordinary |  |
 | `editor.document_end` | `compose`, `edit` | Ordinary |  |
 | `editor.visual_up` | `compose`, `edit` | Ordinary |  |
 | `editor.visual_down` | `compose`, `edit` | Ordinary |  |
-| `editor.line_start` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.line_end` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.extend_grapheme_back` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.extend_grapheme_forward` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.extend_word_back` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.extend_word_forward` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
+| `editor.line_start` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.line_end` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.extend_grapheme_back` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.extend_grapheme_forward` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.extend_word_back` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.extend_word_forward` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
 | `editor.extend_visual_up` | `compose`, `edit` | Ordinary |  |
 | `editor.extend_visual_down` | `compose`, `edit` | Ordinary |  |
 | `editor.extend_document_start` | `compose`, `edit` | Ordinary |  |
 | `editor.extend_document_end` | `compose`, `edit` | Ordinary |  |
-| `editor.extend_line_start` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.extend_line_end` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.extend_visual_row_start` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.extend_visual_row_end` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.move_visual_row_start` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
-| `editor.move_visual_row_end` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query` | Ordinary |  |
+| `editor.extend_line_start` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.extend_line_end` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.extend_visual_row_start` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.extend_visual_row_end` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.move_visual_row_start` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
+| `editor.move_visual_row_end` | `compose`, `edit`, `commands`, `search`, `invocation`, `transfer`, `global_delivery_query`, `export_path` | Ordinary |  |
 | `clipboard.copy` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `clipboard.cut` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | DestructiveUndoable | yes |
 | `clipboard.paste_exact` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
@@ -110,10 +113,10 @@ factory labels without requiring another presentation table.
 | `clipboard.paste_reflow` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `thought.insert_above` | `board`, `commands`, `insertion_boundary` | Ordinary | yes |
 | `thought.insert_below` | `board`, `commands`, `insertion_boundary` | Ordinary | yes |
-| `selection.select_all` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
+| `selection.select_all` | `board`, `compose`, `edit`, `commands`, `invocation`, `export_path`, `insertion_boundary` | Ordinary | yes |
 | `board.duplicate` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
-| `history.undo` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
-| `history.redo` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
+| `history.undo` | `board`, `compose`, `edit`, `commands`, `invocation`, `export_path`, `insertion_boundary` | Ordinary | yes |
+| `history.redo` | `board`, `compose`, `edit`, `commands`, `invocation`, `export_path`, `insertion_boundary` | Ordinary | yes |
 | `submission.submit_keep` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | Ordinary | yes |
 | `editor.delete_logical_line` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | TextEditing | yes |
 | `editor.delete_sentence` | `board`, `compose`, `edit`, `commands`, `invocation`, `insertion_boundary` | TextEditing | yes |

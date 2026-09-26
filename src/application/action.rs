@@ -186,6 +186,8 @@ pub enum Action {
         /// Event time.
         at: Timestamp,
     },
+    /// Remove or replace exported sources after their file became durable.
+    CompleteExport(super::ExportCompletion),
     /// Edit through Proqi's canonical annotation rebasing path.
     #[doc(hidden)]
     EditOwnedThought(OwnedThoughtEdit),

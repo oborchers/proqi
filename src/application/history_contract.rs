@@ -61,6 +61,7 @@ impl Action {
             | Self::SplitThought { .. }
             | Self::ExtractThought { .. }
             | Self::MergeThoughts { .. }
+            | Self::CompleteExport(_)
             | Self::DeleteThought { .. }
             | Self::DeleteThoughts { .. }
             | Self::DeleteItems { .. }

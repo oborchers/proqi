@@ -5,7 +5,7 @@ Status: v0.1.0 architecture contract
 Project: Proqi
 
 Command: `proqi`
-Last updated: 2026-09-12
+Last updated: 2026-09-25
 
 ## Purpose
 
@@ -473,6 +473,98 @@ absolute files. It supports local file URLs, quoted paths, escaped whitespace,
 POSIX shell-escaped punctuation, multiple paths, and Unicode names. Ordinary
 prompt text remains exact. Dropped files remain external references and are
 never read or copied automatically.
+
+### `ExportWriter` and `DirectoryLister`
+
+Plain-text thought export crosses a narrow filesystem port. `ExportWriter`
+accepts an absolute destination, exact bytes, and a closed replacement policy:
+refuse, refuse unless the existing regular file already holds exactly these
+bytes, replace only the confirmed content-free identity (device, inode, length,
+and modification time), or replace any regular file for an explicit CLI flag.
+Replacement is an atomic exchange (`renameat` with `RENAME_EXCHANGE` or
+`RENAME_SWAP`). The displaced entry is then verified as the confirmed regular
+file and is exchanged back when it is not, so an entry that appeared after the
+last check is never overwritten. The temporary guard is disarmed at the
+exchange, so no failure path deletes the displaced entry; if it cannot be
+exchanged back, it is kept at the temporary name and reported. After an
+exchange back, the temporary name is removed only when it provably holds this
+export's own file (same device and inode as the open handle); any other entry
+is kept and reported. Every removal of a temporary name is checked: when the
+old file or this export's own file cannot be removed, the leftover is reported
+as `displaced` with its path instead of being ignored. A crash between the
+exchange and that removal leaves a `.proqi-export-*.tmp` file in the
+destination folder holding the replaced file's previous contents. A replacement
+is created with mode `0600` and receives the inspected file's `0777` permission
+bits before the exchange, so it is never published with wider access than the
+file it replaces and never stays private; set-user-ID and set-group-ID bits,
+owner, group, access control lists, and extended attributes are not copied. If
+the displaced file's bits changed concurrently, they are copied again after
+verification. Failures after the file is in place, including a failed folder
+synchronization on the identical-bytes retry path, are reported as
+`written_unconfirmed` rather than as an ordinary write failure. File systems
+without an atomic exchange refuse replacement (`replace_unsupported`) instead of
+racing a check against a rename. Under an explicit replace-any policy, a target
+that disappeared before the exchange is created as a new file from a fresh
+temporary that follows the umask, never with the vanished file's bits. When
+`persist_noclobber` reports a denial or unsupported operation after the
+temporary file was created in the same folder, the cause is the file system's
+missing no-replace rename (tempfile falls back to a hard link), reported as
+`install_unsupported` rather than `permission_denied`. The identical-bytes check
+opens the target with `O_NONBLOCK | O_NOFOLLOW` and reads only when the open
+handle is still the inspected regular file (same device and inode), so a FIFO,
+device, or link swapped in after inspection is never read or waited on; that
+verified handle is then synchronized, and the path is not opened again. The
+identity is content-free, so a same-length rewrite within the file system's
+timestamp granularity is not detected. The terminal composition root decides a
+deterministic qualification fault once and passes it to `FileExport`; the
+adapter reads no environment.
+The adapter requires an existing parent folder and never creates one, refuses
+symbolic links, folders, and other non-regular targets, writes a `tempfile`
+temporary in the destination folder with mode `0666` before the umask, flushes
+and `fsync`s it, then installs it with `persist_noclobber` or, only when
+replacement is authorized, the verified exchange described above. The folder is
+synchronized afterwards.
+Failures are typed as missing folder, invalid or unsafe target, existing file,
+changed after confirmation, permission, read-only, storage full, or I/O, and no
+partial destination file remains.
+
+`DirectoryLister` returns at most 4,096 UTF-8 entries of one absolute folder
+whose names start with the typed name, inspecting at most 262,144 entries,
+sorted by name, with folder status following links, for destination completion.
+A listing that stopped at either bound is marked truncated, and completion then
+claims neither a unique match nor no match. Matching and the shared prefix use
+every listed match; only the 64 offered rows are capped.
+Both ports run on the existing bounded external lane. The UI owns the field,
+generation-tagged listings, and the pure completion policy; the reducer and
+render path perform no filesystem work. The pure path policy in
+`domain::export` resolves `~/` and relative destinations against an injected
+base and home directory, resolves `.` and `..` lexically so the written path,
+the reference thought, and the receipt agree, names default files, and
+sanitizes stems. The CLI resolves the home directory once when it opens its
+runtime context, beside the working directory.
+
+Export content comes from `application::prompt::copy_text`, the same owner as
+Board copy, so a file is byte-identical to the copy text of its selection. The
+Board step is `Action::CompleteExport`, which requires every source to be live,
+in Board order, and unchanged. Removal uses the ordinary batch deletion with the
+`ExportAndRemove` kind. Replacement is one batch of exact source deletions plus
+one `AddThought` whose body is built by the same attachment-reference
+constructor as Screenshot Inbox captures, with a fresh File ordinal from the
+canonical counters, under the `ExportAndReplace` kind. Both are one undo unit.
+A pending removal or replacement counts as an asynchronous sequence producer
+for mutation admission until its write completes.
+
+The CLI writes the file in its own process and then commits the Board step,
+either under the inactive session lease through `SessionService::complete_export`
+or through owner control. The forwarded request carries the ordered thoughts,
+their SHA-256 content digests as execution preconditions, the disposition, the
+absolute output path, and for replacement a reference `ThoughtId` derived from
+the operation identity. Its content-redacted semantic fingerprint covers the
+caller's inputs (thoughts, disposition, reference identity, and a digest of the
+path) but not the derived content digests, so an exact retry still matches after
+later edits, while reusing an identity for another destination conflicts. An
+exact retry is matched against the retained receipt before any write, so a
+replay never rewrites the file.
 
 ### `AttachmentAccessibility`
 
@@ -970,6 +1062,11 @@ Schema version 18 and storage protocol version 17 add the nullable thought name
 column and the durable `SetName` operation payload. The migration is additive,
 backup-protected, and leaves existing thoughts unnamed. Name-only changes do
 not rebuild full-text search.
+
+Schema version 22 and storage protocol version 21 register the
+`ExportAndRemove` and `ExportAndReplace` Board operation kinds. Migration 22 is
+a metadata-only, backup-protected protocol stamp, like migration 15 for Reflow.
+An older writer refuses the newer protocol instead of misreading export history.
 
 Schema version 19 and storage protocol version 18 add the nullable semantic
 request fingerprint to `commit_receipts`. The application hashes a versioned,
@@ -2184,7 +2281,9 @@ the request. If the owner cannot be verified or reached, the CLI returns `sessio
 the verified owner's control protocol cannot represent the request, the CLI
 returns `protocol_mismatch`, because a retry cannot succeed.
 
-Control protocol version 12 is current. Version 12 adds one selected-thought
+Control protocol version 13 is current. Version 13 adds the export completion
+request, which removes or replaces exported thoughts after the caller's file is
+durable; older owners report `protocol_mismatch` for it. Version 12 adds one selected-thought
 preserve-add batch. The destination owner commits every copy under one operation
 identity and returns one durable cohort receipt; older owners reject the batch.
 Version 11 carries typed separator and

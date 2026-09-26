@@ -28,23 +28,7 @@ pub fn prepare_capture(
     operation_id: OperationId,
     at: Timestamp,
 ) -> ApplicationResult<CaptureCommit> {
-    let path = candidate
-        .path
-        .to_str()
-        .ok_or(ApplicationError::InvalidState)?;
-    let mut content = String::with_capacity(path.len().saturating_add(1));
-    content.push_str(path);
-    content.push(' ');
-    let display_name = safe_display_name(&candidate.path)?;
-    let annotation = ContentAnnotation {
-        start: 0,
-        end: path.len(),
-        kind: ContentAnnotationKind::Attachment {
-            ordinal: None,
-            image: true,
-            display_name,
-        },
-    };
+    let (content, annotation) = attachment_reference(&candidate.path, true)?;
     let sequence = state.next_sequence()?;
     let insertion_index = state.board.live_items().len();
     let position = u32::try_from(insertion_index)
@@ -120,6 +104,38 @@ pub fn apply_capture(
     state.apply_durable_capture(operation)?;
     state.insertion_index = state.board.live_items().len();
     Ok(Some(thought_id))
+}
+
+/// Build the canonical file-reference thought body: the exact absolute path followed by one
+/// ASCII space, with one unassigned attachment annotation covering only the path.
+///
+/// Screenshot captures and file-reference export share this shape.
+///
+/// # Errors
+///
+/// Returns an invalid-state error for a relative, non-UTF-8, or nameless path.
+pub(crate) fn attachment_reference(
+    path: &Path,
+    image: bool,
+) -> ApplicationResult<(String, ContentAnnotation)> {
+    let text = path.to_str().ok_or(ApplicationError::InvalidState)?;
+    if !path.is_absolute() {
+        return Err(ApplicationError::InvalidState);
+    }
+    let mut content = String::with_capacity(text.len().saturating_add(1));
+    content.push_str(text);
+    content.push(' ');
+    let display_name = safe_display_name(path)?;
+    let annotation = ContentAnnotation {
+        start: 0,
+        end: text.len(),
+        kind: ContentAnnotationKind::Attachment {
+            ordinal: None,
+            image,
+            display_name,
+        },
+    };
+    Ok((content, annotation))
 }
 
 fn safe_display_name(path: &Path) -> ApplicationResult<String> {

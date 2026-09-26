@@ -11,6 +11,8 @@ pub enum PendingMutationIntent {
     SubmissionCompletion,
     /// A successful cross-session transfer may remove its source thought.
     TransferRemove,
+    /// A durable plain-text export may remove or replace its source thoughts.
+    ExportChange,
 }
 
 /// Bounded typed counts of pending asynchronous sequence producers.
@@ -20,6 +22,7 @@ pub struct PendingMutationIntents {
     clipboard_pastes: usize,
     submission_completions: usize,
     transfer_removals: usize,
+    export_changes: usize,
 }
 
 impl PendingMutationIntents {
@@ -30,6 +33,7 @@ impl PendingMutationIntents {
             PendingMutationIntent::ClipboardPaste => &mut self.clipboard_pastes,
             PendingMutationIntent::SubmissionCompletion => &mut self.submission_completions,
             PendingMutationIntent::TransferRemove => &mut self.transfer_removals,
+            PendingMutationIntent::ExportChange => &mut self.export_changes,
         };
         *target = target.saturating_add(count);
     }
@@ -41,6 +45,7 @@ impl PendingMutationIntents {
             .saturating_add(self.clipboard_pastes)
             .saturating_add(self.submission_completions)
             .saturating_add(self.transfer_removals)
+            .saturating_add(self.export_changes)
     }
 
     /// Whether no asynchronous completion can still allocate a sequence.

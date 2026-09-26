@@ -1,0 +1,14 @@
+---
+source: src/ui/app/export/tests/scrolling.rs
+expression: "snapshot(&mut fixture, 60, 10)"
+---
+00│┌ export to file ────────────────────────────────────────[x]│
+01││>n11.txt                                                  ↑│
+02││n05.txt                                                   ││
+03││n06.txt                                                   ││
+04││n07.txt                                                   ││
+05││n08.txt                                                   ││
+06││n09.txt                                                   ││
+07││n10.txt                                                   ││
+08││n11.txt                                                   ││
+09│└──────────────────────────────────────────────────────────┘│

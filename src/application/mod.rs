@@ -7,6 +7,7 @@ mod capture;
 mod companion;
 mod control;
 mod error;
+mod export;
 mod history_contract;
 mod instructional_text;
 mod locks;
@@ -43,6 +44,9 @@ pub use companion::{
 };
 pub(crate) use control::{ControlReplay, attach_control_fingerprint, match_control_replay};
 pub use error::{ApplicationError, ApplicationResult, FailureCode};
+pub use export::{
+    ExportBoardChange, ExportCompletion, export_completion_for_request, export_reference_thought_id,
+};
 pub(crate) use history_contract::UndoContract;
 pub use model::{
     AppState, ClipboardIntent, DurabilityState, Effect, EmptyBoardTransition, HistoryResolution,
@@ -52,7 +56,7 @@ pub(crate) use model::{SequencedMutationEffectError, SequencedMutationEffects};
 pub use onboarding::{FirstRunEnvironment, first_run_board};
 pub(crate) use preconditions::exact_live_thought;
 pub(crate) use prompt::{
-    SHARED_HARNESS_COMMANDS, join_prompt_for_target, supports_shared_commands,
+    SHARED_HARNESS_COMMANDS, copy_text, join_prompt_for_target, supports_shared_commands,
 };
 pub use recovery::capture_recovery;
 pub use reducer::reduce;

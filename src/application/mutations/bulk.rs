@@ -401,6 +401,7 @@ fn validate_deletion(thought_ids: &[ThoughtId], kind: BoardOperationKind) -> App
                 | BoardOperationKind::Cut
                 | BoardOperationKind::SubmitAndRemove
                 | BoardOperationKind::TransferAndRemove
+                | BoardOperationKind::ExportAndRemove
         )
     {
         return Err(ApplicationError::InvalidState);

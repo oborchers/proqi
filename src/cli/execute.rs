@@ -5,6 +5,7 @@ mod board_items;
 mod capabilities;
 mod diagnostics;
 mod doctor;
+mod export;
 mod external_thoughts;
 mod forwarding;
 mod helpers;

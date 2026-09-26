@@ -6,7 +6,7 @@
     "bounded_lists": true,
     "cli_schema_version": 1,
     "commands": ["capabilities", "completions", "update", "diagnostics", "doctor", "sessions", "items", "thoughts", "herdr"],
-    "control_protocol": 12,
+    "control_protocol": 13,
     "cross_session_transfer": true,
     "durable_browser_history": true,
     "durable_thought_collapse": true,
@@ -18,10 +18,12 @@
       {"code": "config_invalid", "exit": 2, "retry": "no"},
       {"code": "invalid_shortcut_context", "exit": 2, "retry": "no"},
       {"code": "unsafe_state_path", "exit": 2, "retry": "no"},
+      {"code": "export_target_invalid", "exit": 2, "retry": "no"},
       {"code": "session_not_found", "exit": 3, "retry": "after_change"},
       {"code": "thought_not_found", "exit": 3, "retry": "after_change"},
       {"code": "not_found", "exit": 3, "retry": "after_change"},
       {"code": "cursor_not_found", "exit": 3, "retry": "after_change"},
+      {"code": "export_directory_missing", "exit": 3, "retry": "after_change"},
       {"code": "ambiguous_session", "exit": 4, "retry": "after_change"},
       {"code": "session_busy", "exit": 5, "retry": "yes"},
       {"code": "companion_session_active", "exit": 5, "retry": "after_change"},
@@ -42,6 +44,7 @@
       {"code": "invariant_violation", "exit": 7, "retry": "no"},
       {"code": "conflict", "exit": 7, "retry": "after_change"},
       {"code": "mutation_rejected", "exit": 7, "retry": "after_change"},
+      {"code": "export_target_exists", "exit": 7, "retry": "after_change"},
       {"code": "operation_indeterminate", "exit": 8, "retry": "same_identity"},
       {"code": "storage_failed", "exit": 1, "retry": "after_change"},
       {"code": "storage_full", "exit": 1, "retry": "after_change"},
@@ -56,6 +59,7 @@
       {"code": "herdr_failed", "exit": 1, "retry": "after_change"},
       {"code": "plugin_state_failed", "exit": 1, "retry": "yes"},
       {"code": "output_failed", "exit": 1, "retry": "after_change"},
+      {"code": "export_write_failed", "exit": 1, "retry": "after_change"},
       {"code": "clipboard_failed", "exit": 1, "retry": "after_change"},
       {"code": "environment_failed", "exit": 1, "retry": "after_change"},
       {"code": "diagnostics_failed", "exit": 1, "retry": "after_change"},
@@ -96,7 +100,7 @@
       "history_scopes": ["board", "editor", "browser"],
       "items": ["insert-separator", "move", "delete", "duplicate"],
       "sessions": ["list", "ensure", "create", "rename", "trash", "restore", "undo", "redo", "prune"],
-      "thoughts": ["list", "inspect", "add", "delete", "rename", "replace", "collapse", "move", "split", "extract", "merge", "reflow", "send", "undo", "redo"],
+      "thoughts": ["list", "inspect", "add", "delete", "rename", "replace", "collapse", "move", "split", "extract", "merge", "reflow", "export", "send", "undo", "redo"],
       "update": ["check"]
     },
     "options": {
@@ -121,6 +125,7 @@
         "add": ["name", "position", "operation-id"],
         "collapse": ["collapsed", "operation-id"],
         "delete": ["operation-id"],
+        "export": ["output", "remove", "replace-with-reference", "replace-existing", "operation-id"],
         "extract": ["expected-sha256", "operation-id"],
         "inspect": [],
         "list": ["limit", "after"],
@@ -135,6 +140,7 @@
         "undo": ["thought", "operation-id"]
       }
     },
+    "plain_text_thought_export": true,
     "replacement_sha256_precondition": true,
     "semantic_separator_mutations": true,
     "session_operation_identity": true

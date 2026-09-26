@@ -35,6 +35,15 @@ impl BoardApp {
                 .filter(|request| request.remove_source)
                 .count(),
         );
+        pending.add(
+            PendingMutationIntent::ExportChange,
+            usize::from(
+                self.export
+                    .active
+                    .as_ref()
+                    .is_some_and(super::export::ExportState::board_change_pending),
+            ),
+        );
         pending
     }
 }

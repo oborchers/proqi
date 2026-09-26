@@ -40,6 +40,8 @@ pub(super) struct RuntimeContext {
     pub(super) clock: SystemClock,
     pub(super) ids: SystemIdGenerator,
     pub(super) cwd: PathBuf,
+    /// Home directory for `~` in paths, resolved once with the working directory.
+    pub(super) home: Option<PathBuf>,
     config_dir: PathBuf,
     recovery_dir: PathBuf,
     attachment_dir: PathBuf,
@@ -60,6 +62,7 @@ impl RuntimeContext {
         let cwd = SystemEnvironment
             .current_directory()
             .map_err(|error| CliError::new(ErrorCode::EnvironmentFailed, error.to_string()))?;
+        let home = SystemEnvironment.home_directory();
         let paths = resolve_paths(state_root)?;
         let executable = current_executable()?;
         prepare_state_paths(&paths, state_root)?;
@@ -122,6 +125,7 @@ impl RuntimeContext {
             clock,
             ids,
             cwd,
+            home,
             config_dir,
             recovery_dir,
             attachment_dir,

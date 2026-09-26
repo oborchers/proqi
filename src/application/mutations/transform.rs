@@ -287,7 +287,7 @@ fn replacement_values(
     }
 }
 
-fn deletion(thought: &Thought, at: Timestamp) -> BoardMutation {
+pub(super) fn deletion(thought: &Thought, at: Timestamp) -> BoardMutation {
     BoardMutation::SetDeletionExact {
         thought_id: thought.id,
         expected_content: thought.content.clone(),
@@ -299,7 +299,7 @@ fn deletion(thought: &Thought, at: Timestamp) -> BoardMutation {
     }
 }
 
-fn restoration(thought: &Thought, deleted_at: Timestamp) -> BoardMutation {
+pub(super) fn restoration(thought: &Thought, deleted_at: Timestamp) -> BoardMutation {
     BoardMutation::SetDeletionExact {
         thought_id: thought.id,
         expected_content: thought.content.clone(),
@@ -311,7 +311,7 @@ fn restoration(thought: &Thought, deleted_at: Timestamp) -> BoardMutation {
     }
 }
 
-fn operation(
+pub(super) fn operation(
     state: &AppState,
     id: OperationId,
     kind: BoardOperationKind,

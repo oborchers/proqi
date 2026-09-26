@@ -198,6 +198,9 @@ impl BoardApp {
             | ControlMutation::ReflowThought { .. }) => {
                 return self.transformation_control_action(mutation, at);
             }
+            mutation @ ControlMutation::ExportThoughts { .. } => Action::CompleteExport(
+                crate::application::export_completion_for_request(&self.state, mutation, at)?,
+            ),
             ControlMutation::Delete {
                 operation_id,
                 thought_id,

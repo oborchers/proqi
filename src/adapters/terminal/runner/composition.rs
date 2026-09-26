@@ -128,6 +128,7 @@ pub(super) fn spawn_lanes(
             presentation_source,
             cancellation.clone(),
             invocation_roots,
+            crate::adapters::export::FileExport::with_injected_failure(export_test_failure()),
         ),
         update: super::super::update_lane::UpdateLane::spawn(
             cache_directory,
@@ -143,6 +144,15 @@ pub(super) fn spawn_lanes(
             terminal_host,
         ),
         cancellation,
+    }
+}
+
+/// Deterministic export fault for real-terminal qualification only.
+fn export_test_failure() -> Option<crate::ports::export::ExportWriteError> {
+    std::env::var_os("PROQI_TEST_INPUT_STALL")?;
+    match std::env::var("PROQI_TEST_EXPORT_FAILURE").as_deref() {
+        Ok("storage_full") => Some(crate::ports::export::ExportWriteError::StorageFull),
+        _ => None,
     }
 }
 

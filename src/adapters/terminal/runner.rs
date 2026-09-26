@@ -181,6 +181,9 @@ pub(crate) fn run(resources: TerminalResources) -> Result<SessionId, TerminalErr
     let check_for_updates = settings.ui.check_for_updates;
     let mut app =
         BoardApp::with_settings_and_cwd(state, settings.ui, cwd.clone(), RopeEditorFactory);
+    app.set_home_directory(crate::ports::environment::Environment::home_directory(
+        &crate::adapters::runtime::SystemEnvironment,
+    ));
     if let Some(recovery_state) = input_recovery.ui_state().cloned()
         && !app.restore_input_recovery_state(recovery_state)
     {

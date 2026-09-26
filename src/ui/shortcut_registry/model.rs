@@ -24,6 +24,9 @@ pub enum ShortcutActionId {
     CopyResume,
     SendSession,
     SendSessionRemove,
+    ExportThoughts,
+    ExportRemove,
+    ExportReplace,
     Edit,
     PlainNewline,
     JumpUp,
@@ -131,7 +134,7 @@ pub enum ShortcutActionId {
 
 impl ShortcutActionId {
     /// Complete visible Commands inventory in its established order.
-    pub(crate) const COMMANDS: [(Self, &'static str); 59] = [
+    pub(crate) const COMMANDS: [(Self, &'static str); 62] = [
         (Self::New, "New thought"),
         (Self::InsertAbove, "Insert thought above"),
         (Self::InsertBelow, "Insert thought below"),
@@ -179,6 +182,12 @@ impl ShortcutActionId {
             Self::SendSessionRemove,
             "Send to another Proqi session and remove thought",
         ),
+        (Self::ExportThoughts, "Export to file..."),
+        (Self::ExportRemove, "Export to file and remove..."),
+        (
+            Self::ExportReplace,
+            "Export to file and replace with reference...",
+        ),
         (Self::RefreshAgents, "Refresh adjacent agents"),
         (Self::RefreshAttachments, "Refresh attachments"),
         (Self::InsertInvocation, "Insert discovered invocation"),
@@ -225,6 +234,9 @@ impl ShortcutActionId {
             CopyResume => "session.copy_resume",
             SendSession => "session.send",
             SendSessionRemove => "session.send_remove",
+            ExportThoughts => "thought.export",
+            ExportRemove => "thought.export_remove",
+            ExportReplace => "thought.export_replace",
             Edit => "thought.edit",
             PlainNewline => "editor.plain_newline",
             JumpUp => "editor.jump_up",

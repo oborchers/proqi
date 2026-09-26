@@ -6,23 +6,24 @@ use proqi::ports::control::{
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-const REQUEST: &str = include_str!("fixtures/control/v12/add.request.json");
-const ACCEPTED: &str = include_str!("fixtures/control/v12/add.accepted.json");
-const REJECTED: &str = include_str!("fixtures/control/v12/add.rejected.json");
-const PRESERVE: &str = include_str!("fixtures/control/v12/preserve_add.request.json");
-const PRESERVE_MANY: &str = include_str!("fixtures/control/v12/preserve_add_many.request.json");
-const UPDATE_PREPARE: &str = include_str!("fixtures/control/v12/update_prepare.request.json");
-const UPDATE_READY: &str = include_str!("fixtures/control/v12/update_prepare.ready.json");
-const UPDATE_QUIESCE: &str = include_str!("fixtures/control/v12/update_quiesce.request.json");
-const UPDATE_QUIESCED: &str = include_str!("fixtures/control/v12/update_quiesce.ready.json");
-const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v12/capture_takeover.request.json");
+const REQUEST: &str = include_str!("fixtures/control/v13/add.request.json");
+const ACCEPTED: &str = include_str!("fixtures/control/v13/add.accepted.json");
+const REJECTED: &str = include_str!("fixtures/control/v13/add.rejected.json");
+const PRESERVE: &str = include_str!("fixtures/control/v13/preserve_add.request.json");
+const PRESERVE_MANY: &str = include_str!("fixtures/control/v13/preserve_add_many.request.json");
+const UPDATE_PREPARE: &str = include_str!("fixtures/control/v13/update_prepare.request.json");
+const UPDATE_READY: &str = include_str!("fixtures/control/v13/update_prepare.ready.json");
+const UPDATE_QUIESCE: &str = include_str!("fixtures/control/v13/update_quiesce.request.json");
+const UPDATE_QUIESCED: &str = include_str!("fixtures/control/v13/update_quiesce.ready.json");
+const CAPTURE_TAKEOVER: &str = include_str!("fixtures/control/v13/capture_takeover.request.json");
 const CAPTURE_SCHEDULED: &str =
-    include_str!("fixtures/control/v12/capture_takeover.scheduled.json");
-const RENAME: &str = include_str!("fixtures/control/v12/rename.request.json");
-const RENAME_THOUGHT: &str = include_str!("fixtures/control/v12/rename_thought.request.json");
-const INSERT_SEPARATOR: &str = include_str!("fixtures/control/v12/insert_separator.request.json");
-const SPLIT_THOUGHT: &str = include_str!("fixtures/control/v12/split_thought.request.json");
-const ITEMS_ACCEPTED: &str = include_str!("fixtures/control/v12/items.accepted.json");
+    include_str!("fixtures/control/v13/capture_takeover.scheduled.json");
+const RENAME: &str = include_str!("fixtures/control/v13/rename.request.json");
+const RENAME_THOUGHT: &str = include_str!("fixtures/control/v13/rename_thought.request.json");
+const INSERT_SEPARATOR: &str = include_str!("fixtures/control/v13/insert_separator.request.json");
+const SPLIT_THOUGHT: &str = include_str!("fixtures/control/v13/split_thought.request.json");
+const ITEMS_ACCEPTED: &str = include_str!("fixtures/control/v13/items.accepted.json");
+const EXPORT_THOUGHTS: &str = include_str!("fixtures/control/v13/export_thoughts.request.json");
 
 #[test]
 fn current_request_success_and_error_fixtures_round_trip_canonically() {
@@ -45,6 +46,26 @@ fn current_preservation_fixture_round_trips_with_closed_semantics() {
         request.mutation,
         proqi::ports::control::ControlMutation::PreserveAdd { .. }
     ));
+}
+
+#[test]
+fn export_completion_requires_protocol_thirteen_and_returns_reference_first() {
+    let request: ControlRequest = assert_round_trip(EXPORT_THOUGHTS);
+    assert_eq!(request.protocol, CONTROL_PROTOCOL_VERSION);
+    assert_eq!(request.mutation.minimum_protocol(), 13);
+    let ControlMutation::ExportThoughts {
+        thought_ids,
+        reference_thought_id: Some(reference),
+        ..
+    } = &request.mutation
+    else {
+        panic!("export completion");
+    };
+    let expected = std::iter::once(*reference)
+        .chain(thought_ids.iter().copied())
+        .map(proqi::domain::BoardItemId::Thought)
+        .collect::<Vec<_>>();
+    assert_eq!(request.mutation.item_ids(), expected);
 }
 
 #[test]

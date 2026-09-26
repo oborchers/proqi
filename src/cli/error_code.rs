@@ -93,10 +93,17 @@ error_codes! {
     ConfigInvalid => ("config_invalid", 2, No, "`{}`"),
     InvalidShortcutContext => ("invalid_shortcut_context", 2, No, "`{}`"),
     UnsafeStatePath => ("unsafe_state_path", 2, No, "`{}`"),
+    ExportTargetInvalid => ("export_target_invalid", 2, No, "`{\"output\", \"reason\"}`"),
     SessionNotFound => ("session_not_found", 3, AfterChange, "`{}`"),
     ThoughtNotFound => ("thought_not_found", 3, AfterChange, "`{}`"),
     NotFound => ("not_found", 3, AfterChange, "`{}`"),
     CursorNotFound => ("cursor_not_found", 3, AfterChange, "`{}`"),
+    ExportDirectoryMissing => (
+        "export_directory_missing",
+        3,
+        AfterChange,
+        "`{\"output\", \"reason\"}`"
+    ),
     AmbiguousSession => ("ambiguous_session", 4, AfterChange, "`{\"matches\": [session_id]}`"),
     SessionBusy => (
         "session_busy",
@@ -137,6 +144,7 @@ error_codes! {
     InvariantViolation => ("invariant_violation", 7, No, "`{}`"),
     Conflict => ("conflict", 7, AfterChange, "`{}`"),
     MutationRejected => ("mutation_rejected", 7, AfterChange, "`{}`"),
+    ExportTargetExists => ("export_target_exists", 7, AfterChange, "`{\"output\"}`"),
     OperationIndeterminate => (
         "operation_indeterminate",
         8,
@@ -156,6 +164,12 @@ error_codes! {
     HerdrFailed => ("herdr_failed", 1, AfterChange, "`{}`"),
     PluginStateFailed => ("plugin_state_failed", 1, Yes, "`{}`"),
     OutputFailed => ("output_failed", 1, AfterChange, "`{}`"),
+    ExportWriteFailed => (
+        "export_write_failed",
+        1,
+        AfterChange,
+        "`{\"output\", \"reason\", \"file_written\"}`"
+    ),
     ClipboardFailed => ("clipboard_failed", 1, AfterChange, "`{}`"),
     EnvironmentFailed => ("environment_failed", 1, AfterChange, "`{}`"),
     DiagnosticsFailed => ("diagnostics_failed", 1, AfterChange, "`{}`"),

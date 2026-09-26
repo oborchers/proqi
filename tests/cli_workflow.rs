@@ -17,6 +17,8 @@ mod capabilities;
 mod diagnostics;
 #[path = "cli_workflow/doctor.rs"]
 mod doctor;
+#[path = "cli_workflow/export.rs"]
+mod export;
 #[path = "support/herdr.rs"]
 mod herdr_fixture;
 #[path = "cli_workflow/identity_namespace.rs"]

@@ -411,6 +411,28 @@ pub(super) enum ThoughtCommand {
         #[arg(long, value_name = "OP_ID")]
         operation_id: Option<String>,
     },
+    /// Write thoughts to a plain-text file, optionally removing or replacing them.
+    Export {
+        session: String,
+        /// Thoughts to export; the file follows their Board order.
+        #[arg(required = true, num_args = 1..)]
+        thoughts: Vec<String>,
+        /// Destination file; relative paths resolve from the current directory.
+        #[arg(long, value_name = "PATH")]
+        output: String,
+        /// Remove the thoughts after the file is durable.
+        #[arg(long, conflicts_with = "replace_with_reference")]
+        remove: bool,
+        /// Replace the thoughts with one reference to the file after it is durable.
+        #[arg(long)]
+        replace_with_reference: bool,
+        /// Replace an existing regular file at the destination.
+        #[arg(long)]
+        replace_existing: bool,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
     /// Copy one thought into another Proqi session.
     Send {
         /// Session that currently contains the thought.

@@ -3,8 +3,8 @@
 use crate::cli::error_code::ErrorCode;
 mod board;
 pub(super) use board::{
-    extract_thought, insert_separator, merge_thoughts, move_item, mutate_items, reflow_thought,
-    split_thought,
+    export_thoughts, extract_thought, insert_separator, merge_thoughts, move_item, mutate_items,
+    reflow_thought, split_thought,
 };
 
 use serde_json::json;
@@ -331,6 +331,25 @@ pub(super) fn history(
     send(context, &owner, session_id, mutation).map(Some)
 }
 
+/// Refuse early when an active owner cannot represent `mutation`, so no side
+/// effect happens before a request that the owner would reject.
+pub(super) fn ensure_owner_supports(
+    context: &RuntimeContext,
+    session_id: SessionId,
+    mutation: &ControlMutation,
+) -> Result<(), CliError> {
+    owner_supports(owner(context, session_id)?.as_ref(), mutation)
+}
+
+fn owner_supports(
+    owner: Option<&InstanceInfo>,
+    mutation: &ControlMutation,
+) -> Result<(), CliError> {
+    owner.map_or(Ok(()), |owner| {
+        required_protocol(owner, mutation).map(|_| ())
+    })
+}
+
 fn owner(
     context: &RuntimeContext,
     session_id: SessionId,
@@ -367,6 +386,7 @@ fn send_control(
             | ControlMutation::ExtractThought { .. }
             | ControlMutation::MergeThoughts { .. }
             | ControlMutation::ReflowThought { .. }
+            | ControlMutation::ExportThoughts { .. }
     );
     let protocol = required_protocol(owner, &mutation)?;
     let request = ControlRequest {
@@ -468,21 +488,4 @@ fn map_error(error: ControlError, owner: &InstanceInfo, reports_invalid_state: b
 }
 
 #[cfg(test)]
-mod tests {
-    use super::sync_protocol;
-
-    #[test]
-    fn read_sync_degrades_for_legacy_owners_but_rejects_newer_protocols() {
-        assert_eq!(
-            sync_protocol(None).expect("unadvertised legacy owner"),
-            None
-        );
-        assert_eq!(sync_protocol(Some(3)).expect("protocol three owner"), None);
-        assert_eq!(
-            sync_protocol(Some(4)).expect("protocol four owner"),
-            Some(4)
-        );
-        assert_eq!(sync_protocol(Some(7)).expect("current owner"), Some(7));
-        assert!(sync_protocol(Some(crate::ports::control::CONTROL_PROTOCOL_VERSION + 1)).is_err());
-    }
-}
+mod tests;

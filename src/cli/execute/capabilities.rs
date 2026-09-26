@@ -37,7 +37,7 @@ pub(super) fn outcome() -> Outcome {
             "items": ["insert-separator", "move", "delete", "duplicate"],
             "thoughts": [
                 "list", "inspect", "add", "delete", "rename", "replace", "collapse",
-                "move", "split", "extract", "merge", "reflow", "send", "undo", "redo"
+                "move", "split", "extract", "merge", "reflow", "export", "send", "undo", "redo"
             ],
             "update": ["check"],
             "herdr": ["toggle"],
@@ -64,6 +64,7 @@ pub(super) fn outcome() -> Outcome {
         "idempotent_session_trash": true,
         "bounded_lists": true,
         "json_help_and_version": true,
+        "plain_text_thought_export": true,
         "max_thought_stdin_bytes": MAX_THOUGHT_STDIN_BYTES,
         "herdr_submission": true,
         "herdr_managed_pane_required": true,

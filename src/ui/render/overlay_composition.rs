@@ -18,7 +18,9 @@ pub(super) fn render(
     if let Some(release_highlights_visible) = render_decision(frame, app, layout, theme) {
         return release_highlights_visible;
     }
-    if let Some((query, entries, selected)) = app.search_view() {
+    if let Some(view) = app.export_view() {
+        render_export(frame, app, layout, theme, view);
+    } else if let Some((query, entries, selected)) = app.search_view() {
         if let Some(overlay) = &layout.overlay {
             render_plain_picker(
                 frame,
@@ -81,6 +83,51 @@ pub(super) fn render(
         overlays::render_help(frame, app, overlay, theme);
     }
     false
+}
+
+fn render_export(
+    frame: &mut Frame<'_>,
+    app: &BoardApp,
+    layout: &LayoutSnapshot,
+    theme: &Theme,
+    view: crate::ui::app::ExportView,
+) {
+    let Some(overlay) = &layout.overlay else {
+        return;
+    };
+    match view {
+        crate::ui::app::ExportView::Path {
+            title,
+            query,
+            entries,
+            selected,
+        } => render_plain_picker(
+            frame,
+            overlay,
+            app,
+            PlainPickerView {
+                title,
+                prompt: '>',
+                query,
+                entries,
+                selected,
+            },
+            theme,
+        ),
+        crate::ui::app::ExportView::Confirm {
+            title,
+            entries,
+            selected,
+        } => overlays::render_update(
+            frame,
+            overlay,
+            title,
+            &entries,
+            selected,
+            app.hovered(),
+            theme,
+        ),
+    }
 }
 
 fn render_session_rename(

@@ -81,6 +81,12 @@ enum FingerprintRequest {
         thought_id: ThoughtId,
         expected_digest: [u8; 32],
     },
+    ExportThoughts {
+        thought_ids: Vec<ThoughtId>,
+        disposition: crate::domain::ExportDisposition,
+        reference_thought_id: Option<ThoughtId>,
+        output_path_digest: [u8; 32],
+    },
     Replace {
         thought_id: ThoughtId,
         expected_digest: Option<[u8; 32]>,
@@ -155,6 +161,7 @@ fn canonical_request(mutation: &ControlMutation) -> Result<Option<FingerprintReq
         ControlMutation::SplitThought { .. }
         | ControlMutation::ExtractThought { .. }
         | ControlMutation::MergeThoughts { .. }
+        | ControlMutation::ExportThoughts { .. }
         | ControlMutation::ReflowThought { .. } => canonical_transform(mutation)?,
         ControlMutation::Replace {
             thought_id,
@@ -328,6 +335,20 @@ fn canonical_transform(mutation: &ControlMutation) -> Result<FingerprintRequest,
         } => FingerprintRequest::ReflowThought {
             thought_id: *thought_id,
             expected_digest: *expected_digest,
+        },
+        // Content digests are execution preconditions derived from the current
+        // Board, not caller input, so an exact retry after later edits still matches.
+        ControlMutation::ExportThoughts {
+            thought_ids,
+            disposition,
+            reference_thought_id,
+            output_path,
+            ..
+        } => FingerprintRequest::ExportThoughts {
+            thought_ids: thought_ids.clone(),
+            disposition: *disposition,
+            reference_thought_id: *reference_thought_id,
+            output_path_digest: Sha256::digest(output_path.as_bytes()).into(),
         },
         _ => return Err(wrong_fingerprint_family()),
     })

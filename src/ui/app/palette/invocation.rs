@@ -137,6 +137,7 @@ impl CommandContext {
             A::MutableThought | A::Editor => self.when_mutable(),
             A::TransferKeep => self.when_transfer(false),
             A::TransferRemove => self.when_transfer(true),
+            A::Export => Self::when(self.selection.thought_count > 0, "No thought is focused"),
             A::FocusedMutableThought => self.when_focused_mutable_thought(),
             A::ReorderUp => self.reorder_applicability(true),
             A::ReorderDown => self.reorder_applicability(false),

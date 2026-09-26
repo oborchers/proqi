@@ -14,6 +14,7 @@ mod control;
 mod creation;
 mod duplicate;
 mod editing;
+mod export;
 mod folds;
 pub(in crate::ui) mod global_delivery;
 mod help;
@@ -68,6 +69,7 @@ use crate::{
 };
 
 use super::layout::FooterChromeVisibility;
+pub(in crate::ui) use export::ExportView;
 use input_dispatch::ActiveInputOwner as Owner;
 pub(in crate::ui) use invocation::InvocationChoiceView;
 pub(in crate::ui) use palette::CommandPaletteView;
@@ -165,6 +167,7 @@ pub struct BoardApp {
     session_rename_persistence: SessionRenamePersistence,
     transfer: Option<transfer::TransferState>,
     transfer_generation: u64,
+    export: export::ExportOwner,
     settings: UiSettings,
     footer_chrome_visibility: crate::ui::layout::FooterChromeVisibility,
     selection: selection::BoardSelection,
@@ -269,6 +272,7 @@ impl BoardApp {
             session_rename_persistence: SessionRenamePersistence::Idle,
             transfer: None,
             transfer_generation: 0,
+            export: export::ExportOwner::default(),
             settings,
             footer_chrome_visibility,
             selection: selection::BoardSelection::default(),
@@ -425,6 +429,9 @@ impl BoardApp {
                 self.handle_invocation_input(&input, ids, clock)
             }
             Owner::Transfer => self.handle_transfer_input(&input, ids, clock),
+            Owner::ExportPath | Owner::ExportReplace => {
+                self.handle_export_input(&input, ids, clock)
+            }
             Owner::Rename => self.handle_session_rename(&input, ids, clock),
             Owner::ThoughtRename => self.handle_thought_rename(&input, ids, clock),
             Owner::Search => self.handle_search_input(&input, ids, clock),

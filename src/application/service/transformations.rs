@@ -185,7 +185,7 @@ where
         })
     }
 
-    fn apply_transform(
+    pub(super) fn apply_transform(
         &mut self,
         session_id: SessionId,
         mutation: &ControlMutation,

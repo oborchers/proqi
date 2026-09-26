@@ -1,6 +1,7 @@
 //! Terminal-independent session lifecycle and scriptable mutation service.
 
 mod board_items;
+mod export;
 mod external_edits;
 mod sessions;
 mod thoughts;

@@ -57,6 +57,7 @@ pub(crate) enum CommandApplicability {
     MutableThought,
     TransferKeep,
     TransferRemove,
+    Export,
     FocusedMutableThought,
     ReorderUp,
     ReorderDown,

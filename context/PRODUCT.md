@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-09-17
+Last updated: 2026-09-25
 
 ## Vision
 
@@ -1322,6 +1322,96 @@ the destination copies.
 The scriptable CLI exposes the same behavior with `thoughts send` and separate
 idempotency identifiers for destination creation and optional source removal.
 
+### Export thoughts to a file
+
+Selected thoughts, or the focused thought, can be saved as one plain-text file
+the way a text editor saves a file. Commands offers three actions, each
+unbound by default and bindable through versioned configuration as
+`thought.export`, `thought.export_remove`, and `thought.export_replace`:
+
+- **Export to file...** writes the file and leaves the Board unchanged.
+- **Export to file and remove...** writes the file, then recoverably deletes the
+  exported thoughts.
+- **Export to file and replace with reference...** writes the file, then
+  replaces the exported thoughts with one thought whose canonical content is the
+  file's absolute path followed by one ASCII space. The attachment annotation
+  covers only the path and receives the next session File ordinal, so the
+  reference folds as `[File N]` exactly like a Screenshot Inbox capture. The new
+  thought takes the first exported thought's Board position and receives focus.
+
+The destination is a one-line path field owned by the shared single-line text
+editor. It is prefilled with the session directory, the session's most recent
+opening directory, joined with a default name. One selected thought with a name
+uses that name; otherwise the name is the session label plus a UTC timestamp
+`YYYY-MM-DD-HHMMSS`. Separators, controls, and `:*?"<>|` become `-`, leading
+dots are removed, and `.txt` is appended. The field is fully editable. `~/`
+resolves from the home directory and every other relative path from the
+session directory. `.` and `..` resolve as text, so the saved path and a
+reference thought name the same clean absolute path. When the session directory
+is not valid UTF-8, the field starts empty with a message asking for an absolute
+destination. `Tab` completes the final path component from one bounded listing
+of the entries in its folder that start with the typed name. Matching and the
+longest shared prefix always consider every listed match, and at most 64
+choices are offered, with a message when more matched. When a folder is too
+large to list completely, completion never claims a single match or no match and
+asks for more of the name instead. Completion extends to the longest shared
+prefix and then cycles through the remaining choices; `Shift+Tab` cycles back,
+and Down and Up and the wheel move through them the same way. PageDown and PageUp
+jump five choices and stop at the first and last. Printable letters, including
+`j` and `k`, always stay text in the field. The list scrolls so the
+highlighted choice stays visible, with overflow markers. Hidden entries appear
+only after a typed leading dot. Every completion is one undo step of the field.
+Completion rows and the save row are pointer targets. A missing parent folder is
+an error and is never created. A Git working tree gets no special treatment, so
+the default path writes into the working tree by design.
+
+The file content is exactly the copy text of the same selection: canonical
+bodies in Board order joined by one blank line, without names, headings, or
+other formatting. The configurable `merge_separator` applies to merging only
+and never to export. Any typed file name is accepted, and the extension never
+changes the content. Attachment paths appear exactly as in the copy text;
+attached files are never copied.
+
+An existing regular file is never replaced silently. Proqi asks with **Cancel**
+preselected; Cancel, `Escape`, and the close control all return to the path
+field with the typed path kept. It replaces only a file whose content-free identity (device, inode,
+length, and modification time) still matches the one it observed; a file changed
+or removed during the confirmation is reported and nothing is replaced. A
+same-length rewrite within the file system's timestamp granularity is
+indistinguishable from the observed file. An
+existing symbolic link, folder, or other non-regular entry is refused, so a
+link is never replaced by a regular file.
+
+The write goes through a temporary file in the destination folder. The file is
+synchronized, atomically moved into place without replacing an entry that
+appeared meanwhile unless replacement was confirmed, and the folder is
+synchronized. A new file's permissions follow the user's umask. A replacement
+takes the replaced file's read, write, and execute bits before it is moved into
+place, as text editors do; set-user-ID and set-group-ID bits, owner, group,
+access control lists, and extended attributes are not carried over. If Proqi
+stops between replacing a file and removing the replaced copy, a hidden
+`.proqi-export-*.tmp` file in the same folder holds the previous contents. The
+set and order of exported thoughts are fixed when the path field opens; their
+text is read from the Board when the user saves, so edits made while the path
+field was open are included, and a selected thought that disappeared meanwhile
+cancels the export without writing. Only
+after this durable success does the Board change: removal and replacement are
+each one Board operation and one undo step, admitted like other asynchronous
+sequence producers. Undo restores the thoughts and removes the reference; the
+file stays, like a saved file. If the Board step is rejected after the file was
+written, for example because the thoughts changed, a lock is held, or saving is
+failing, the file stays, the Board is left unchanged, and the message names that
+cause. Remove and replace do not open while saving is failing, so no file is
+written for a Board change that cannot be stored.
+Permission, read-only, full-disk, and other write failures leave the Board
+unchanged with a truthful message. A reference whose file is later moved or
+deleted shows the ordinary inaccessible state, and submission refuses it.
+
+The scriptable CLI exposes the same behavior with `thoughts export`, including
+`--remove`, `--replace-with-reference`, `--replace-existing`, and an operation
+identity for exact replay of the Board step. A relative `--output` resolves from
+the CLI process's current directory, the usual convention for command-line tools.
+
 ### Interaction economy
 
 The following actions must not open a confirmation dialog:
@@ -2020,7 +2110,8 @@ These remain compatible with the vision but are not initial requirements:
 
 - A previewed bulk split-by-blank-lines transformation.
 - External editor handoff through `$VISUAL` or `$EDITOR`.
-- Import and export as plain text, Markdown, or JSON.
+- Import from files, and export as Markdown or JSON. Plain-text export is part
+  of the current product; see Export thoughts to a file.
 - Configurable retention and recoverable pruning.
 - Session handoff between machines without making cloud sync mandatory.
 - Additional multiplexer and harness adapters that remain separate from the

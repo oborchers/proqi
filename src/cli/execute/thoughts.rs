@@ -4,7 +4,7 @@ use crate::domain::UndoScope;
 
 use super::{
     super::args::{HistoryArgs, ThoughtCommand},
-    CliError, Outcome, RuntimeContext, external_thoughts, forwarding,
+    CliError, Outcome, RuntimeContext, export, external_thoughts, forwarding,
     helpers::{parse_operation_id, parse_thought_id, read_standard_input},
     mutation_outcome, queries, receipt_outcome, session_service, thought_names, transfer,
     transformations,
@@ -143,6 +143,31 @@ pub(super) fn execute(
             &thought,
             &expected_sha256,
             operation_id.as_deref(),
+        ),
+        ThoughtCommand::Export {
+            session,
+            thoughts,
+            output,
+            remove,
+            replace_with_reference,
+            replace_existing,
+            operation_id,
+        } => export::export(
+            context,
+            &export::ExportArguments {
+                session: &session,
+                thoughts: &thoughts,
+                output: &output,
+                disposition: if replace_with_reference {
+                    crate::domain::ExportDisposition::ReplaceWithReference
+                } else if remove {
+                    crate::domain::ExportDisposition::Remove
+                } else {
+                    crate::domain::ExportDisposition::Keep
+                },
+                replace_existing,
+                operation: operation_id.as_deref(),
+            },
         ),
         ThoughtCommand::Send {
             source,
