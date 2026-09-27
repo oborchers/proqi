@@ -7,7 +7,7 @@
 use serde_json::json;
 
 use crate::{
-    application::{CaptureError, CapturedText, ThoughtMutation, clipboard_text},
+    application::{CaptureError, CaptureSource, CapturedText, ThoughtMutation, clipboard_text},
     domain::{OperationId, SessionId},
 };
 
@@ -66,7 +66,7 @@ pub(super) fn capture_error(error: &CaptureError) -> CliError {
         CaptureError::Empty { source } => CliError::new(ErrorCode::CaptureEmpty, message)
             .with_details(json!({ "source": source.as_str() })),
         CaptureError::NoText => CliError::new(ErrorCode::CaptureNoText, message)
-            .with_details(json!({ "source": "clipboard" })),
+            .with_details(json!({ "source": CaptureSource::Clipboard.as_str() })),
         CaptureError::TooLarge { source, bytes } => {
             CliError::new(ErrorCode::CaptureTooLarge, message).with_details(json!({
                 "source": source.as_str(),

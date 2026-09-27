@@ -2172,7 +2172,8 @@ contains no decision logic.
 otherwise the `Clipboard` port's text), exact acceptance, the 128 KiB thought
 input limit shared with standard input, one wording per failure cause, and the
 single-line notification preview. `application::companion::capture` validates
-the text before it resolves a session, so failure creates nothing. Toggle and
+the text before it resolves a session, so failure creates nothing, and records
+the captured session whenever the tab's record named no available one. Toggle and
 capture share one session owner, `resolve_tab_session`: the recorded session
 unless it is unavailable, otherwise the named get-or-create rule. Only the
 toggle adds its active-session and other-tab blockers. The CLI stores the text
@@ -2181,9 +2182,12 @@ an ordinary `ControlMutation::Add` whose additive `announcement: capture` field
 asks it to append at the Board end and, after the matching durable
 acknowledgement, count the capture in the Screenshot Inbox's shared
 `N new captures` status. The field is outside the semantic request fingerprint,
-so replay matches `thoughts add`. Owners that predate it ignore the unknown
-field, because control requests have never denied unknown fields, and still
-create the same thought without the status. An inactive session commits the
+so replay matches `thoughts add`. A capture never takes the empty-Compose
+first-item focus handoff that ordinary API additions receive. Owners that
+predate the field ignore it, because control requests have never denied
+unknown fields, and still create the same thought, but at their own insertion
+point and without the status. This mixed-version degradation ends when the
+update convergence restarts those owners. An inactive session commits the
 same add under its lease. One composition function,
 `adapters::clipboard::capture_clipboard`, called only by the CLI runtime, may
 replace the native clipboard with a read-only JSON fixture through the

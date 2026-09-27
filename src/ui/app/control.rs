@@ -54,6 +54,12 @@ impl BoardApp {
                 .is_some_and(|editor| editor.content.is_empty())
         {
             match mutation {
+                // A capture is a quiet background addition, like a Screenshot
+                // Inbox capture, so it never takes the Compose owner's input.
+                ControlMutation::Add {
+                    announcement: Some(_),
+                    ..
+                } => None,
                 ControlMutation::Add { thought_id, .. }
                 | ControlMutation::PreserveAdd { thought_id, .. } => {
                     Some(BoardItemId::Thought(*thought_id))
@@ -102,6 +108,7 @@ impl BoardApp {
     /// Restore the reducer state when owner-control effect validation rejects a mutation.
     pub(crate) fn restore_control_state(&mut self, state: crate::application::AppState) {
         self.state = state;
+        self.screenshot.forwarded.roll_back_latest();
         if self
             .pending_first_control_focus
             .as_ref()

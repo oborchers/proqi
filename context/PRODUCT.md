@@ -1945,13 +1945,17 @@ It takes the selection Herdr passes with a key-bound invocation when that is
 not empty, and otherwise the clipboard's text. It never reads scrollback. The
 thought holds exactly the captured text, with no trimming, quoting, metadata,
 or truncation, and repeated captures of the same text are all stored. The
-session follows the toggle's rule; a tab without a recorded session records
-the one it captured into. A live owner appends the capture as a quiet
-background addition and counts it in the shared `N new captures` status, never
-moving the editor, caret, selection, or an open overlay. A Herdr notification
-shows a single-line, control-free preview of at most 40 characters and the
+session follows the toggle's rule; a tab whose record names no available
+session records the one it captured into. A live owner appends the capture as a
+quiet background addition and counts it in the shared `N new captures` status,
+never moving the editor, caret, selection, an open overlay, or an empty
+Compose owner. A Herdr notification
+shows a single-line preview of up to 40 characters without control or
+text-direction formatting characters, an ellipsis when truncated, and the
 character count. Empty, non-text, oversized, and unreadable input stores and
-creates nothing and says why with one wording per cause. Because plugin actions
+creates nothing and says why with one wording per cause. A failure while
+storing does not claim that nothing was stored, because a timed-out owner may
+have committed it. Because plugin actions
 run on the Herdr server, a remote server's clipboard is the server's, and only
 a passed selection comes from the viewer's screen. `thoughts capture --from
 clipboard` exposes the same clipboard capture to scripts.

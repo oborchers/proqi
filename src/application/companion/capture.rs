@@ -2,13 +2,14 @@
 //!
 //! The text is read and validated before any session is resolved or created,
 //! so a failure stores and creates nothing. The tab's session is chosen by the
-//! same rule as the toggle, which needs no open Proqi pane. A tab without a
-//! record keeps the session it captured into, so a later toggle opens it.
+//! same rule as the toggle, which needs no open Proqi pane. The tab records the
+//! session it captured into whenever its record named no available session, so
+//! later captures and toggles use the same one.
 
 use std::fmt;
 
 use crate::{
-    application::{CaptureError, CaptureSource, capture_text},
+    application::{CaptureError, CaptureSource, NOTHING_CAPTURED, capture_text},
     domain::{SessionId, ThoughtId},
     ports::{
         clipboard::Clipboard,
@@ -55,8 +56,11 @@ impl<E: fmt::Display> fmt::Display for CompanionCaptureError<E> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Capture(error) => write!(formatter, "{error}"),
-            Self::Host(error) => write!(formatter, "Nothing captured: {error}"),
-            Self::Session(error) => write!(formatter, "Nothing captured: {error}"),
+            // Host and plugin-state failures happen before anything is stored.
+            Self::Host(error) => write!(formatter, "{NOTHING_CAPTURED}: {error}"),
+            // A store failure may be a timeout after the owner committed, so
+            // the wording claims no outcome.
+            Self::Session(error) => write!(formatter, "Capture to Proqi failed: {error}"),
         }
     }
 }
@@ -125,12 +129,15 @@ where
     let thought_id = sessions
         .capture(session_id, text.text())
         .map_err(CompanionCaptureError::Session)?;
-    if record.is_none() {
-        // The thought is already durable; failing to remember the session only
-        // means the next toggle resolves it again by the same rule.
+    if record.as_ref().map(|record| record.session_id) != Some(session_id) {
+        // Remember the session so later captures and toggles cannot drift to
+        // another name. A pane the record still names keeps its entry; the
+        // toggle never closes a pane running a different session. The thought
+        // is already durable, so a failed save only means the next action
+        // resolves the session again by the same rule.
         let _best_effort = records.save(&CompanionRecord {
             tab_id: context.tab_id.clone(),
-            pane_id: None,
+            pane_id: record.and_then(|record| record.pane_id),
             session_id,
         });
     }

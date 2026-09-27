@@ -20,7 +20,7 @@ use crate::{
     },
 };
 
-pub use fixture::FixtureClipboard;
+use fixture::FixtureClipboard;
 use provenance::{FileClipboardProvenance, ProvenanceRecord};
 
 const OSC52_MAX_BYTES: usize = 100_000;

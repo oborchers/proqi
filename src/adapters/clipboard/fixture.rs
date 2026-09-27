@@ -30,14 +30,14 @@ enum Fixture {
 
 /// Clipboard whose every read returns the fixture's current content.
 #[derive(Clone, Debug)]
-pub struct FixtureClipboard {
+pub(super) struct FixtureClipboard {
     path: PathBuf,
 }
 
 impl FixtureClipboard {
     /// Read the fixture at `path` on every clipboard read.
     #[must_use]
-    pub fn new(path: PathBuf) -> Self {
+    pub(super) fn new(path: PathBuf) -> Self {
         Self { path }
     }
 

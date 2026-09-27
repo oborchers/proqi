@@ -177,41 +177,51 @@ captured text: nothing is trimmed, quoted, wrapped, or added, and line endings,
 indentation, and Unicode stay as they were. Capturing the same text twice
 stores it twice.
 
-In practice the clipboard is the usual source. Herdr's default
+In practice the clipboard is the source. Herdr's default
 `copy_on_select = true` copies a mouse selection to the clipboard and clears it
 when you release the button, so select the text, release, then press the key.
-Herdr passes a selection to a plugin action only for a key binding pressed in
-a Herdr client, and today its prefix key and copy mode clear the selection
-before the action starts, which Herdr tracks as
-[herdrdev/herdr#3380](https://github.com/herdrdev/herdr/issues/3380). Running
-the action with `herdr plugin action invoke proqi.capture` never passes a
-selection and always uses the clipboard.
+A pressed key clears a visible selection before Herdr runs the bound action,
+even with `copy_on_select = false`, so a key binding captures the clipboard.
+Herdr tracks this as [herdrdev/herdr#3380](https://github.com/herdrdev/herdr/issues/3380);
+once it is fixed, the selection takes precedence without any change to Proqi.
+Herdr 0.8 also passes a selection that is still visible when the action starts
+without a key press, for example through
+`herdr plugin action invoke proqi.capture` from another terminal. Since Herdr
+0.9, a selection reaches a plugin action only through a key binding, so that
+command always uses the clipboard.
 
 ### Which session receives it
 
 The same rule as the toggle picks the session: the tab's recorded session,
 unless it was trashed or deleted, otherwise the tab's named session found or
 created as described in [Which session a tab uses](#which-session-a-tab-uses).
-When the tab had no recorded session yet, it now records the one it captured
-into, so the next toggle opens it.
+When the tab had no recorded session, or its recorded session was trashed or
+deleted, it records the one it captured into, so later captures and the next
+toggle use it even if the tab or agent is renamed.
 
 When that session is open in Proqi, the capture reaches the running Proqi,
 which appends it quietly: your editor, caret, selection, and any open overlay
 stay where they are, and the footer counts `1 new capture`, `2 new captures`,
-and so on, as for the Screenshot Inbox. When no Proqi has the session open, the
-thought is saved directly and appears when you open it.
+and so on, as for the Screenshot Inbox. An empty board waiting for your first
+thought stays ready for typing. When no Proqi has the session open, the thought
+is saved directly and appears when you open it. A Proqi session still running
+an older release than the one that provides the capture action stores the
+capture without the count, at its current insertion point instead of the end;
+restart that session to update it.
 
 ### Feedback
 
-A Herdr notification confirms each capture with a single-line preview of at
-most 40 characters and the character count, for example:
+A Herdr notification confirms each capture with a single-line preview of up to
+40 characters, followed by an ellipsis when the text is longer, and the
+character count, for example:
 
 ```text
 Captured to Proqi: "Review the retry path in the export work…" (184 characters)
 ```
 
-The preview drops control characters and joins lines with spaces. When nothing
-can be captured, nothing is stored or created and the notification says why:
+The preview drops control and text-direction formatting characters and joins
+lines with spaces. When the input cannot be captured, nothing is stored or
+created and the notification says why:
 
 | Notification | Cause |
 | --- | --- |
@@ -221,8 +231,11 @@ can be captured, nothing is stored or created and the notification says why:
 | `Nothing captured: the clipboard has N bytes, more than the 131072-byte thought limit` | The text exceeds the 128 KiB thought limit; nothing is truncated |
 | `Nothing captured: the clipboard could not be read (...)` | The system clipboard was unavailable |
 
-Session and Herdr failures, such as a name conflict or an unreachable Herdr,
-use the same `Nothing captured:` prefix with the toggle's explanation.
+Herdr and plugin-state failures, which happen before anything is stored, use
+the same `Nothing captured:` prefix with the toggle's explanation. A failure
+while storing, such as a name conflict or a Proqi that does not answer in time,
+reads `Capture to Proqi failed:` instead, because a Proqi that timed out may
+still have saved the thought; check the session before capturing again.
 
 ### Remote Herdr servers
 

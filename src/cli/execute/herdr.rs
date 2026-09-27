@@ -56,7 +56,11 @@ pub(super) fn capture(cli: &Cli) -> Result<Outcome, CliError> {
     let (mut records, mut context) = match prepared {
         Ok(prepared) => prepared,
         Err(error) => {
-            host.notify(&format!("Nothing captured: {}", error.message()));
+            host.notify(&format!(
+                "{}: {}",
+                crate::application::NOTHING_CAPTURED,
+                error.message()
+            ));
             return Err(error);
         }
     };

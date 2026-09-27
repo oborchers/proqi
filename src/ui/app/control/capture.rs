@@ -15,13 +15,12 @@ use crate::{
 
 use super::BoardApp;
 
-/// Bound on unacknowledged forwarded captures; the persistence lane is ordered.
-const MAX_PENDING: usize = 64;
-
 /// Sequences of forwarded captures awaiting their durable acknowledgement.
 #[derive(Debug, Default)]
 pub(in crate::ui::app) struct CaptureAnnouncements {
     pending: Vec<OperationSequence>,
+    /// Sequence the latest owner-control mutation added, until the next one.
+    latest: Option<OperationSequence>,
 }
 
 impl CaptureAnnouncements {
@@ -38,25 +37,42 @@ impl CaptureAnnouncements {
                 ..
             }
         );
-        if let (true, Some(sequence)) = (announced, batch.and_then(|batch| batch.sequence())) {
-            if self.pending.len() == MAX_PENDING {
-                self.pending.remove(0);
-            }
+        self.latest = batch
+            .and_then(|batch| batch.sequence())
+            .filter(|_| announced);
+        if let Some(sequence) = self.latest {
             self.pending.push(sequence);
         }
     }
 
+    /// Forget the latest mutation's capture when effect validation rolled it back.
+    ///
+    /// Its sequence is then reused by the next mutation, whose acknowledgement
+    /// must not be announced as a capture.
+    pub(in crate::ui::app) fn roll_back_latest(&mut self) {
+        if let Some(sequence) = self.latest.take() {
+            self.pending.retain(|pending| *pending != sequence);
+        }
+    }
+
     /// Settle one acknowledgement and report whether a capture became durable.
+    ///
+    /// The persistence lane acknowledges sequences in order, so a pending
+    /// sequence below an acknowledged one can never be acknowledged later, for
+    /// example after its request was rejected. Pruning those keeps the set to
+    /// the captures still in flight without a capacity bound that could drop one.
+    /// A failed save stays pending so a successful retry still counts it.
     pub(in crate::ui::app) fn acknowledge(
         &mut self,
         sequence: OperationSequence,
         succeeded: bool,
     ) -> bool {
-        let Some(index) = self.pending.iter().position(|pending| *pending == sequence) else {
+        self.pending.retain(|pending| *pending >= sequence);
+        if !succeeded || !self.pending.contains(&sequence) {
             return false;
-        };
-        self.pending.remove(index);
-        succeeded
+        }
+        self.pending.retain(|pending| *pending != sequence);
+        true
     }
 }
 

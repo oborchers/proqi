@@ -13,6 +13,8 @@ use crate::ports::clipboard::{Clipboard, ClipboardContent, ClipboardError};
 
 /// Largest thought body accepted from standard input or an explicit capture.
 pub const MAX_THOUGHT_INPUT_BYTES: usize = 128 * 1024;
+/// Prefix of every message about a capture that stored nothing.
+pub const NOTHING_CAPTURED: &str = "Nothing captured";
 /// Graphemes shown in a single-line capture preview before the ellipsis.
 const PREVIEW_GRAPHEMES: usize = 40;
 
@@ -109,7 +111,7 @@ impl CapturedText {
                 pending_space = !preview.is_empty();
                 continue;
             }
-            let visible: String = grapheme.chars().filter(|c| !c.is_control()).collect();
+            let visible: String = grapheme.chars().filter(|c| is_visible(*c)).collect();
             if visible.is_empty() {
                 continue;
             }
@@ -144,6 +146,14 @@ impl CapturedText {
     }
 }
 
+/// Whether a character may appear in a one-line preview: controls and the
+/// bidirectional embedding, override, and isolate formats are dropped, so a
+/// preview can neither break the line nor reorder the notification around it.
+fn is_visible(character: char) -> bool {
+    !character.is_control()
+        && !matches!(character, '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+}
+
 /// Why nothing was captured.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CaptureError {
@@ -175,11 +185,13 @@ impl fmt::Display for CaptureError {
                     source.noun()
                 )
             }
-            Self::NoText => formatter
-                .write_str("Nothing captured: the clipboard holds no text (for example an image)"),
+            Self::NoText => write!(
+                formatter,
+                "{NOTHING_CAPTURED}: the clipboard holds no text (for example an image)"
+            ),
             Self::TooLarge { source, bytes } => write!(
                 formatter,
-                "Nothing captured: the {} has {bytes} bytes, more than the {MAX_THOUGHT_INPUT_BYTES}-byte thought limit",
+                "{NOTHING_CAPTURED}: the {} has {bytes} bytes, more than the {MAX_THOUGHT_INPUT_BYTES}-byte thought limit",
                 source.noun()
             ),
             Self::Clipboard(error) => {
@@ -196,8 +208,9 @@ impl std::error::Error for CaptureError {}
 
 /// Capture the host-supplied selection, or else the clipboard's text.
 ///
-/// A nonempty selection always wins, even when it is only whitespace, because
-/// the user selected it deliberately. The clipboard is read only without one.
+/// A nonempty selection always wins because the user selected it deliberately,
+/// so a whitespace-only selection is rejected as empty instead of falling back.
+/// The clipboard is read only without a selection.
 ///
 /// # Errors
 ///

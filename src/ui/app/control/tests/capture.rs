@@ -142,3 +142,79 @@ fn an_ordinary_add_keeps_its_position_and_is_not_announced() {
     app.acknowledge_persistence_result(sequence(&effects), Ok(()));
     assert_eq!(app.status_text(), None);
 }
+
+#[test]
+fn a_capture_never_takes_an_untouched_empty_compose_owner() {
+    let mut ids = FakeIdGenerator::new(1_725_280_000_000);
+    let session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-control-capture-compose"),
+        Timestamp::from_millis(1),
+    )
+    .expect("session");
+    let board = SessionBoard::new(session, Vec::new()).expect("board");
+    let mut app = BoardApp::new(AppState::new(board), RopeEditorFactory);
+    assert_eq!(app.state.mode, InteractionMode::Compose);
+    let clock = FakeClock::new(Timestamp::from_millis(2));
+    let (mutation, captured) = add(&mut ids, "captured", Some(AddAnnouncement::Capture));
+    let effects = app.handle_control(&mutation, &clock).expect("capture");
+    app.acknowledge_persistence_result(sequence(&effects), Ok(()));
+    assert_eq!(app.state.board.live_thoughts()[0].id, captured);
+    assert_eq!(
+        app.state.mode,
+        InteractionMode::Compose,
+        "typing stays text"
+    );
+    assert_eq!(app.status_text(), Some("1 new capture"));
+}
+
+#[test]
+fn a_burst_of_captures_is_counted_completely() {
+    let (mut app, mut ids, _) = editing_app();
+    let clock = FakeClock::new(Timestamp::from_millis(2));
+    let sequences = (0..70)
+        .map(|index| {
+            let (mutation, _) = add(
+                &mut ids,
+                &format!("burst {index}"),
+                Some(AddAnnouncement::Capture),
+            );
+            sequence(&app.handle_control(&mutation, &clock).expect("capture"))
+        })
+        .collect::<Vec<_>>();
+    for sequence in sequences {
+        app.acknowledge_persistence_result(sequence, Ok(()));
+    }
+    assert_eq!(app.status_text(), Some("70 new captures"));
+}
+
+#[test]
+fn a_capture_saved_by_a_retry_is_counted_once() {
+    let (mut app, mut ids, _) = editing_app();
+    let clock = FakeClock::new(Timestamp::from_millis(2));
+    let (mutation, _) = add(&mut ids, "retried", Some(AddAnnouncement::Capture));
+    let sequence = sequence(&app.handle_control(&mutation, &clock).expect("capture"));
+    app.acknowledge_persistence_result(
+        sequence,
+        Err(crate::application::FailureCode::StorageFailed),
+    );
+    app.acknowledge_persistence_result(sequence, Ok(()));
+    app.acknowledge_persistence_result(sequence, Ok(()));
+    assert_eq!(app.screenshot.notice_count, 1);
+}
+
+#[test]
+fn a_rolled_back_capture_never_announces_the_mutation_that_reuses_its_sequence() {
+    let (mut app, mut ids, _) = editing_app();
+    let clock = FakeClock::new(Timestamp::from_millis(2));
+    let previous = app.state.clone();
+    let (mutation, _) = add(&mut ids, "rejected", Some(AddAnnouncement::Capture));
+    let rejected = sequence(&app.handle_control(&mutation, &clock).expect("capture"));
+    app.restore_control_state(previous);
+    let (mutation, _) = add(&mut ids, "ordinary", None);
+    let reused = sequence(&app.handle_control(&mutation, &clock).expect("add"));
+    assert_eq!(reused, rejected, "the rolled-back sequence is reused");
+    app.acknowledge_persistence_result(reused, Ok(()));
+    assert_eq!(app.status_text(), None);
+    assert_eq!(app.screenshot.notice_count, 0);
+}

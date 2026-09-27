@@ -100,11 +100,25 @@ fn a_trashed_recorded_session_falls_back_to_the_named_rule_like_the_toggle() {
     let mut clipboard = ScriptedClipboard::text("unused");
     capture_to_companion(&mut host, &mut records, &mut sessions, &mut clipboard).expect("capture");
     assert_eq!(sessions.captured, vec![(session(OWN), "note".to_owned())]);
-    assert_eq!(
-        records.0,
-        vec![record(None, OTHER)],
-        "toggle owns re-recording"
-    );
+    assert_eq!(records.0, vec![record(None, OWN)]);
+
+    // A later rename of the agent no longer moves captures to another session.
+    let mut renamed = host_with_selection(Some("again")).with_agent_names(&["renamed"]);
+    capture_to_companion(&mut renamed, &mut records, &mut sessions, &mut clipboard)
+        .expect("capture");
+    assert_eq!(sessions.captured[1], (session(OWN), "again".to_owned()));
+    assert_eq!(renamed.agent_queries, 0);
+}
+
+#[test]
+fn a_replaced_record_keeps_the_pane_it_names() {
+    let mut host = host_with_selection(Some("note"));
+    let mut records = FakeRecords(vec![record(Some("w1:p9"), OTHER)]);
+    let mut sessions = FakeSessions::with_named("agent-tab", OWN)
+        .with_state(OTHER, CompanionSessionState::Unavailable);
+    let mut clipboard = ScriptedClipboard::text("unused");
+    capture_to_companion(&mut host, &mut records, &mut sessions, &mut clipboard).expect("capture");
+    assert_eq!(records.0, vec![record(Some("w1:p9"), OWN)]);
 }
 
 #[test]
@@ -194,7 +208,7 @@ fn a_store_failure_is_reported_and_leaves_no_record() {
     assert!(records.0.is_empty());
     assert_eq!(
         host.notifications,
-        vec!["Nothing captured: session is busy".to_owned()]
+        vec!["Capture to Proqi failed: session is busy".to_owned()]
     );
 }
 

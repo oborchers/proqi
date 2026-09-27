@@ -31,6 +31,8 @@ pub(super) struct PluginContext {
     worktree: Option<WorktreeContext>,
     /// Filled by Herdr 0.8 for any invocation with a visible selection in the
     /// focused pane, and since 0.9 only for key-bound invocations from a client.
+    /// Herdr 0.9.1 clears the selection on that key press first
+    /// (herdrdev/herdr#3380), so capture then falls back to the clipboard.
     selected_text: Option<String>,
 }
 

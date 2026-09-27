@@ -165,3 +165,18 @@ fn debug_output_never_contains_the_captured_text() {
     let captured = CapturedText::new(CaptureSource::Clipboard, "secret".to_owned()).expect("text");
     assert!(!format!("{captured:?}").contains("secret"));
 }
+
+#[test]
+fn preview_drops_bidirectional_formatting_that_could_reorder_the_notification() {
+    let captured = CapturedText::new(
+        CaptureSource::Selection,
+        "safe \u{202E}txt.exe\u{202C} \u{2066}iso\u{2069}".to_owned(),
+    )
+    .expect("text");
+    assert_eq!(captured.preview(), "safe txt.exe iso");
+    assert_eq!(
+        captured.text(),
+        "safe \u{202E}txt.exe\u{202C} \u{2066}iso\u{2069}",
+        "stored content stays exact"
+    );
+}

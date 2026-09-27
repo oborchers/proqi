@@ -70,8 +70,8 @@ pub use service::{
     SessionServiceError, ThoughtMutation,
 };
 pub use text_capture::{
-    CaptureError, CaptureSource, CapturedText, MAX_THOUGHT_INPUT_BYTES, capture_text,
-    clipboard_text,
+    CaptureError, CaptureSource, CapturedText, MAX_THOUGHT_INPUT_BYTES, NOTHING_CAPTURED,
+    capture_text, clipboard_text,
 };
 pub use update::{
     UpdateAvailability, UpdateCheckMode, UpdateCheckResult, UpdateRefresh, UpdateService,

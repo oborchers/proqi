@@ -423,7 +423,8 @@ presentation metadata on a copied thought is not carried over. `--from` names
 the source; `clipboard` is the only value today, and later sources can be added
 without changing existing invocations. An active session's Proqi appends the
 thought quietly and counts it in its `N new captures` status; an inactive
-session commits it under its lease. The same text captured twice creates two
+session commits it under its lease. A Proqi still running a release that
+predates capture stores it at its insertion point without the count. The same text captured twice creates two
 thoughts.
 
 `--operation-id` replays like `thoughts add`: a retry while the clipboard holds
@@ -696,9 +697,9 @@ Like `herdr toggle`, it runs only with the plugin environment and fails with
 It stores the `selected_text` of `HERDR_PLUGIN_CONTEXT_JSON` when that is not
 empty, and otherwise the clipboard's text, as one new thought at the end of the
 tab's session. The session is resolved exactly as `herdr toggle` resolves it,
-without opening a pane. The text is read and checked first, so a failure
-creates no session and stores nothing. A tab without a recorded session records
-the one it captured into. Every outcome is also shown as a Herdr notification.
+without opening a pane. The text is read and checked first, so rejected input
+creates no session and stores nothing. A tab whose record names no available
+session records the one it captured into. Every outcome is also shown as a Herdr notification.
 
 A successful JSON response has this shape:
 
