@@ -1,7 +1,7 @@
 //! Real-binary contracts for the scriptable session and thought workflow.
 
 use std::{
-    io::Write,
+    io::{ErrorKind, Write},
     path::Path,
     process::{Command, Output, Stdio},
 };
@@ -54,15 +54,25 @@ fn run(root: &Path, arguments: &[&str], input: Option<&str>) -> Output {
         command.stdin(Stdio::null());
     }
     let mut child = command.spawn().expect("spawn proqi");
-    if let Some(input) = input {
+    let write_error = if let Some(input) = input {
         child
             .stdin
             .take()
             .expect("child stdin")
             .write_all(input.as_bytes())
-            .expect("write stdin");
+            .err()
+    } else {
+        None
+    };
+    let output = child.wait_with_output().expect("wait for proqi");
+    if let Some(error) = write_error {
+        assert_eq!(error.kind(), ErrorKind::BrokenPipe, "write stdin");
+        assert!(
+            !output.status.success(),
+            "proqi succeeded without consuming all stdin"
+        );
     }
-    child.wait_with_output().expect("wait for proqi")
+    output
 }
 
 fn success(root: &Path, arguments: &[&str], input: Option<&str>) -> Value {

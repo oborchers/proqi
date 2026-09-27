@@ -1,0 +1,15 @@
+name: Fetch historical PTY fixture dependencies
+description: Cache the locked dependencies of released binaries before offline fixture builds
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/proqi-historical-fetch.XXXXXX")"
+        trap 'rm -rf -- "$fixture_dir"' EXIT
+        for tag in v0.9.0 v0.10.2; do
+          mkdir "$fixture_dir/$tag"
+          git archive "$tag" | tar -xf - -C "$fixture_dir/$tag"
+          cargo fetch --locked --manifest-path "$fixture_dir/$tag/Cargo.toml"
+        done
