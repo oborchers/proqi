@@ -212,6 +212,17 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: macos-15
+      - name: Fetch pinned historical PTY fixture dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/proqi-historical-fetch.XXXXXX")"
+          trap 'rm -rf -- "$fixture_dir"' EXIT
+          for tag in v0.9.0 v0.10.2; do
+            mkdir "$fixture_dir/$tag"
+            git archive "$tag" | tar -xf - -C "$fixture_dir/$tag"
+            cargo fetch --locked --manifest-path "$fixture_dir/$tag/Cargo.toml"
+          done
       - run: cargo xtask test-pty
       - name: Preserve synthetic migration failure evidence
         if: failure()
