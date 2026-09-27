@@ -57,6 +57,7 @@ fn exact_add_replay_is_accepted_but_changed_content_conflicts() {
         content: "exact".to_owned(),
         annotations: Vec::new(),
         position: Some(0),
+        announcement: None,
     };
     assert!(matches!(
         match_control_replay(&existing, session_id, &exact),
@@ -68,6 +69,7 @@ fn exact_add_replay_is_accepted_but_changed_content_conflicts() {
         content: "changed".to_owned(),
         annotations: Vec::new(),
         position: Some(0),
+        announcement: None,
     };
     assert!(matches!(
         match_control_replay(&existing, session_id, &changed),

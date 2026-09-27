@@ -25,6 +25,8 @@ pub struct CompanionContext {
     /// Stable directory that anchors the tab's first session: the Herdr worktree
     /// checkout, else the repository root containing the focused directory.
     pub session_root: Option<PathBuf>,
+    /// Text the user had selected in the focused pane, when the host supplied it.
+    pub selected_text: Option<String>,
 }
 
 /// One pane of the invoking tab, observed from one bounded host snapshot.
@@ -226,4 +228,15 @@ pub trait CompanionSessions {
     ///
     /// Returns the service error when a live owner cannot confirm the flush.
     fn flush(&mut self, session_id: SessionId) -> Result<(), Self::Error>;
+
+    /// Append exact captured text as one thought, announced as a capture by a live owner.
+    ///
+    /// # Errors
+    ///
+    /// Returns the service error; nothing is stored on failure.
+    fn capture(
+        &mut self,
+        session_id: SessionId,
+        text: &str,
+    ) -> Result<crate::domain::ThoughtId, Self::Error>;
 }

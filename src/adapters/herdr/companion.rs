@@ -43,6 +43,10 @@ pub const LAUNCHER_PATH: &str = "herdr-plugin/proqi.sh";
 pub const INSTALL_PATH: &str = "herdr-plugin/install.sh";
 /// Capability flag the launcher requires before it runs the toggle.
 pub const TOGGLE_CAPABILITY: &str = "herdr_companion_toggle";
+/// Manifest action that captures the selection or clipboard text.
+pub const CAPTURE_ACTION_ID: &str = "capture";
+/// Capability flag the launcher requires before it runs the capture.
+pub const CAPTURE_CAPABILITY: &str = "herdr_capture";
 /// Oldest Herdr release whose protocol Proqi qualifies and whose plugin surface this host uses.
 pub const MIN_HERDR_VERSION: &str = "0.8.0";
 

@@ -1,6 +1,9 @@
 //! Owner-control mutations applied through the same reducer as terminal input.
 
+mod capture;
 mod transformations;
+
+pub(super) use capture::CaptureAnnouncements;
 
 use super::{BoardApp, SessionRenamePersistence};
 use crate::{
@@ -87,6 +90,9 @@ impl BoardApp {
         {
             self.session_rename_persistence = SessionRenamePersistence::Saving;
         }
+        self.screenshot
+            .forwarded
+            .track(mutation, effects.iter().find_map(Effect::persistence_batch));
         self.restore_live_interaction(previous_mode, previous_focus);
         self.reconcile_thought_rename();
         self.sync_editor_from_state();
@@ -326,6 +332,7 @@ impl BoardApp {
                 content,
                 annotations,
                 position,
+                announcement,
             } => {
                 if annotations
                     .iter()
@@ -338,7 +345,7 @@ impl BoardApp {
                     *thought_id,
                     content,
                     annotations,
-                    *position,
+                    self.announced_position(*announcement, *position),
                     at,
                 ))
             }

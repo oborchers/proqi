@@ -64,6 +64,8 @@ pub(super) struct ScreenshotInbox {
     pub(super) takeover_selected: usize,
     auto_ready: Option<crate::domain::ThoughtId>,
     pub(super) notice_count: usize,
+    /// Forwarded captures that join the shared count once durable.
+    pub(super) forwarded: super::control::CaptureAnnouncements,
     activity: ScreenshotActivity,
     pending_pause: Option<ScreenshotPauseReason>,
     pause_warning_acknowledged: bool,
@@ -379,6 +381,11 @@ impl BoardApp {
         self.screenshot.auto_ready =
             (make_ready && !self.screenshot.candidates.is_empty()).then_some(thought_id);
         self.sync_editor_from_state();
+        self.announce_new_capture();
+    }
+
+    /// Count one durable capture from any source in the shared quiet status.
+    pub(super) fn announce_new_capture(&mut self) {
         self.screenshot.notice_count = self.screenshot.notice_count.saturating_add(1);
         let count = self.screenshot.notice_count;
         let message = if count == 1 {

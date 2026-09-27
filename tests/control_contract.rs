@@ -1,7 +1,8 @@
 //! Current-contract fixtures for the typed local owner-control protocol.
 
 use proqi::ports::control::{
-    CONTROL_PROTOCOL_VERSION, ControlMutation, ControlRequest, ControlResponse, ControlResult,
+    AddAnnouncement, CONTROL_PROTOCOL_VERSION, ControlMutation, ControlRequest, ControlResponse,
+    ControlResult,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -9,6 +10,7 @@ use serde_json::Value;
 const REQUEST: &str = include_str!("fixtures/control/v13/add.request.json");
 const ACCEPTED: &str = include_str!("fixtures/control/v13/add.accepted.json");
 const REJECTED: &str = include_str!("fixtures/control/v13/add.rejected.json");
+const CAPTURE: &str = include_str!("fixtures/control/v13/add_capture.request.json");
 const PRESERVE: &str = include_str!("fixtures/control/v13/preserve_add.request.json");
 const PRESERVE_MANY: &str = include_str!("fixtures/control/v13/preserve_add_many.request.json");
 const UPDATE_PREPARE: &str = include_str!("fixtures/control/v13/update_prepare.request.json");
@@ -36,6 +38,55 @@ fn current_request_success_and_error_fixtures_round_trip_canonically() {
     assert_eq!(rejected.protocol, CONTROL_PROTOCOL_VERSION);
     assert!(matches!(accepted.result, ControlResult::Accepted(_)));
     assert!(matches!(rejected.result, ControlResult::Rejected { .. }));
+}
+
+#[test]
+fn a_capture_is_an_ordinary_add_with_an_additive_announcement() {
+    let request: ControlRequest = assert_round_trip(CAPTURE);
+    assert_eq!(request.protocol, CONTROL_PROTOCOL_VERSION);
+    assert_eq!(request.mutation.minimum_protocol(), 1);
+    let ControlMutation::Add {
+        content,
+        announcement,
+        ..
+    } = &request.mutation
+    else {
+        panic!("capture add");
+    };
+    assert_eq!(content, "  Captured\r\nselection \n");
+    assert_eq!(*announcement, Some(AddAnnouncement::Capture));
+    // An ordinary add omits the field, so owners that predate it see no change.
+    let plain: ControlRequest = serde_json::from_str(REQUEST).expect("plain add");
+    assert!(
+        !serde_json::to_string(&plain)
+            .expect("serialize")
+            .contains("announcement")
+    );
+}
+
+/// Owners that predate the announcement decode requests with the same derive,
+/// which has never denied unknown fields. A field unknown to this decoder is
+/// therefore ignored exactly as an older owner ignores `announcement`: the add
+/// still creates the same exact thought.
+#[test]
+fn an_unknown_additive_add_field_is_ignored_by_the_owner_decoder() {
+    let mut value: Value = serde_json::from_str(CAPTURE).expect("capture fixture");
+    let mutation = value["mutation"].as_object_mut().expect("mutation object");
+    let announcement = mutation.remove("announcement").expect("announcement field");
+    mutation.insert("announcement_from_the_future".to_owned(), announcement);
+    let decoded: ControlRequest = serde_json::from_value(value).expect("unknown field ignored");
+    let ControlMutation::Add {
+        content,
+        announcement,
+        position,
+        ..
+    } = decoded.mutation
+    else {
+        panic!("add");
+    };
+    assert_eq!(content, "  Captured\r\nselection \n");
+    assert_eq!(announcement, None);
+    assert_eq!(position, None);
 }
 
 #[test]

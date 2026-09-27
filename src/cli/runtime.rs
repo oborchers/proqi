@@ -172,6 +172,11 @@ impl RuntimeContext {
         }
     }
 
+    /// Clipboard used by explicit capture.
+    pub(super) fn capture_clipboard(&self) -> Box<dyn crate::ports::clipboard::Clipboard> {
+        crate::adapters::clipboard::capture_clipboard(&self.cache_dir)
+    }
+
     pub(super) fn finish_exact_resume(
         &mut self,
         session_id: crate::domain::SessionId,

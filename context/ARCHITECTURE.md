@@ -5,7 +5,7 @@ Status: v0.1.0 architecture contract
 Project: Proqi
 
 Command: `proqi`
-Last updated: 2026-09-25
+Last updated: 2026-09-27
 
 ## Purpose
 
@@ -2129,12 +2129,13 @@ The repository root carries `herdr-plugin.toml`, which makes Proqi installable
 with `herdr plugin install oborchers/proqi`. Its build step
 `herdr-plugin/install.sh` installs nothing when a Proqi exists on `PATH` or in
 the standalone directory; otherwise it runs the checksum-matched standalone
-installer from the latest release. Its one action and its pane entrypoint run
+installer from the latest release. Its two actions and its pane entrypoint run
 `herdr-plugin/proqi.sh`, which only resolves the installed executable, checks
-the `herdr_companion_toggle` capability, and replaces itself with
-`proqi herdr toggle` or `proqi --resume <id>`. It contains no decision logic.
+the `herdr_companion_toggle` or `herdr_capture` capability, and replaces itself
+with `proqi herdr toggle`, `proqi herdr capture`, or `proqi --resume <id>`. It
+contains no decision logic.
 
-`proqi herdr toggle` is the plugin action. The CLI composes three parts:
+`proqi herdr toggle` is the first plugin action. The CLI composes three parts:
 
 - The terminal-independent `CompanionHost`, `CompanionRecords`, and
   `CompanionSessions` ports in `ports::companion`. They speak in panes, tabs,
@@ -2165,6 +2166,30 @@ the `herdr_companion_toggle` capability, and replaces itself with
   serializes toggles; the lock wait exceeds the slowest complete toggle. A
   record keeps the tab's session after its pane closes, so later toggles
   reopen it from any pane. Unreadable state is treated as no record.
+
+`proqi herdr capture` is the second action. The terminal-independent policy
+`application::text_capture` owns the source order (a nonempty host selection,
+otherwise the `Clipboard` port's text), exact acceptance, the 128 KiB thought
+input limit shared with standard input, one wording per failure cause, and the
+single-line notification preview. `application::companion::capture` validates
+the text before it resolves a session, so failure creates nothing. Toggle and
+capture share one session owner, `resolve_tab_session`: the recorded session
+unless it is unavailable, otherwise the named get-or-create rule. Only the
+toggle adds its active-session and other-tab blockers. The CLI stores the text
+through one path that `thoughts capture` uses as well: an active owner receives
+an ordinary `ControlMutation::Add` whose additive `announcement: capture` field
+asks it to append at the Board end and, after the matching durable
+acknowledgement, count the capture in the Screenshot Inbox's shared
+`N new captures` status. The field is outside the semantic request fingerprint,
+so replay matches `thoughts add`. Owners that predate it ignore the unknown
+field, because control requests have never denied unknown fields, and still
+create the same thought without the status. An inactive session commits the
+same add under its lease. One composition function,
+`adapters::clipboard::capture_clipboard`, called only by the CLI runtime, may
+replace the native clipboard with a read-only JSON fixture through the
+dedicated test variable `PROQI_TEST_CLIPBOARD_FIXTURE`, so process and live
+qualification never touch the user's clipboard. Neither clipboard adapter reads
+the environment, and the terminal's clipboard lane never consults the variable.
 
 The owner flush reuses owner control's `Sync` request through a strict variant
 that fails when no owner confirms. Herdr owns plugin-pane ownership only in

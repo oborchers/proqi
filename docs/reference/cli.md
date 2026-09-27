@@ -9,6 +9,8 @@
     retry identities for session mutations, named thought creation, bounded
     lists, and JSON help and version output. It also removed the legacy
     `thoughts` array from `thoughts list`. Proqi 0.14.0 adds `herdr toggle`.
+    The next release adds `thoughts export`, `thoughts capture`, and
+    `herdr capture`.
     Always read `capabilities` from the installed binary before using an
     operation.
 
@@ -296,6 +298,7 @@ proqi thoughts merge <session> <thought> <thought>... --expected-sha256 HEX --ex
 proqi thoughts reflow <session> <thought> --expected-sha256 HEX [--operation-id OP_ID]
 proqi thoughts export <session> <thought>... --output PATH [--remove | --replace-with-reference] [--replace-existing] [--operation-id OP_ID]
 proqi thoughts send <source> <thought> <destination> [--remove] [--operation-id OP_ID] [--remove-operation-id OP_ID]
+proqi thoughts capture <session> --from clipboard [--operation-id OP_ID]
 proqi thoughts undo <session> [--thought THOUGHT] [--operation-id OP_ID]
 proqi thoughts redo <session> [--thought THOUGHT] [--operation-id OP_ID]
 ```
@@ -403,6 +406,45 @@ The result reports `output`, `bytes`, `disposition` (`keep`, `remove`, or
 `reference_thought_id`, `item_ids`, and the Board `receipt`, which is `null` when
 the Board is unchanged.
 
+### Capture the clipboard
+
+<span class="version-scope">Next release</span>
+
+`thoughts capture` stores the native clipboard's text as one new thought at the
+end of the Board:
+
+```sh
+proqi --json thoughts capture <session> --from clipboard
+```
+
+The thought holds exactly the clipboard's text, the same way `thoughts add`
+stores standard input: nothing is trimmed, quoted, or added, and Proqi
+presentation metadata on a copied thought is not carried over. `--from` names
+the source; `clipboard` is the only value today, and later sources can be added
+without changing existing invocations. An active session's Proqi appends the
+thought quietly and counts it in its `N new captures` status; an inactive
+session commits it under its lease. The same text captured twice creates two
+thoughts.
+
+`--operation-id` replays like `thoughts add`: a retry while the clipboard holds
+the same text returns the original receipt with `idempotent_replay: true`, and
+the same identity with different text fails with `idempotency_conflict`.
+
+The result is the `thoughts add` result plus `source` (`clipboard`),
+`characters` (perceived characters), and `bytes`. When nothing is captured,
+nothing is stored:
+
+- `capture_empty` when the clipboard holds no text or only whitespace:
+  `Nothing captured: the clipboard is empty`;
+- `capture_no_text` for an image or other non-text content:
+  `Nothing captured: the clipboard holds no text (for example an image)`;
+- `capture_too_large` above the 131,072-byte thought limit, which is never
+  truncated;
+- `clipboard_failed` when the system clipboard cannot be read.
+
+Only run it when you mean to store your clipboard; coding agents should pass
+text to `thoughts add` on standard input instead.
+
 ### Bounded lists
 
 <span class="version-scope">Proqi 0.13.0</span>
@@ -470,7 +512,9 @@ that advertises no protocol yet, such as another command in progress, still
 reports `session_busy`. Proqi 0.14.0 adds `companion_session_active`,
 `herdr_failed`, and `plugin_state_failed` for the Herdr plugin toggle. The next
 release adds `export_target_invalid`, `export_directory_missing`,
-`export_target_exists`, and `export_write_failed` for `thoughts export`.
+`export_target_exists`, and `export_write_failed` for `thoughts export`, and
+`capture_empty`, `capture_no_text`, and `capture_too_large` for
+`thoughts capture` and `herdr capture`.
 
 With `--json`, every failure writes
 `{"schema_version": 1, "ok": false, "error": {"code", "message", "details"}}` to
@@ -527,6 +571,9 @@ any other failure.
 | `conflict` | 7 | After change | `{}` |
 | `mutation_rejected` | 7 | After change | `{}` |
 | `export_target_exists` | 7 | After change | `{"output"}` |
+| `capture_empty` | 7 | After change | `{"source"}` |
+| `capture_no_text` | 7 | After change | `{"source"}` |
+| `capture_too_large` | 7 | After change | `{"source", "bytes", "limit"}` |
 | `operation_indeterminate` | 8 | Same identity | `{"session_id", "holder"}` |
 | `storage_failed` | 1 | After change | `{}` |
 | `storage_full` | 1 | After change | `{}` |
@@ -632,6 +679,37 @@ pane whose process Herdr cannot report in time, which blocks opening because it
 might hide a Proqi, and
 `plugin_state_failed` (1) when the plugin's private state or its toggle lock is
 unavailable.
+
+## Capture into a Herdr tab's session
+
+<span class="version-scope">Next release</span>
+
+```text
+proqi herdr capture
+```
+
+This command is the **Capture to Proqi** action of the
+[Herdr plugin](../guides/herdr-plugin.md#capture-the-selection-or-clipboard).
+Like `herdr toggle`, it runs only with the plugin environment and fails with
+`unsupported` anywhere else.
+
+It stores the `selected_text` of `HERDR_PLUGIN_CONTEXT_JSON` when that is not
+empty, and otherwise the clipboard's text, as one new thought at the end of the
+tab's session. The session is resolved exactly as `herdr toggle` resolves it,
+without opening a pane. The text is read and checked first, so a failure
+creates no session and stores nothing. A tab without a recorded session records
+the one it captured into. Every outcome is also shown as a Herdr notification.
+
+A successful JSON response has this shape:
+
+```json
+{"action": "captured", "tab_id": "w1:t1", "session_id": "ses_...", "thought_id": "tht_...", "source": "selection", "characters": 184, "bytes": 190}
+```
+
+`source` is `selection` or `clipboard`. Failures use `capture_empty`,
+`capture_no_text`, `capture_too_large`, and `clipboard_failed` (see
+[Capture the clipboard](#capture-the-clipboard)), plus the session and Herdr
+codes of `herdr toggle`.
 
 ## Check updates
 

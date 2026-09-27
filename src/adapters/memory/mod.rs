@@ -192,3 +192,55 @@ impl ProcessRunner for FakeProcessRunner {
             .unwrap_or_else(|| Err(ProcessError::Io("no fake result queued".to_owned())))
     }
 }
+
+/// Clipboard that returns one scripted read and records every read.
+#[derive(Clone, Debug)]
+pub struct ScriptedClipboard {
+    /// Result every read returns.
+    pub content:
+        Result<crate::ports::clipboard::ClipboardContent, crate::ports::clipboard::ClipboardError>,
+    /// Number of reads observed.
+    pub reads: usize,
+}
+
+impl ScriptedClipboard {
+    /// Clipboard holding exact plain text.
+    #[must_use]
+    pub fn text(text: &str) -> Self {
+        Self::with(Ok(crate::ports::clipboard::ClipboardContent::Text(
+            crate::ports::clipboard::ClipboardText::plain(text.to_owned()),
+        )))
+    }
+
+    /// Clipboard returning one fixed result.
+    #[must_use]
+    pub fn with(
+        content: Result<
+            crate::ports::clipboard::ClipboardContent,
+            crate::ports::clipboard::ClipboardError,
+        >,
+    ) -> Self {
+        Self { content, reads: 0 }
+    }
+}
+
+impl crate::ports::clipboard::Clipboard for ScriptedClipboard {
+    fn write(
+        &mut self,
+        _request_id: RequestId,
+        _content: &crate::ports::clipboard::ClipboardText,
+    ) -> Result<crate::ports::clipboard::ClipboardWrite, crate::ports::clipboard::ClipboardError>
+    {
+        Err(crate::ports::clipboard::ClipboardError::Unavailable(
+            "scripted clipboard is read-only".to_owned(),
+        ))
+    }
+
+    fn read(
+        &mut self,
+    ) -> Result<crate::ports::clipboard::ClipboardContent, crate::ports::clipboard::ClipboardError>
+    {
+        self.reads += 1;
+        self.content.clone()
+    }
+}

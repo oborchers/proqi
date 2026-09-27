@@ -1,7 +1,9 @@
 //! Active-session CLI mutations forwarded to the verified reducer owner.
 
 use crate::cli::error_code::ErrorCode;
+mod add;
 mod board;
+pub(super) use add::{add, capture, preserve_add};
 pub(super) use board::{
     export_thoughts, extract_thought, insert_separator, merge_thoughts, move_item, mutate_items,
     reflow_thought, split_thought,
@@ -12,7 +14,7 @@ use serde_json::json;
 use crate::{
     adapters::control::LocalControlClient,
     application::ThoughtMutation,
-    domain::{ContentAnnotation, OperationId, RevisionId, SessionId, ThoughtId, UndoScope},
+    domain::{OperationId, RevisionId, SessionId, ThoughtId, UndoScope},
     ports::{
         control::{ControlClient, ControlError, ControlMutation, ControlRequest},
         environment::IdGenerator,
@@ -22,15 +24,6 @@ use crate::{
 };
 
 use super::super::{output::CliError, runtime::RuntimeContext};
-
-struct ForwardedAdd<'a> {
-    body: &'a str,
-    annotations: Vec<ContentAnnotation>,
-    name: Option<crate::domain::ThoughtName>,
-    position: Option<usize>,
-    supplied: Option<OperationId>,
-    preserve: bool,
-}
 
 pub(super) fn rename_session(
     context: &mut RuntimeContext,
@@ -113,86 +106,6 @@ fn sync_owner(
         }
         Err(error) => Err(map_error(error, &owner, false)),
     }
-}
-
-pub(super) fn add(
-    context: &mut RuntimeContext,
-    session_id: SessionId,
-    body: &str,
-    position: Option<usize>,
-    supplied: Option<OperationId>,
-) -> Result<Option<ThoughtMutation>, CliError> {
-    add_with_kind(
-        context,
-        session_id,
-        ForwardedAdd {
-            body,
-            annotations: Vec::new(),
-            name: None,
-            position,
-            supplied,
-            preserve: false,
-        },
-    )
-}
-
-pub(super) fn preserve_add(
-    context: &mut RuntimeContext,
-    session_id: SessionId,
-    body: &str,
-    annotations: Vec<ContentAnnotation>,
-    name: Option<crate::domain::ThoughtName>,
-    position: Option<usize>,
-    supplied: Option<OperationId>,
-) -> Result<Option<ThoughtMutation>, CliError> {
-    add_with_kind(
-        context,
-        session_id,
-        ForwardedAdd {
-            body,
-            annotations,
-            name,
-            position,
-            supplied,
-            preserve: true,
-        },
-    )
-}
-
-fn add_with_kind(
-    context: &mut RuntimeContext,
-    session_id: SessionId,
-    add: ForwardedAdd<'_>,
-) -> Result<Option<ThoughtMutation>, CliError> {
-    let Some(owner) = owner(context, session_id)? else {
-        return Ok(None);
-    };
-    let operation_id = add.supplied.unwrap_or_else(|| context.ids.operation_id());
-    let thought_id = ThoughtId::from_database_bytes(operation_id.database_bytes())
-        .map_err(|error| CliError::identifier(error.to_string()))?;
-    let mutation = if add.preserve {
-        ControlMutation::PreserveAdd {
-            operation_id,
-            thought_id,
-            content: add.body.to_owned(),
-            annotations: add.annotations,
-            name: add.name,
-            position: add.position,
-        }
-    } else {
-        ControlMutation::Add {
-            operation_id,
-            thought_id,
-            content: add.body.to_owned(),
-            annotations: Vec::new(),
-            position: add.position,
-        }
-    };
-    let receipt = send(context, &owner, session_id, mutation)?;
-    Ok(Some(ThoughtMutation {
-        thought_id,
-        receipt,
-    }))
 }
 
 pub(super) fn delete(

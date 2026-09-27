@@ -179,6 +179,7 @@ mod tests {
                 content: "add".to_owned(),
                 annotations: Vec::new(),
                 position: None,
+                announcement: None,
             },
             ControlMutation::Replace {
                 revision_id: ids.revision_id(),
@@ -252,6 +253,7 @@ mod tests {
             content: "control first".to_owned(),
             annotations: Vec::new(),
             position: None,
+            announcement: None,
         };
         let effects = app.handle_control(&add, &clock).expect("control mutation");
         let [Effect::CommitBoardOperation(operation)] = effects.as_slice() else {
@@ -280,6 +282,7 @@ mod tests {
             content: "active".to_owned(),
             annotations: Vec::new(),
             position: None,
+            announcement: None,
         };
         let add_effects = app.handle_control(&add, &clock).expect("seed thought");
         let [Effect::CommitBoardOperation(add_operation)] = add_effects.as_slice() else {
