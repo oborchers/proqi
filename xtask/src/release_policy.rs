@@ -86,7 +86,7 @@ const DEPENDABOT_AUTOMERGE_REQUIRED: [&str; 11] = [
     "github.event.pull_request.user.login == 'dependabot[bot]'",
     "github.repository == 'oborchers/proqi'",
     "github.event.pull_request.draft == false",
-    "dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7 # v2.4.0",
+    "dependabot/fetch-metadata@08eff52bf64351f401fb50d4972fa95b9f2c2d1b # v2.4.0",
     "steps.metadata.outputs.update-type == 'version-update:semver-patch'",
     "steps.metadata.outputs.update-type == 'version-update:semver-minor'",
     "GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
