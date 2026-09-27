@@ -62,7 +62,7 @@ fn prioritized_disabled_row_keeps_truthful_state_visible() {
     );
     let theme = Theme::resolve(ThemePreference::Dark, true);
 
-    let rendered = picker_line(row, 20, true, &theme);
+    let rendered = picker_line(row, 20, true, false, &theme);
     assert_eq!(rendered.to_string(), "Block…  p8 · blocked");
     assert!(
         rendered
@@ -78,12 +78,12 @@ fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
     let theme = Theme::resolve(ThemePreference::Dark, true);
     let row = PickerRow::fields("$skill", "Project Skill");
 
-    let ordinary = picker_line(row, 24, false, &theme);
+    let ordinary = picker_line(row, 24, false, false, &theme);
     assert_eq!(ordinary.spans.len(), 3);
     assert_eq!(ordinary.spans[0].style.fg, Some(theme.foreground));
     assert_eq!(ordinary.spans[2].style.fg, Some(theme.muted));
 
-    let selected = picker_line(row, 24, true, &theme);
+    let selected = picker_line(row, 24, true, false, &theme);
     assert_eq!(selected.spans.len(), 3);
     assert_eq!(selected.spans[0].style.fg, Some(theme.accent));
     assert!(
@@ -94,6 +94,25 @@ fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
     );
     assert_eq!(selected.spans[2].style.fg, Some(theme.muted));
     assert_eq!(selected.spans[2].style.bg, theme.focused_surface);
+    let hovered_selected = picker_line(row, 24, true, true, &theme);
+    assert_ne!(hovered_selected, selected);
+    assert_eq!(hovered_selected.spans[0].style.fg, Some(theme.on_accent));
+    assert_eq!(
+        hovered_selected.spans[0].style.bg,
+        Some(theme.accent_surface)
+    );
+    assert!(
+        hovered_selected.spans[0]
+            .style
+            .add_modifier
+            .contains(Modifier::BOLD)
+    );
+    assert!(
+        !hovered_selected.spans[0]
+            .style
+            .add_modifier
+            .intersects(Modifier::ITALIC | Modifier::UNDERLINED)
+    );
     insta::with_settings!({ snapshot_path => "../snapshots" }, {
         insta::assert_debug_snapshot!("picker_metadata_styles", (ordinary, selected));
     });
@@ -102,13 +121,11 @@ fn every_picker_secondary_uses_the_same_quiet_metadata_style() {
 #[test]
 fn selected_disabled_choice_keeps_focus_surface_and_muted_text() {
     let theme = Theme::resolve(ThemePreference::Dark, true);
-    let selected = picker_line(
-        PickerRow::choice("Blocked receiver", "blocked", false),
-        32,
-        true,
-        &theme,
-    );
+    let row = PickerRow::choice("Blocked receiver", "blocked", false);
+    let selected = picker_line(row, 32, true, false, &theme);
+    let hovered = picker_line(row, 32, true, true, &theme);
 
+    assert_eq!(hovered, selected);
     assert!(
         selected
             .spans

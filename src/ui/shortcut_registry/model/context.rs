@@ -33,6 +33,10 @@ pub enum ShortcutContext {
     Rename,
     /// Session Browser rename field, whose Delete contract differs from Board rename.
     BrowserRename,
+    /// Plain-text export destination field with path completion.
+    ExportPath,
+    /// Confirmation before an export replaces an existing file.
+    ExportReplace,
     /// Update-choice overlay.
     Update,
     /// Screenshot Inbox takeover choice or quit confirmation.
@@ -77,10 +81,12 @@ impl ShortcutContext {
             | Self::GlobalDeliveryQuery
             | Self::BrowserQuery
             | Self::Rename
-            | Self::BrowserRename => Contract::LocalText,
+            | Self::BrowserRename
+            | Self::ExportPath => Contract::LocalText,
             Self::Browser => Contract::BrowserTextThenDurable,
             Self::Help
             | Self::GlobalDeliveryDisposition
+            | Self::ExportReplace
             | Self::Update
             | Self::Screenshot
             | Self::Recovery

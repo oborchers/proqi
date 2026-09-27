@@ -194,6 +194,25 @@ impl QueryEditor {
         self.state.head = self.state.text.len();
     }
 
+    pub(in crate::ui) fn place_cursor(&mut self, byte: usize, extend_selection: bool) {
+        self.close_group();
+        let previous = self.state.head;
+        let mut next = byte.min(self.state.text.len());
+        while !self.state.text.is_char_boundary(next) {
+            next = next.saturating_sub(1);
+        }
+        if extend_selection {
+            self.state.anchor.get_or_insert(previous);
+            self.state.head = next;
+            if self.state.anchor == Some(self.state.head) {
+                self.state.anchor = None;
+            }
+        } else {
+            self.state.head = next;
+            self.state.anchor = None;
+        }
+    }
+
     pub(in crate::ui) fn undo(&mut self) -> bool {
         self.close_group();
         let Some(previous) = self.past.pop() else {

@@ -108,11 +108,11 @@ fn undoing_a_split_returns_focus_to_its_retained_source_instead_of_board_start()
         },
     )
     .expect("split");
-    assert_eq!(fixture.state.focused_thought, Some(new_thought_id));
+    assert_eq!(fixture.state.focused_thought_id(), Some(new_thought_id));
 
     move_history(&mut fixture, UndoScope::Board, true);
 
-    assert_eq!(fixture.state.focused_thought, Some(source));
+    assert_eq!(fixture.state.focused_thought_id(), Some(source));
     assert_eq!(fixture.state.mode, InteractionMode::Board);
 }
 

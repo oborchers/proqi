@@ -15,7 +15,7 @@ use super::{
     },
     validation::{ShortcutRegistryError as Error, validate_descriptors},
 };
-use crate::ui::{KeyBindings, LogicalModifiers};
+use crate::ui::{KeyBindings, LogicalKey, LogicalModifiers};
 
 type ContextMaps = BTreeMap<String, BTreeMap<String, Vec<AliasDocument>>>;
 
@@ -177,6 +177,7 @@ fn apply_overrides(
     platform: ShortcutPlatform,
     overrides: &Overrides,
 ) {
+    let footer_displacements = footer_default_displacements(overrides);
     for descriptor in descriptors {
         let (defaults, aliases) = match platform {
             ShortcutPlatform::MacOs => (
@@ -188,22 +189,52 @@ fn apply_overrides(
                 &mut descriptor.portable_aliases,
             ),
         };
+        if descriptor.action == Action::ToggleFooter {
+            for claim in defaults.iter_mut().chain(aliases.iter_mut()) {
+                claim
+                    .contexts
+                    .retain(|context| !footer_displacements.contains(context));
+            }
+            defaults.retain(|claim| !claim.contexts.is_empty());
+            aliases.retain(|claim| !claim.contexts.is_empty());
+        }
         for ((context, action), bindings) in overrides {
             if *action != descriptor.action {
                 continue;
             }
+            let contexts = if *action == Action::ToggleFooter && *context == Context::Board {
+                &[Context::Board, Context::InsertionBoundary][..]
+            } else {
+                std::slice::from_ref(context)
+            };
             for claim in defaults.iter_mut().chain(aliases.iter_mut()) {
-                claim.contexts.retain(|candidate| candidate != context);
+                claim
+                    .contexts
+                    .retain(|candidate| !contexts.contains(candidate));
             }
             defaults.retain(|claim| !claim.contexts.is_empty());
             aliases.retain(|claim| !claim.contexts.is_empty());
             defaults.extend(bindings.iter().map(|binding| ShortcutBindingClaim {
                 binding: *binding,
-                contexts: vec![*context],
+                contexts: contexts.to_vec(),
                 presentation: ShortcutBindingPresentation::Explicit,
             }));
         }
     }
+}
+
+fn footer_default_displacements(overrides: &Overrides) -> BTreeSet<Context> {
+    overrides
+        .iter()
+        .filter_map(|((context, action), bindings)| {
+            (*action != Action::ToggleFooter
+                && bindings.iter().any(|binding| {
+                    binding.key == LogicalKey::Character('h')
+                        && binding.modifiers == ShortcutModifiers::Exact(LogicalModifiers::NONE)
+                }))
+            .then_some(*context)
+        })
+        .collect()
 }
 
 #[cfg(test)]

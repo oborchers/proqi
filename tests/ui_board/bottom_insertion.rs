@@ -32,7 +32,7 @@ fn insert_at_top(fixture: &mut Fixture) -> (ThoughtId, Vec<Effect>) {
     let current = fixture
         .app
         .state
-        .focused_thought
+        .focused_thought_id()
         .and_then(|focused| live.iter().position(|thought| thought.id == focused))
         .expect("focused setup thought");
     for _ in 0..current {

@@ -42,10 +42,7 @@ fn run_delete(sequence: &str) {
         .as_str()
         .expect("session ID");
     let deleted = json_command(binary, state.path(), &["thoughts", "list", session]);
-    assert_eq!(
-        deleted["data"]["thoughts"].as_array().map(Vec::len),
-        Some(0)
-    );
+    assert_eq!(deleted["data"]["items"].as_array().map(Vec::len), Some(0));
 
     let undo = r#"
         log_user 0
@@ -74,7 +71,7 @@ fn run_delete(sequence: &str) {
         .expect("run PTY undo workflow");
     assert!(status.success(), "undo PTY exited with {status}");
     let restored = json_command(binary, state.path(), &["thoughts", "list", session]);
-    assert_eq!(restored["data"]["thoughts"][0]["content"], "alpha");
+    assert_eq!(restored["data"]["items"][0]["content"], "alpha");
 }
 
 #[test]
@@ -125,11 +122,8 @@ fn physical_delete_removes_one_multi_selection_and_undo_restores_it() {
         .as_str()
         .expect("session ID");
     let remaining = json_command(binary, state.path(), &["thoughts", "list", session]);
-    assert_eq!(remaining["data"]["thoughts"][0]["content"], "first");
-    assert_eq!(
-        remaining["data"]["thoughts"].as_array().map(Vec::len),
-        Some(1)
-    );
+    assert_eq!(remaining["data"]["items"][0]["content"], "first");
+    assert_eq!(remaining["data"]["items"].as_array().map(Vec::len), Some(1));
 
     let undo = r#"
         log_user 0
@@ -156,7 +150,7 @@ fn physical_delete_removes_one_multi_selection_and_undo_restores_it() {
         .expect("run PTY multi-delete undo");
     assert!(status.success(), "multi-delete undo exited with {status}");
     let restored = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let contents = restored["data"]["thoughts"]
+    let contents = restored["data"]["items"]
         .as_array()
         .expect("thoughts")
         .iter()
@@ -209,9 +203,6 @@ fn modified_delete_is_not_a_board_alias_but_still_deletes_forward_in_edit() {
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    assert_eq!(thoughts["data"]["thoughts"][0]["content"], "a");
-    assert_eq!(
-        thoughts["data"]["thoughts"].as_array().map(Vec::len),
-        Some(1)
-    );
+    assert_eq!(thoughts["data"]["items"][0]["content"], "a");
+    assert_eq!(thoughts["data"]["items"].as_array().map(Vec::len), Some(1));
 }

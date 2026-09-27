@@ -16,9 +16,10 @@ use std::{
 
 #[test]
 fn old_coordinator_converges_real_schema_changing_replacements() {
+    let _fixture_guard = super::fixture_lock::acquire();
     let fixture = OldFixture::build();
     for count in [3, 15] {
-        assert_automatic_schema_update(&fixture, count);
+        assert_automatic_schema_update(fixture, count);
     }
 }
 
@@ -37,6 +38,7 @@ fn assert_automatic_schema_update(fixture: &OldFixture, count: usize) {
         state.path(),
         &launch_order,
     );
+    let evidence = super::evidence::Evidence::new(state.path(), count);
     owners.wait_ready(state.path());
     let before = active_instances(state.path());
     assert_launch_directory_matrix(state.path(), &before, count);
@@ -55,20 +57,19 @@ fn assert_automatic_schema_update(fixture: &OldFixture, count: usize) {
         .matches("\"stage\":\"board_ready\"")
         .count();
 
+    evidence.stage("coordination");
     let execution = fixture.coordinate(
         state.path(),
         &installation,
         initiating.instance_id,
         initiating.session_id,
+        &mut owners,
     );
-    assert_eq!(execution["prepared_participants"], count);
-    assert_eq!(execution["quiescence_requests"], count);
-    assert_eq!(execution["quiesced_participants"], count);
-    assert_eq!(execution["restart_requests"], count);
-    assert_eq!(execution["restart_accepted"], count);
-    assert_eq!(execution["replacement_missing"], 0);
-    assert_eq!(execution["restart_failed"], serde_json::json!([]));
+    evidence.execution(&execution);
+    evidence.stage("coordination_assertions");
+    assert_execution(&execution, count, &evidence);
 
+    evidence.stage("replacement_verification");
     let after = wait_for_exact_replacements(state.path(), &before);
     assert_exact_replacements(&before, &after, &sessions);
     assert_store_after_automatic_update(state.path(), count);
@@ -79,6 +80,7 @@ fn assert_automatic_schema_update(fixture: &OldFixture, count: usize) {
         migration_completed_before,
         follower_before,
     );
+    evidence.stage("final_convergence");
     let cache = wait_for_final_convergence(
         state.path(),
         installation.identity,
@@ -93,8 +95,37 @@ fn assert_automatic_schema_update(fixture: &OldFixture, count: usize) {
             .map(proqi::domain::ReleaseHighlightAnnouncement::session_id),
         Some(initiating.session_id)
     );
+    evidence.stage("normal_shutdown");
     owners.stop();
     assert!(active_instances(state.path()).is_empty());
+}
+
+fn assert_execution(
+    execution: &serde_json::Value,
+    count: usize,
+    evidence: &super::evidence::Evidence,
+) {
+    for field in [
+        "prepared_participants",
+        "quiescence_requests",
+        "quiesced_participants",
+        "restart_requests",
+        "restart_accepted",
+    ] {
+        assert_eq!(execution[field], count, "{field}: {}", evidence.summary());
+    }
+    assert_eq!(
+        execution["replacement_missing"],
+        0,
+        "{}",
+        evidence.summary()
+    );
+    assert_eq!(
+        execution["restart_failed"],
+        serde_json::json!([]),
+        "{}",
+        evidence.summary()
+    );
 }
 
 fn wait_for_final_convergence(
@@ -126,7 +157,7 @@ fn wait_for_final_convergence(
     }
 }
 
-fn launch_plan(state: &Path, sessions: &[String]) -> Vec<(String, PathBuf)> {
+pub(super) fn launch_plan(state: &Path, sessions: &[String]) -> Vec<(String, PathBuf)> {
     let shared = state.join("cwd-shared");
     let mixed_a = state.join("cwd-mixed-a");
     let mixed_b = state.join("cwd-mixed-b");
@@ -165,7 +196,7 @@ fn assert_launch_directory_matrix(state: &Path, before: &[InstanceInfo], count: 
     }
 }
 
-fn create_ambiguous_sessions(binary: &str, state: &Path, count: usize) -> Vec<String> {
+pub(super) fn create_ambiguous_sessions(binary: &str, state: &Path, count: usize) -> Vec<String> {
     let sessions = (0..count)
         .map(|_| {
             let created = super::json_command(binary, state, &[]);
@@ -190,7 +221,10 @@ fn create_ambiguous_sessions(binary: &str, state: &Path, count: usize) -> Vec<St
     sessions
 }
 
-fn wait_for_exact_replacements(state: &Path, before: &[InstanceInfo]) -> Vec<InstanceInfo> {
+pub(super) fn wait_for_exact_replacements(
+    state: &Path,
+    before: &[InstanceInfo],
+) -> Vec<InstanceInfo> {
     let deadline = Instant::now() + super::OWNER_TIMEOUT;
     loop {
         let active = active_instances(state);
@@ -214,7 +248,11 @@ fn wait_for_exact_replacements(state: &Path, before: &[InstanceInfo]) -> Vec<Ins
     }
 }
 
-fn assert_exact_replacements(before: &[InstanceInfo], after: &[InstanceInfo], sessions: &[String]) {
+pub(super) fn assert_exact_replacements(
+    before: &[InstanceInfo],
+    after: &[InstanceInfo],
+    sessions: &[String],
+) {
     assert_eq!(after.len(), sessions.len());
     let expected = sessions.iter().cloned().collect::<BTreeSet<_>>();
     let restored = after
@@ -238,7 +276,7 @@ fn assert_exact_replacements(before: &[InstanceInfo], after: &[InstanceInfo], se
     }
 }
 
-fn assert_store_after_automatic_update(state: &Path, count: usize) {
+pub(super) fn assert_store_after_automatic_update(state: &Path, count: usize) {
     let connection = Connection::open(state.join("data/proqi.sqlite3")).expect("database");
     let integrity: String = connection
         .query_row("PRAGMA quick_check", [], |row| row.get(0))
@@ -269,7 +307,7 @@ fn assert_store_after_automatic_update(state: &Path, count: usize) {
     assert_eq!(runtime_entries, count);
 }
 
-fn assert_cross_version_diagnostics(
+pub(super) fn assert_cross_version_diagnostics(
     state: &Path,
     count: usize,
     started_before: usize,

@@ -7,13 +7,22 @@ use crate::{
         editor::{CursorMovement, EditorSnapshot},
         environment::{Clock, IdGenerator},
     },
-    ui::PastePayload,
+    ui::{PastePayload, PointerKind},
 };
 
 use super::{BoardApp, BoundaryInsertion, InsertionConfirmation, InsertionFocus, UiInput};
 
 impl BoardApp {
     pub(super) fn reset_insertion_confirmation(&mut self, input: &UiInput) {
+        if matches!(
+            input,
+            UiInput::Pointer(crate::ui::PointerInput {
+                kind: PointerKind::Move,
+                ..
+            })
+        ) {
+            return;
+        }
         let boundary = match input {
             UiInput::Key(key) => match self.settings.shortcuts.board_action_for_intention(*key) {
                 Some(crate::ui::ShortcutActionId::FocusPrevious) => {
@@ -71,7 +80,7 @@ impl BoardApp {
     }
 
     fn bottom_insertion_index(&self) -> usize {
-        self.state.board.live_thoughts().len()
+        self.state.board.live_items().len()
     }
 
     pub(super) fn insert_relative_to_focus(
@@ -81,20 +90,23 @@ impl BoardApp {
         clock: &impl Clock,
     ) -> Vec<Effect> {
         if self.insertion_focused() {
-            self.set_warning("focus a thought before inserting above or below");
+            self.set_warning("focus a Board item before inserting above or below");
             return Vec::new();
         }
-        let Some(reference) = self.active_thought_id() else {
-            self.set_warning("focus a thought before inserting above or below");
+        let Some(reference) = self.state.focused_item else {
+            self.set_warning("focus a Board item before inserting above or below");
             return Vec::new();
         };
-        if self.submission_locked(reference) {
+        if reference
+            .thought()
+            .is_some_and(|thought_id| self.submission_locked(thought_id))
+        {
             self.set_warning("focused thought has a submission in progress");
             return Vec::new();
         }
-        let live = self.state.board.live_thoughts();
-        let Some(index) = live.iter().position(|thought| thought.id == reference) else {
-            self.set_warning("focused thought is no longer available");
+        let live = self.state.board.live_items();
+        let Some(index) = live.iter().position(|item| item.id() == reference) else {
+            self.set_warning("focused Board item is no longer available");
             return Vec::new();
         };
         self.create_blank_at(index.saturating_add(usize::from(below)), ids, clock)
@@ -105,10 +117,10 @@ impl BoardApp {
             && self
                 .state
                 .board
-                .live_thoughts()
+                .live_items()
                 .first()
-                .map(|thought| thought.id)
-                == self.state.focused_thought
+                .map(|item| item.id())
+                .is_some_and(|id| self.state.focused_item == Some(id))
     }
 
     fn at_boundary(&self, boundary: BoundaryInsertion) -> bool {

@@ -88,7 +88,7 @@ fn editor_fixture(count: usize, index: usize, preference: ThoughtPresentation) -
         durable_thought(&mut fixture, "seed");
     }
     let id = fixture.app.state.board.live_thoughts()[index].id;
-    fixture.app.state.focused_thought = Some(id);
+    fixture.app.state.focused_item = Some(id.into());
     fixture
         .app
         .state

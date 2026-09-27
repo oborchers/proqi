@@ -1,0 +1,11 @@
+---
+source: src/ui/app/export/tests/rendering.rs
+assertion_line: 86
+expression: "snapshot(&mut path_stage(), 60, 6)"
+---
+00│┌ export and replace with reference ─────────────────────[x]│
+01││>notes/Grüße.txt                                          ││
+02││Save and replace 2 thoughts with a file reference         ││
+03││                                                          ││
+04│└──────────────────────────────────────────────────────────┘│
+05│  n New   y Copy  x Cut  d/Del  Space Select / Search│

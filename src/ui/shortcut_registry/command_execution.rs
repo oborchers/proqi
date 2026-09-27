@@ -20,11 +20,16 @@ pub(crate) enum BoardCommand {
     New,
     InsertAbove,
     InsertBelow,
+    InsertSeparator,
     RenameSession,
+    RenameThought,
     CopySessionId,
     CopyResume,
     SendSession,
     SendSessionRemove,
+    Export,
+    ExportRemove,
+    ExportReplace,
     Delete,
     Copy,
     Cut,
@@ -130,11 +135,16 @@ pub(crate) const fn execution_for(action: Action) -> Option<CommandExecution> {
         A::New => Some(E::Board(BoardCommand::New)),
         A::InsertAbove => Some(E::Board(BoardCommand::InsertAbove)),
         A::InsertBelow => Some(E::Board(BoardCommand::InsertBelow)),
+        A::InsertSeparator => Some(E::Board(BoardCommand::InsertSeparator)),
         A::RenameSession => Some(E::Board(BoardCommand::RenameSession)),
+        A::RenameThought => Some(E::Board(BoardCommand::RenameThought)),
         A::CopySessionId => Some(E::Board(BoardCommand::CopySessionId)),
         A::CopyResume => Some(E::Board(BoardCommand::CopyResume)),
         A::SendSession => Some(E::Board(BoardCommand::SendSession)),
         A::SendSessionRemove => Some(E::Board(BoardCommand::SendSessionRemove)),
+        A::ExportThoughts => Some(E::Board(BoardCommand::Export)),
+        A::ExportRemove => Some(E::Board(BoardCommand::ExportRemove)),
+        A::ExportReplace => Some(E::Board(BoardCommand::ExportReplace)),
         A::Edit => Some(E::Entry(EntryCommand::Edit)),
         A::PlainNewline => Some(E::Editor(EditorCommand::PlainNewline)),
         A::JumpUp => Some(E::Editor(EditorCommand::JumpUp)),
@@ -227,6 +237,7 @@ pub(crate) const fn execution_for(action: Action) -> Option<CommandExecution> {
         | A::PickerPrevious
         | A::PickerNext
         | A::ContextualTransform
+        | A::ToggleFooter
         | A::OpenSearch
         | A::OpenCommands
         | A::BrowserTrash

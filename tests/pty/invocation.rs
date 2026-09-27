@@ -17,7 +17,7 @@ fn thought_content(binary: &str, state: &std::path::Path) -> String {
     let session = sessions["data"]["sessions"][0]["id"]
         .as_str()
         .expect("session ID");
-    json_command(binary, state, &["thoughts", "list", session])["data"]["thoughts"][0]["content"]
+    json_command(binary, state, &["thoughts", "list", session])["data"]["items"][0]["content"]
         .as_str()
         .expect("thought content")
         .to_owned()
@@ -77,6 +77,8 @@ fn select_invocation(
 fn short_fuzzy_invocation_completes_exactly_and_shuts_down_in_a_real_pty() {
     let state = tempfile::tempdir().expect("temporary state");
     let home = tempfile::tempdir().expect("isolated home");
+    let cwd = home.path().join("projects/non-git/nested");
+    std::fs::create_dir_all(&cwd).expect("nested non-Git cwd");
     let external = home.path().join("catalog/aos-communication-email");
     let skill = external.join("SKILL.md");
     std::fs::create_dir_all(&external).expect("external skill directory");
@@ -101,6 +103,7 @@ fn short_fuzzy_invocation_completes_exactly_and_shuts_down_in_a_real_pty() {
         set timeout 10
         set binary $env(PROQI_TEST_BINARY)
         set state $env(PROQI_TEST_STATE)
+        cd $env(PROQI_TEST_CWD)
         spawn $binary --state-dir $state
         expect -exact "\x1b\[?1049h"
         after 500
@@ -119,6 +122,7 @@ fn short_fuzzy_invocation_completes_exactly_and_shuts_down_in_a_real_pty() {
         .args(["-c", interact])
         .env("PROQI_TEST_BINARY", binary)
         .env("PROQI_TEST_STATE", state.path())
+        .env("PROQI_TEST_CWD", &cwd)
         .env("HOME", home.path())
         .env_remove("HERDR_ENV")
         .status()
@@ -131,7 +135,7 @@ fn short_fuzzy_invocation_completes_exactly_and_shuts_down_in_a_real_pty() {
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
+        thoughts["data"]["items"][0]["content"],
         "$aos-communication-email "
     );
 }

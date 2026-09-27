@@ -52,7 +52,7 @@ fn contents(fixture: &Fixture) -> Vec<&str> {
 }
 
 fn focused_content(fixture: &Fixture) -> Option<&str> {
-    let focused = fixture.app.state.focused_thought?;
+    let focused = fixture.app.state.focused_thought_id()?;
     fixture
         .app
         .state
@@ -306,12 +306,12 @@ fn empty_insertion_locked_and_stale_references_never_partially_insert() {
 
     let mut stale = Fixture::new();
     durable_thought(&mut stale, "still present");
-    stale.app.state.focused_thought = Some(stale.ids.thought_id());
+    stale.app.state.focused_item = Some(stale.ids.thought_id().into());
     assert!(stale.effects(shortcut(Shortcut::InsertAbove)).is_empty());
     assert_eq!(contents(&stale), ["still present"]);
     assert_eq!(
         stale.app.status_text(),
-        Some("focused thought is no longer available"),
+        Some("focused Board item is no longer available"),
     );
 
     let mut locked = Fixture::new();
@@ -490,6 +490,6 @@ fn unavailable_board_command_binding_does_not_mutate_after_opening_commands() {
     );
     assert_eq!(
         fixture.app.status_text(),
-        Some("command is unavailable in the current state"),
+        Some("Available from Board focus"),
     );
 }

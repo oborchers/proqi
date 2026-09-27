@@ -1,5 +1,6 @@
 //! Read-only health-check command presentation.
 
+use crate::cli::error_code::ErrorCode;
 use serde_json::json;
 
 use super::Outcome;
@@ -13,7 +14,7 @@ pub(super) fn execute(paths: &AppPaths) -> Result<Outcome, CliError> {
     let report = inspect(paths);
     let human = render_human(&report);
     if report.overall_status == DoctorStatus::Fail {
-        return Err(CliError::new("doctor_failed", human, 1).with_details(json!(report)));
+        return Err(CliError::new(ErrorCode::DoctorFailed, human).with_details(json!(report)));
     }
     Ok(Outcome {
         data: json!(report),

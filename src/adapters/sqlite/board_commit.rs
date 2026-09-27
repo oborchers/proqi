@@ -1,5 +1,7 @@
 //! New structural and editor commits.
 
+mod thought_names;
+
 use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::{
@@ -7,13 +9,15 @@ use crate::{
         BoardMutation, BoardOperation, ContentAnnotation, OperationSequence, Session, SessionId,
         ThoughtId, ThoughtRevision, Timestamp,
     },
-    ports::store::{CommitReceipt, DurableIdentity, OperationBatch, StoreError},
+    ports::store::{
+        CommitReceipt, DurableIdentity, OperationBatch, SemanticRequestFingerprint, StoreError,
+    },
 };
 
 use super::{
     history_commit::{
-        HistoryMove, commit_history_move, existing_receipt, insert_receipt, persist_board,
-        require_next_sequence, set_integration_context, update_session_sequence,
+        HistoryMove, ReceiptInsert, commit_history_move, existing_receipt, insert_receipt,
+        persist_board, require_next_sequence, set_integration_context, update_session_sequence,
     },
     load::{load_board, load_session_record},
     search::rebuild_session_search,
@@ -29,8 +33,14 @@ pub(super) fn commit_batch(
             create_session(transaction, session)?;
             Ok(None)
         }
-        OperationBatch::Board(operation) => commit_board(transaction, operation).map(Some),
-        OperationBatch::Revision(revision) => commit_revision(transaction, revision).map(Some),
+        OperationBatch::Board {
+            operation,
+            semantic_fingerprint,
+        } => commit_board(transaction, operation, *semantic_fingerprint).map(Some),
+        OperationBatch::Revision {
+            revision,
+            semantic_fingerprint,
+        } => commit_revision(transaction, revision, *semantic_fingerprint).map(Some),
         OperationBatch::HistoryMove {
             operation_id,
             session_id,
@@ -38,6 +48,7 @@ pub(super) fn commit_batch(
             undo,
             sequence,
             at,
+            semantic_fingerprint,
         } => commit_history_move(
             transaction,
             HistoryMove {
@@ -47,6 +58,28 @@ pub(super) fn commit_batch(
                 undo: *undo,
                 sequence: *sequence,
                 at: *at,
+                semantic_fingerprint: *semantic_fingerprint,
+            },
+        )
+        .map(Some),
+        OperationBatch::ThoughtNoOpRename {
+            operation_id,
+            session_id,
+            thought_id,
+            name,
+            sequence,
+            at,
+            semantic_fingerprint,
+        } => thought_names::commit_noop_rename(
+            transaction,
+            thought_names::NoOpRename {
+                operation_id: *operation_id,
+                session_id: *session_id,
+                thought_id: *thought_id,
+                name: name.clone(),
+                sequence: *sequence,
+                at: *at,
+                semantic_fingerprint: *semantic_fingerprint,
             },
         )
         .map(Some),
@@ -112,6 +145,7 @@ pub(super) fn create_session(
 pub(super) fn commit_board(
     transaction: &Transaction<'_>,
     operation: &BoardOperation,
+    semantic_fingerprint: Option<SemanticRequestFingerprint>,
 ) -> Result<CommitReceipt, StoreError> {
     let request_json = serde_json::to_string(operation)
         .map_err(|error| StoreError::Serialization(error.to_string()))?;
@@ -120,6 +154,7 @@ pub(super) fn commit_board(
         "operation",
         operation.id.database_bytes(),
         &request_json,
+        semantic_fingerprint,
         DurableIdentity::Operation(operation.id),
     )? {
         return Ok(receipt);
@@ -153,7 +188,13 @@ pub(super) fn commit_board(
         .map_err(map_sql_error)?;
     truncate_editor_redo(transaction, &operation.forward)?;
     persist_board(transaction, &board)?;
-    finish_board_commit(transaction, operation, cursor, &request_json)
+    finish_board_commit(
+        transaction,
+        operation,
+        cursor,
+        &request_json,
+        semantic_fingerprint,
+    )
 }
 
 fn finish_board_commit(
@@ -161,6 +202,7 @@ fn finish_board_commit(
     operation: &BoardOperation,
     cursor: usize,
     request_json: &str,
+    semantic_fingerprint: Option<SemanticRequestFingerprint>,
 ) -> Result<CommitReceipt, StoreError> {
     super::browser_history::invalidate_activity_conflicts(transaction, operation.session_id)?;
     transaction
@@ -179,12 +221,15 @@ fn finish_board_commit(
         .map_err(map_sql_error)?;
     insert_receipt(
         transaction,
-        operation.session_id,
-        operation.sequence,
-        "operation",
-        operation.id.database_bytes(),
-        request_json,
-        operation.created_at,
+        ReceiptInsert {
+            session_id: operation.session_id,
+            sequence: operation.sequence,
+            entity_kind: "operation",
+            external_id: operation.id.database_bytes(),
+            request_json,
+            semantic_fingerprint,
+            at: operation.created_at,
+        },
     )?;
     transaction
         .execute(
@@ -218,6 +263,10 @@ pub(super) fn mutation_changes_search(mutation: &BoardMutation) -> bool {
         | BoardMutation::SetDeletionExact { .. }
         | BoardMutation::ReplaceContent { .. } => true,
         BoardMutation::MoveThought { .. }
+        | BoardMutation::SetName { .. }
+        | BoardMutation::AddSeparator { .. }
+        | BoardMutation::SetSeparatorDeletion { .. }
+        | BoardMutation::MoveSeparator { .. }
         | BoardMutation::SetPresentation { .. }
         | BoardMutation::LegacySetCollapsed { .. } => false,
     }
@@ -245,8 +294,12 @@ fn truncate_editor_redo(
         }
         BoardMutation::AddThought { .. }
         | BoardMutation::AddThoughtFromCompose { .. }
+        | BoardMutation::AddSeparator { .. }
+        | BoardMutation::SetSeparatorDeletion { .. }
+        | BoardMutation::MoveSeparator { .. }
         | BoardMutation::SetDeletion { .. }
         | BoardMutation::MoveThought { .. }
+        | BoardMutation::SetName { .. }
         | BoardMutation::SetPresentation { .. }
         | BoardMutation::LegacySetCollapsed { .. } => {}
     }
@@ -256,6 +309,7 @@ fn truncate_editor_redo(
 fn commit_revision(
     transaction: &Transaction<'_>,
     revision: &ThoughtRevision,
+    semantic_fingerprint: Option<SemanticRequestFingerprint>,
 ) -> Result<CommitReceipt, StoreError> {
     let request_json = serde_json::to_string(revision)
         .map_err(|error| StoreError::Serialization(error.to_string()))?;
@@ -264,6 +318,7 @@ fn commit_revision(
         "revision",
         revision.id.database_bytes(),
         &request_json,
+        semantic_fingerprint,
         DurableIdentity::Revision(revision.id),
     )? {
         return Ok(receipt);
@@ -279,12 +334,15 @@ fn commit_revision(
     persist_revision(transaction, revision, cursor, &request_json)?;
     insert_receipt(
         transaction,
-        revision.session_id,
-        revision.sequence,
-        "revision",
-        revision.id.database_bytes(),
-        &request_json,
-        revision.created_at,
+        ReceiptInsert {
+            session_id: revision.session_id,
+            sequence: revision.sequence,
+            entity_kind: "revision",
+            external_id: revision.id.database_bytes(),
+            request_json: &request_json,
+            semantic_fingerprint,
+            at: revision.created_at,
+        },
     )?;
     update_session_sequence(
         transaction,

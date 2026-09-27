@@ -50,3 +50,60 @@ fn pending_owner_rename_rejects_reordering_and_clears_after_failure() {
     ));
     assert_eq!(app.state.board.session.name.as_deref(), Some("Second"));
 }
+
+#[test]
+fn thought_name_owner_refuses_locks_and_reconciles_external_deletion() {
+    let mut ids = FakeIdGenerator::new(1_725_231_000_000);
+    let session = Session::new(
+        ids.session_id(),
+        std::env::temp_dir().join("proqi-control-thought-name-owner"),
+        Timestamp::from_millis(1),
+    )
+    .expect("session");
+    let thought_id = ids.thought_id();
+    let thought = Thought::new(
+        thought_id,
+        session.id,
+        "body".to_owned(),
+        ThoughtPosition::new(0),
+        Timestamp::from_millis(1),
+    );
+    let mut app = BoardApp::new(
+        AppState::new(SessionBoard::new(session, vec![thought]).expect("board")),
+        crate::adapters::editor::RopeEditorFactory,
+    );
+    app.state.focused_item = Some(thought_id.into());
+    let clock = FakeClock::new(Timestamp::from_millis(2));
+
+    app.reduce(Action::BeginSubmission {
+        thought_ids: vec![thought_id],
+    });
+    assert!(
+        app.begin_thought_rename_for(thought_id, &mut ids, &clock)
+            .is_empty()
+    );
+    assert!(app.thought_name_editor(thought_id).is_none());
+    app.reduce(Action::EndSubmission {
+        thought_ids: vec![thought_id],
+    });
+
+    assert!(
+        app.begin_thought_rename_for(thought_id, &mut ids, &clock)
+            .is_empty()
+    );
+    assert!(app.thought_name_editor(thought_id).is_some());
+    let effects = app
+        .handle_control(
+            &ControlMutation::Delete {
+                operation_id: ids.operation_id(),
+                thought_id,
+            },
+            &clock,
+        )
+        .expect("external delete");
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CommitBoardOperation(_)]
+    ));
+    assert!(app.thought_name_editor(thought_id).is_none());
+}

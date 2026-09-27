@@ -230,7 +230,7 @@ fn in_app_restart_reopens_until_dismissed_then_remains_manual() {
     );
     let peer_thoughts = json_command(original, state.path(), &["thoughts", "list", peer_session]);
     assert_eq!(
-        peer_thoughts["data"]["thoughts"][0]["content"],
+        peer_thoughts["data"]["items"][0]["content"],
         highlight_fixture::PEER_QUIET_PROOF
     );
     let status = owner.wait().expect("wait for crash fixture");
@@ -258,7 +258,7 @@ fn in_app_restart_reopens_until_dismissed_then_remains_manual() {
     );
     let resumed = json_command(original, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        resumed["data"]["thoughts"][0]["content"],
+        resumed["data"]["items"][0]["content"],
         highlight_fixture::RESUME_QUIET_PROOF
     );
     let status = highlight_fixture::run_manual_reopen(&binary, state.path(), session);

@@ -1,3 +1,5 @@
+//! Fast navigation and scrolling across grouped Browser results.
+
 use super::*;
 use proqi::ui::FastNavigation;
 

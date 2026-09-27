@@ -15,6 +15,8 @@ use super::snapshot_support::snapshot_buffer;
 mod attachment_accessibility_snapshots;
 #[path = "snapshots/attachment_numbering.rs"]
 mod attachment_numbering;
+#[path = "snapshots/footer_visibility.rs"]
+mod footer_visibility;
 #[path = "snapshots/herdr.rs"]
 mod herdr_snapshots;
 #[path = "snapshots/platform.rs"]
@@ -44,6 +46,16 @@ fn engaged_empty_compose_editor() {
         .expect("passive Compose prompt");
     fixture.pointer(insert.x, insert.y, PointerKind::Down(PointerButton::Left));
     insta::assert_snapshot!(snapshot(&mut fixture, 48, 8, ThemePreference::Dark));
+}
+
+#[test]
+fn first_api_item_has_the_ordinary_board_focus_presentation() {
+    let mut fixture = Fixture::new();
+    durable_thought(&mut fixture, "first API focus");
+    fixture
+        .app
+        .acknowledge_persistence(OperationSequence::new(1), true);
+    insta::assert_snapshot!(snapshot(&mut fixture, 48, 12, ThemePreference::Dark));
 }
 
 #[test]

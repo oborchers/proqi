@@ -71,3 +71,74 @@ fn recovery_actions_follow_durable_pending_and_failed_state_exactly() {
         Some(0)
     );
 }
+
+#[test]
+fn selected_transfer_retry_is_available_only_for_its_matching_action() {
+    use crate::{
+        domain::{BoardItemId, Separator, Thought, ThoughtPosition},
+        ports::transfer::{SessionTransferBatchRequest, TransferItem},
+    };
+
+    let mut ids = FakeIdGenerator::new(1_725_000_000_000);
+    let at = Timestamp::from_millis(1);
+    let session = Session::new(ids.session_id(), std::env::temp_dir(), at).expect("session");
+    let destination = ids.session_id();
+    let thought = Thought::new(
+        ids.thought_id(),
+        session.id,
+        "first".to_owned(),
+        ThoughtPosition::new(0),
+        at,
+    );
+    let separator = Separator::new(ids.separator_id(), session.id, ThoughtPosition::new(1), at);
+    let mut app = BoardApp::new(
+        AppState::new(
+            SessionBoard::with_separators(session, vec![thought.clone()], vec![separator.clone()])
+                .expect("board"),
+        ),
+        RopeEditorFactory,
+    );
+    app.state.focused_item = Some(thought.id.into());
+    app.replace_board_selection([
+        BoardItemId::Thought(thought.id),
+        BoardItemId::Separator(separator.id),
+    ]);
+    let request = SessionTransferBatchRequest {
+        source_session_id: app.state.board.session.id,
+        destination_session_id: destination,
+        operation_id: ids.operation_id(),
+        removal_operation_id: ids.operation_id(),
+        items: vec![TransferItem {
+            source_thought_id: thought.id,
+            destination_thought_id: ids.thought_id(),
+            content: thought.content.clone(),
+            annotations: thought.annotations.clone(),
+            name: thought.name.clone(),
+        }],
+        remove_source: true,
+    };
+    app.pending_transfer_batches
+        .insert(request.operation_id, request);
+    let remove = metadata(&app, ShortcutActionId::SendSessionRemove);
+    let keep = metadata(&app, ShortcutActionId::SendSession);
+    let cleanup = metadata(&app, ShortcutActionId::ReflowThought);
+    let context = app.capture_command_context();
+    assert_eq!(context.applicability(remove), Applicability::ENABLED);
+    assert_eq!(
+        context.applicability(keep),
+        Applicability::disabled("Thought has an operation in progress")
+    );
+    assert_eq!(
+        context.applicability(cleanup),
+        Applicability::disabled("Thought has an operation in progress")
+    );
+    for request in app.pending_transfer_batches.values_mut() {
+        request.remove_source = false;
+    }
+    let keep_retry = app.capture_command_context();
+    assert_eq!(keep_retry.applicability(keep), Applicability::ENABLED);
+    assert_eq!(
+        keep_retry.applicability(remove),
+        Applicability::disabled("Thought has an operation in progress")
+    );
+}

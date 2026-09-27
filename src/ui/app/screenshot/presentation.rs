@@ -20,7 +20,7 @@ impl BoardApp {
         }
     }
 
-    pub(in crate::ui::app) fn screenshot_footer_state(&self, compact: bool) -> Option<String> {
+    pub(in crate::ui) fn screenshot_footer_state(&self, compact: bool) -> Option<String> {
         match self.screenshot.state {
             ScreenshotState::Listening => Some(if compact {
                 "inbox".to_owned()

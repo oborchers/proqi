@@ -228,6 +228,11 @@ fn every_eligible_action_context_pair_is_configurable_and_resolves_its_identity(
     }
 }
 
+#[path = "config/export.rs"]
+mod export;
+#[path = "config/footer_visibility.rs"]
+mod footer_visibility;
+
 #[test]
 fn altgr_option_and_shifted_text_cannot_be_stolen_from_any_text_owner() {
     for context in super::super::inventory::bindings::vocabulary::KEYBOARD_CONTEXTS
@@ -336,5 +341,20 @@ fn exact_uppercase_aliases_have_distinct_help_and_footer_labels() {
     assert_eq!(
         same.action_label(Context::Board, Action::New, false),
         "Ctrl+D"
+    );
+}
+
+#[test]
+fn thought_name_action_is_configurable_by_its_typed_identifier() {
+    let registry = parse("schema_version=1\n[bindings.board]\n\"thought.rename\"=[{key='F8'}]")
+        .expect("valid name shortcut override");
+    assert_eq!(
+        action(
+            &registry,
+            Context::Board,
+            LogicalKey::Function(8),
+            LogicalModifiers::NONE,
+        ),
+        Some(Action::RenameThought)
     );
 }

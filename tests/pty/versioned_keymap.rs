@@ -55,7 +55,7 @@ fn aliases_replace_defaults_and_survive_undo_restart_and_config_reload() {
     ] {
         run(state.path(), session, keys);
         let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-        let actual = thoughts["data"]["thoughts"].as_array().unwrap();
+        let actual = thoughts["data"]["items"].as_array().unwrap();
         assert_eq!(
             actual.len(),
             usize::from(expected.is_some()),
@@ -75,8 +75,8 @@ fn aliases_replace_defaults_and_survive_undo_restart_and_config_reload() {
     .unwrap();
     run(state.path(), session, "\x1b[15~\x1b[17~");
     let retained = json_command(binary, state.path(), &["thoughts", "list", session]);
-    assert_eq!(retained["data"]["thoughts"][0]["content"], content);
+    assert_eq!(retained["data"]["items"][0]["content"], content);
     run(state.path(), session, "\x1b[20~");
     let deleted = json_command(binary, state.path(), &["thoughts", "list", session]);
-    assert!(deleted["data"]["thoughts"].as_array().unwrap().is_empty());
+    assert!(deleted["data"]["items"].as_array().unwrap().is_empty());
 }

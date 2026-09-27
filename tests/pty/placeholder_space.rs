@@ -20,7 +20,7 @@ fn selected_file_placeholder_moves_right_and_undoes_in_a_real_pty() {
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let thought = thoughts["data"]["thoughts"][0]["id"]
+    let thought = thoughts["data"]["items"][0]["id"]
         .as_str()
         .expect("thought ID");
     let original = file.to_string_lossy();

@@ -3,6 +3,8 @@
 use std::{fs, path::Path};
 use yaml_rust2::{Yaml, YamlLoader};
 
+mod docs;
+
 const RELEASE_REQUIRED: [&str; 19] = [
     "environment: release",
     "cargo xtask release-promotion-plan",
@@ -98,9 +100,11 @@ pub(crate) fn check(root: &Path) -> Result<Vec<String>, String> {
     let image = read(root, ".github/workflows/ci-linux-image.yml")?;
     let sentinel = read(root, HERDR_SENTINEL_PATH)?;
     let dependabot = read(root, DEPENDABOT_AUTOMERGE_PATH)?;
+    let docs = read(root, docs::PATH)?;
     let mut found = findings(&release, &candidate, &ci, &image);
     found.extend(herdr_sentinel_findings(&sentinel));
     found.extend(dependabot_automerge_findings(&dependabot));
+    found.extend(docs::findings(&docs));
     found.extend(image_repository_findings(root)?);
     found.extend(scheduled_workflow_findings(root)?);
     found.extend(super::release_targets::policy_findings(root)?);

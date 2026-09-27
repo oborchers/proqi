@@ -436,6 +436,9 @@ fn inside_code_fence(prefix: &str) -> bool {
 }
 
 #[cfg(test)]
+#[path = "invocation/builtins_tests.rs"]
+mod builtins_tests;
+#[cfg(test)]
 #[path = "invocation/discovery_tests.rs"]
 mod discovery_tests;
 #[cfg(test)]

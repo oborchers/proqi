@@ -25,6 +25,23 @@ const REPLACEMENT_OPERATION_ENV: &str = "PROQI_UPDATE_REPLACEMENT_OPERATION";
 const REPLACEMENT_INSTANCE_ENV: &str = "PROQI_UPDATE_REPLACEMENT_INSTANCE";
 const REPLACEMENT_VERSION_ENV: &str = "PROQI_UPDATE_REPLACEMENT_VERSION";
 const REPLACEMENT_STORAGE_PROTOCOL_ENV: &str = "PROQI_UPDATE_REPLACEMENT_STORAGE_PROTOCOL";
+const INPUT_RECOVERY_SESSION_ENV: &str = "PROQI_INPUT_RECOVERY_SESSION";
+const INPUT_RECOVERY_LINEAGE_ENV: &str = "PROQI_INPUT_RECOVERY_LINEAGE";
+const INPUT_RECOVERY_ATTEMPT_ENV: &str = "PROQI_INPUT_RECOVERY_ATTEMPT";
+const INPUT_RECOVERY_INSTANCE_ENV: &str = "PROQI_INPUT_RECOVERY_INSTANCE";
+const INPUT_RECOVERY_PID_ENV: &str = "PROQI_INPUT_RECOVERY_PID";
+
+const REPLACEMENT_ENVIRONMENT: [&str; 9] = [
+    REPLACEMENT_OPERATION_ENV,
+    REPLACEMENT_INSTANCE_ENV,
+    REPLACEMENT_VERSION_ENV,
+    REPLACEMENT_STORAGE_PROTOCOL_ENV,
+    INPUT_RECOVERY_SESSION_ENV,
+    INPUT_RECOVERY_LINEAGE_ENV,
+    INPUT_RECOVERY_ATTEMPT_ENV,
+    INPUT_RECOVERY_INSTANCE_ENV,
+    INPUT_RECOVERY_PID_ENV,
+];
 
 fn replacement_context() -> Option<crate::ports::runtime::UpdateReplacementContext> {
     let operation_id = std::env::var(REPLACEMENT_OPERATION_ENV).ok()?;
@@ -48,6 +65,41 @@ pub(crate) fn replacement_startup_context() -> (
     let follows_schema_change = context.is_some()
         && previous.is_some_and(|value| value < crate::ports::store::STORAGE_PROTOCOL_VERSION);
     (context, follows_schema_change)
+}
+
+pub(crate) fn input_recovery_startup_context() -> Result<
+    Option<crate::adapters::runtime::input_recovery::RecoveryExecProof>,
+    crate::adapters::runtime::input_recovery::RecoveryError,
+> {
+    use crate::adapters::runtime::input_recovery::{RecoveryError, RecoveryExecProof};
+
+    let values = [
+        std::env::var(INPUT_RECOVERY_SESSION_ENV),
+        std::env::var(INPUT_RECOVERY_LINEAGE_ENV),
+        std::env::var(INPUT_RECOVERY_ATTEMPT_ENV),
+        std::env::var(INPUT_RECOVERY_INSTANCE_ENV),
+        std::env::var(INPUT_RECOVERY_PID_ENV),
+    ];
+    if values.iter().all(Result::is_err) {
+        return Ok(None);
+    }
+    let [session, lineage, attempt, instance, pid] =
+        values.map(|value| value.map_err(|_| RecoveryError::MalformedProof));
+    Ok(Some(RecoveryExecProof {
+        session_id: session?
+            .parse()
+            .map_err(|_| RecoveryError::MalformedProof)?,
+        lineage_id: lineage?
+            .parse()
+            .map_err(|_| RecoveryError::MalformedProof)?,
+        attempt_id: attempt?
+            .parse()
+            .map_err(|_| RecoveryError::MalformedProof)?,
+        previous_instance_id: instance?
+            .parse()
+            .map_err(|_| RecoveryError::MalformedProof)?,
+        pid: pid?.parse().map_err(|_| RecoveryError::MalformedProof)?,
+    }))
 }
 
 /// Operating-system process runner with bounded output and a hard deadline.
@@ -105,10 +157,78 @@ impl crate::ports::update::ProcessReplacer for SystemProcessReplacer {
                 REPLACEMENT_STORAGE_PROTOCOL_ENV,
                 crate::ports::store::STORAGE_PROTOCOL_VERSION.to_string(),
             );
+        for name in [
+            INPUT_RECOVERY_SESSION_ENV,
+            INPUT_RECOVERY_LINEAGE_ENV,
+            INPUT_RECOVERY_ATTEMPT_ENV,
+            INPUT_RECOVERY_INSTANCE_ENV,
+            INPUT_RECOVERY_PID_ENV,
+        ] {
+            command.env_remove(name);
+        }
         let error = command.exec();
         Err(crate::ports::update::UpdateError::Coordination(format!(
             "process replacement failed: {error}"
         )))
+    }
+}
+
+impl SystemProcessReplacer {
+    pub(crate) fn replace_after_input_stall(
+        executable: &std::path::Path,
+        expected_executable: &crate::adapters::runtime::input_recovery::ExecutableIdentity,
+        working_directory: &std::path::Path,
+        state_root: Option<&std::path::Path>,
+        proof: &crate::adapters::runtime::input_recovery::RecoveryExecProof,
+    ) -> Result<
+        (),
+        (
+            crate::adapters::runtime::input_recovery::RecoveryFailure,
+            String,
+        ),
+    > {
+        use crate::adapters::runtime::input_recovery::RecoveryFailure;
+        use std::os::unix::process::CommandExt as _;
+
+        let current =
+            crate::adapters::runtime::input_recovery::ExecutableIdentity::read(executable)
+                .map_err(|_| {
+                    (
+                        RecoveryFailure::ExecutableUnavailable,
+                        "verified executable became unavailable before recovery".to_owned(),
+                    )
+                })?;
+        if &current != expected_executable {
+            return Err((
+                RecoveryFailure::ExecutableChanged,
+                "verified executable identity changed before recovery".to_owned(),
+            ));
+        }
+        let mut command = Command::new(executable);
+        command
+            .args(resume_args(proof.session_id, state_root))
+            .current_dir(working_directory)
+            .env(INPUT_RECOVERY_SESSION_ENV, proof.session_id.to_string())
+            .env(INPUT_RECOVERY_LINEAGE_ENV, proof.lineage_id.to_string())
+            .env(INPUT_RECOVERY_ATTEMPT_ENV, proof.attempt_id.to_string())
+            .env(
+                INPUT_RECOVERY_INSTANCE_ENV,
+                proof.previous_instance_id.to_string(),
+            )
+            .env(INPUT_RECOVERY_PID_ENV, proof.pid.to_string());
+        for name in [
+            REPLACEMENT_OPERATION_ENV,
+            REPLACEMENT_INSTANCE_ENV,
+            REPLACEMENT_VERSION_ENV,
+            REPLACEMENT_STORAGE_PROTOCOL_ENV,
+        ] {
+            command.env_remove(name);
+        }
+        let error = command.exec();
+        Err((
+            RecoveryFailure::ExecFailed,
+            format!("process replacement failed: {error}"),
+        ))
     }
 }
 
@@ -142,6 +262,9 @@ impl ProcessRunner for SystemProcessRunner {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        for name in REPLACEMENT_ENVIRONMENT {
+            command.env_remove(name);
+        }
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt as _;

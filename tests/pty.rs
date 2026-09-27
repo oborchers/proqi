@@ -12,6 +12,30 @@ mod support;
 mod active_control;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/compose_api_focus.rs"]
+mod compose_api_focus;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/active_board_failure.rs"]
+mod active_board_failure;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/active_transfer.rs"]
+mod active_transfer;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/active_transfer_failures.rs"]
+mod active_transfer_failures;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/active_transfer_names.rs"]
+mod active_transfer_names;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/inactive_tui_transfer.rs"]
+mod inactive_tui_transfer;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/bottom_boundary.rs"]
 mod bottom_boundary;
 
@@ -40,12 +64,32 @@ mod editor_persistence;
 mod fairness;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/footer_visibility.rs"]
+mod footer_visibility;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/invocation.rs"]
 mod invocation;
 
 #[cfg(target_os = "macos")]
 #[path = "pty/input_pause.rs"]
 mod input_pause;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/input_stall_continuity.rs"]
+mod input_stall_continuity;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/input_stall_failures.rs"]
+mod input_stall_failures;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/input_stall_modes.rs"]
+mod input_stall_modes;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/hover.rs"]
+mod hover;
 
 #[cfg(target_os = "macos")]
 #[path = "pty/key_inspector.rs"]
@@ -74,6 +118,9 @@ mod recovery;
 #[cfg(target_os = "macos")]
 #[path = "pty/reorder.rs"]
 mod reorder;
+#[cfg(target_os = "macos")]
+#[path = "pty/selected_actions.rs"]
+mod selected_actions;
 
 #[cfg(target_os = "macos")]
 #[path = "pty/sentence_deletion.rs"]
@@ -102,6 +149,14 @@ mod top_boundary;
 #[cfg(target_os = "macos")]
 #[path = "pty/terminal_safe_navigation.rs"]
 mod terminal_safe_navigation;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/thought_export.rs"]
+mod thought_export;
+
+#[cfg(target_os = "macos")]
+#[path = "pty/thought_names.rs"]
+mod thought_names;
 
 #[cfg(target_os = "macos")]
 #[path = "pty/transformations.rs"]

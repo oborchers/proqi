@@ -70,7 +70,7 @@ fn assert_manual_scroll_edit_entry(through_palette: bool) {
         super::navigation::durable_thought(&mut fixture, content);
     }
     let target = fixture.app.state.board.live_thoughts()[0].id;
-    fixture.app.state.focused_thought = Some(target);
+    fixture.app.state.focused_item = Some(target.into());
     fixture
         .app
         .state
@@ -131,7 +131,7 @@ fn deleting_the_manual_anchor_owner_reconciles_to_the_adjacent_focus() {
         let live = fixture.app.state.board.live_thoughts();
         (live[1].id, live[2].id, live[3].id)
     };
-    fixture.app.state.focused_thought = Some(owner);
+    fixture.app.state.focused_item = Some(owner.into());
     for thought_id in [owner, adjacent, tail] {
         fixture
             .app
@@ -395,13 +395,13 @@ fn assert_board_combination(
             .expect("long thought")
             .presentation = presentation;
     }
-    fixture.app.state.focused_thought = fixture
+    fixture.app.state.focused_item = fixture
         .app
         .state
         .board
         .live_thoughts()
         .first()
-        .map(|thought| thought.id);
+        .map(|thought| thought.id.into());
     scroll_combination_down(&mut fixture, presentations, area);
     scroll_combination_up(&mut fixture, presentations, area);
     assert_eq!(

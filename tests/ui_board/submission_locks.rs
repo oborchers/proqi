@@ -18,13 +18,15 @@ fn every_board_mutation_stays_locked_until_submission_is_journaled() {
         crate::key_input(UiKey::PrimaryCharacter('J')),
         crate::key_input(UiKey::Undo),
     ] {
-        assert!(fixture.effects(input).is_empty());
+        assert!(fixture.effects(input.clone()).is_empty());
         assert_eq!(fixture.app.state.board.live_thoughts().len(), 1);
         assert!(
             fixture
                 .app
                 .status_text()
-                .is_some_and(|status| { status.contains("submission in progress") })
+                .is_some_and(|status| { status.contains("submission in progress") }),
+            "{input:?}: {:?}",
+            fixture.app.status_text()
         );
     }
 

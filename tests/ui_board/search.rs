@@ -7,7 +7,11 @@ use proqi::ui::FastNavigation;
 fn thought_search_filters_content_and_focuses_the_selected_match() {
     let mut fixture = Fixture::new();
     fixture.paste("first searchable prompt");
-    let first = fixture.app.state.focused_thought.expect("first thought");
+    let first = fixture
+        .app
+        .state
+        .focused_thought_id()
+        .expect("first thought");
     fixture.input(crate::key_input(UiKey::Escape));
     fixture.paste("unrelated second prompt");
     fixture.input(crate::key_input(UiKey::Escape));
@@ -24,7 +28,7 @@ fn thought_search_filters_content_and_focuses_the_selected_match() {
     assert_eq!(results, ["first searchable prompt"]);
 
     fixture.input(crate::key_input(UiKey::Enter));
-    assert_eq!(fixture.app.state.focused_thought, Some(first));
+    assert_eq!(fixture.app.state.focused_thought_id(), Some(first));
     assert!(fixture.app.search_view().is_none());
 }
 

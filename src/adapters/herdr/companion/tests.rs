@@ -1,0 +1,389 @@
+//! Herdr CLI translation for the companion host and its plugin state records.
+
+use std::{cell::RefCell, collections::VecDeque, ffi::OsString, path::PathBuf, rc::Rc};
+
+use serde_json::{Value, json};
+
+use crate::ports::{
+    companion::{CompanionError, CompanionHost, PaneProcess, ProqiPresence},
+    environment::{ProcessError, ProcessOutput, ProcessRequest, ProcessRunner},
+};
+
+use super::{HerdrCompanionHost, HerdrPluginEnvironment};
+
+mod focus;
+mod probes;
+mod state;
+
+pub(super) const SESSION: &str = "ses_06g30t7dv5qv55n1ppn3clis3k";
+
+#[derive(Clone, Default)]
+pub(super) struct ScriptedRunner {
+    responses: Rc<RefCell<VecDeque<ProcessOutput>>>,
+    requests: Rc<RefCell<Vec<Vec<String>>>>,
+}
+
+impl ScriptedRunner {
+    pub(super) fn with(responses: Vec<ProcessOutput>) -> Self {
+        Self {
+            responses: Rc::new(RefCell::new(responses.into())),
+            requests: Rc::default(),
+        }
+    }
+
+    pub(super) fn requests(&self) -> Vec<Vec<String>> {
+        self.requests.borrow().clone()
+    }
+}
+
+impl ProcessRunner for ScriptedRunner {
+    fn run(&mut self, request: ProcessRequest) -> Result<ProcessOutput, ProcessError> {
+        assert_eq!(request.program, OsString::from("/bin/herdr"));
+        assert!(request.stdin.is_none());
+        self.requests.borrow_mut().push(
+            request
+                .args
+                .iter()
+                .map(|argument| argument.to_string_lossy().into_owned())
+                .collect(),
+        );
+        self.responses
+            .borrow_mut()
+            .pop_front()
+            .ok_or_else(|| ProcessError::Io("unexpected Herdr call".to_owned()))
+    }
+}
+
+pub(super) fn ok(result: &Value) -> ProcessOutput {
+    ProcessOutput {
+        exit_code: Some(0),
+        stdout: serde_json::to_vec(&json!({ "id": "cli", "result": result })).expect("json"),
+        stderr: Vec::new(),
+    }
+}
+
+pub(super) fn rejected(code: &str) -> ProcessOutput {
+    ProcessOutput {
+        exit_code: Some(1),
+        stdout: Vec::new(),
+        stderr: serde_json::to_vec(&json!({ "error": { "code": code, "message": code } }))
+            .expect("json"),
+    }
+}
+
+pub(super) fn plugin_context() -> Value {
+    json!({
+        "workspace_id": "w1", "workspace_label": "demo", "workspace_cwd": "/workspace",
+        "tab_id": "w1:t1", "tab_label": "1", "focused_pane_id": "w1:p1",
+        "focused_pane_cwd": "/work", "invocation_source": "keybinding"
+    })
+}
+
+pub(super) fn host(runner: &ScriptedRunner, context: &Value) -> HerdrCompanionHost<ScriptedRunner> {
+    HerdrCompanionHost::new(
+        HerdrPluginEnvironment::new(
+            OsString::from("/bin/herdr"),
+            "proqi".to_owned(),
+            context.to_string(),
+            PathBuf::from("/state"),
+        ),
+        runner.clone(),
+    )
+}
+
+#[test]
+fn context_reads_the_plugin_invocation_and_falls_back_to_the_workspace_directory() {
+    let runner = ScriptedRunner::default();
+    let context = host(&runner, &plugin_context()).context().expect("context");
+    assert_eq!(context.tab_label.as_deref(), Some("1"));
+    assert_eq!(context.focused_pane_cwd, PathBuf::from("/work"));
+    let mut without_cwd = plugin_context();
+    without_cwd["focused_pane_cwd"] = Value::Null;
+    let context = host(&runner, &without_cwd).context().expect("fallback");
+    assert_eq!(context.focused_pane_cwd, PathBuf::from("/workspace"));
+    let malformed = host(&runner, &json!({ "tab_id": "w1:t1" })).context();
+    assert!(matches!(malformed, Err(CompanionError::Unavailable(_))));
+}
+
+#[test]
+fn the_session_root_is_the_worktree_checkout_else_the_repository_root() {
+    let runner = ScriptedRunner::default();
+    let repository = tempfile::tempdir().expect("repository");
+    std::fs::create_dir_all(repository.path().join(".git")).expect("git marker");
+    let subdirectory = repository.path().join("sub dir");
+    std::fs::create_dir_all(&subdirectory).expect("subdirectory");
+
+    let mut in_repository = plugin_context();
+    in_repository["focused_pane_cwd"] = json!(subdirectory);
+    in_repository["workspace_cwd"] = json!(subdirectory);
+    let context = host(&runner, &in_repository).context().expect("context");
+    assert_eq!(context.session_root, Some(repository.path().to_path_buf()));
+
+    let mut worktree = in_repository.clone();
+    worktree["worktree"] = json!({ "checkout_path": "/checkouts/feature" });
+    let context = host(&runner, &worktree).context().expect("context");
+    assert_eq!(
+        context.session_root,
+        Some(PathBuf::from("/checkouts/feature"))
+    );
+
+    let outside = tempfile::tempdir().expect("outside");
+    let mut plain = plugin_context();
+    plain["focused_pane_cwd"] = json!(outside.path());
+    let context = host(&runner, &plain).context().expect("context");
+    assert_eq!(
+        context.session_root,
+        crate::adapters::filesystem::repository_root(outside.path()),
+        "Herdr's workspace_cwd follows the focused pane and is never the root"
+    );
+}
+
+#[test]
+fn tab_panes_keep_only_the_invoking_tab_and_detect_the_proqi_lease() {
+    let runner = ScriptedRunner::with(vec![ok(&json!({ "type": "pane_list", "panes": [
+        { "pane_id": "w1:p1", "tab_id": "w1:t1", "focused": true, "agent": "claude", "cwd": "/work" },
+        { "pane_id": "w1:p3", "tab_id": "w1:t1", "display_agent": "proqi", "label": "Proqi", "future": 1 },
+        { "pane_id": "w1:p4", "tab_id": "w1:t2", "display_agent": "proqi" }
+    ]}))]);
+    let panes = host(&runner, &plugin_context())
+        .tab_panes("w1:t1")
+        .expect("panes");
+    assert_eq!(panes.len(), 2);
+    assert!(panes[0].agent && panes[0].focused && panes[0].presence == ProqiPresence::Absent);
+    assert!(panes[1].presence == ProqiPresence::Present && !panes[1].agent);
+    assert_eq!(panes[1].label.as_deref(), Some("Proqi"));
+    assert_eq!(runner.requests(), vec![vec!["pane", "list"]]);
+}
+
+#[test]
+fn tab_agent_names_keep_named_agents_of_the_invoking_tab() {
+    let runner = ScriptedRunner::with(vec![
+        ok(&json!({ "type": "agent_list", "agents": [
+            { "pane_id": "w1:p1", "tab_id": "w1:t1", "agent": "claude", "name": "api-claude", "future": 1 },
+            { "pane_id": "w1:p2", "tab_id": "w1:t1", "agent": "codex", "name": null },
+            { "pane_id": "w1:p5", "tab_id": "w1:t1", "agent": "pi" },
+            { "pane_id": "w1:p7", "tab_id": "w1:t2", "agent": "codex", "name": "other-tab" }
+        ]})),
+        rejected("server_busy"),
+    ]);
+    let mut host = host(&runner, &plugin_context());
+    assert_eq!(
+        host.tab_agent_names("w1:t1").expect("names"),
+        vec!["api-claude".to_owned()]
+    );
+    assert_eq!(runner.requests(), vec![vec!["agent", "list"]]);
+    assert!(matches!(
+        host.tab_agent_names("w1:t1"),
+        Err(CompanionError::Host(_))
+    ));
+}
+
+#[test]
+fn a_proqi_or_launcher_without_a_display_lease_is_recognized_by_its_process() {
+    let runner = ScriptedRunner::with(vec![
+        ok(&json!({ "type": "pane_list", "panes": [
+            { "pane_id": "w1:p1", "tab_id": "w1:t1", "agent": "codex" },
+            { "pane_id": "w1:p4", "tab_id": "w1:t1" },
+            { "pane_id": "w1:p5", "tab_id": "w1:t1" },
+            { "pane_id": "w1:p6", "tab_id": "w1:t1" },
+            { "pane_id": "w1:p7", "tab_id": "w1:t1" }
+        ]})),
+        info(9, 11, &[(11, &["proqi", "--resume", SESSION])]),
+        info(5, 5, &[(5, &["-zsh"])]),
+        rejected("pane_not_found"),
+        info(
+            7,
+            7,
+            &[(7, &["sh", "/plugins/proqi/herdr-plugin/proqi.sh", "board"])],
+        ),
+    ]);
+    let panes = host(&runner, &plugin_context())
+        .tab_panes("w1:t1")
+        .expect("panes");
+    let present: Vec<_> = panes
+        .iter()
+        .map(|pane| pane.presence == ProqiPresence::Present)
+        .collect();
+    assert_eq!(present, vec![false, true, false, false, true]);
+    let queried: Vec<_> = runner
+        .requests()
+        .into_iter()
+        .skip(1)
+        .map(|request| request[3].clone())
+        .collect();
+    assert_eq!(
+        queried,
+        vec!["w1:p4", "w1:p5", "w1:p6", "w1:p7"],
+        "agents are never probed"
+    );
+}
+
+pub(super) fn info(shell: u32, group: u32, processes: &[(u32, &[&str])]) -> ProcessOutput {
+    let processes: Vec<_> = processes
+        .iter()
+        .map(|(pid, argv)| json!({ "pid": pid, "argv": argv }))
+        .collect();
+    ok(&json!({ "process_info": {
+        "shell_pid": shell, "foreground_process_group_id": group,
+        "foreground_processes": processes
+    }}))
+}
+
+fn assert_classified(cases: Vec<(ProcessOutput, Option<PaneProcess>)>) {
+    for (response, expected) in cases {
+        let runner = ScriptedRunner::with(vec![response]);
+        let process = host(&runner, &plugin_context())
+            .process("w1:p3")
+            .expect("process");
+        assert_eq!(process, expected);
+        assert_eq!(
+            runner.requests(),
+            vec![vec!["pane", "process-info", "--pane", "w1:p3"]]
+        );
+    }
+}
+
+#[test]
+fn process_classification_recognizes_proqi_and_both_launcher_phases() {
+    let session = SESSION.parse().expect("session");
+    let launcher = "exec sh \"/plugins/proqi/herdr-plugin/proqi.sh\" board";
+    assert_classified(vec![
+        (
+            info(
+                7,
+                7,
+                &[(7, &["/home/u/.local/bin/proqi", "--resume", SESSION])],
+            ),
+            Some(PaneProcess::Proqi {
+                session_id: Some(session),
+            }),
+        ),
+        (
+            info(6, 9, &[(9, &["proqi", "-r", SESSION])]),
+            Some(PaneProcess::Proqi {
+                session_id: Some(session),
+            }),
+        ),
+        (
+            // The in-app update restarts a session in place with this argv.
+            info(
+                7,
+                7,
+                &[(7, &["/opt/proqi", "--state-dir", "/s", "-r", SESSION])],
+            ),
+            Some(PaneProcess::Proqi {
+                session_id: Some(session),
+            }),
+        ),
+        (
+            info(7, 7, &[(7, &["proqi", &format!("--resume={SESSION}")])]),
+            Some(PaneProcess::Proqi {
+                session_id: Some(session),
+            }),
+        ),
+        (
+            info(7, 7, &[(7, &["proqi", "--resume", "session-name"])]),
+            Some(PaneProcess::Proqi { session_id: None }),
+        ),
+        (
+            info(
+                7,
+                7,
+                &[(7, &["sh", "/plugins/proqi/herdr-plugin/proqi.sh", "board"])],
+            ),
+            Some(PaneProcess::Launcher),
+        ),
+        (
+            info(7, 7, &[(7, &["sh", "-c", launcher])]),
+            Some(PaneProcess::Launcher),
+        ),
+    ]);
+}
+
+#[test]
+fn process_classification_separates_idle_shells_from_other_work() {
+    assert_classified(vec![
+        (
+            info(5, 8, &[(8, &["vim", "herdr-plugin/proqi.sh"])]),
+            Some(PaneProcess::Other),
+        ),
+        (info(5, 5, &[(5, &["-zsh"])]), Some(PaneProcess::IdleShell)),
+        (
+            info(5, 5, &[(5, &["/bin/bash"])]),
+            Some(PaneProcess::IdleShell),
+        ),
+        (
+            info(5, 8, &[(8, &["vim", "notes"])]),
+            Some(PaneProcess::Other),
+        ),
+        (
+            info(5, 5, &[(5, &["zsh", "-c", "sleep 9"])]),
+            Some(PaneProcess::Other),
+        ),
+        (info(5, 5, &[(5, &["python3"])]), Some(PaneProcess::Other)),
+        (rejected("pane_not_found"), None),
+    ]);
+}
+
+#[test]
+fn open_beside_uses_the_manifest_entrypoint_without_a_shell_command() {
+    let runner = ScriptedRunner::with(vec![ok(&json!({ "type": "plugin_pane_opened",
+        "plugin_pane": { "entrypoint": "board", "plugin_id": "proqi",
+            "pane": { "pane_id": "w1:p7", "tab_id": "w1:t1" } } }))]);
+    let pane = host(&runner, &plugin_context())
+        .open_beside(
+            "w1:p1",
+            std::path::Path::new("/work dir/ü"),
+            SESSION.parse().expect("id"),
+        )
+        .expect("open");
+    assert_eq!(pane, "w1:p7");
+    let session = format!("PROQI_HERDR_SESSION={SESSION}");
+    assert_eq!(
+        runner.requests(),
+        vec![vec![
+            "plugin",
+            "pane",
+            "open",
+            "--plugin",
+            "proqi",
+            "--entrypoint",
+            "board",
+            "--placement",
+            "split",
+            "--target-pane",
+            "w1:p1",
+            "--direction",
+            "right",
+            "--cwd",
+            "/work dir/ü",
+            "--env",
+            &session,
+            "--focus",
+        ]]
+    );
+}
+
+#[test]
+fn close_tolerates_an_already_closed_pane_and_reports_other_rejections() {
+    let runner = ScriptedRunner::with(vec![rejected("pane_not_found"), rejected("busy")]);
+    let mut host = host(&runner, &plugin_context());
+    host.close("w1:p3").expect("already closed");
+    assert!(matches!(host.close("w1:p3"), Err(CompanionError::Host(_))));
+}
+
+#[test]
+fn notification_is_best_effort_and_carries_only_the_message() {
+    let runner = ScriptedRunner::with(vec![rejected("disabled")]);
+    host(&runner, &plugin_context()).notify("Proqi is busy");
+    assert_eq!(
+        runner.requests(),
+        vec![vec![
+            "notification",
+            "show",
+            "Proqi",
+            "--body",
+            "Proqi is busy"
+        ]]
+    );
+}

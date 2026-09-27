@@ -272,6 +272,19 @@ impl BoardApp {
     }
 
     pub(super) fn close_overlay(&mut self) {
+        // Close only the visible owner. The replacement confirmation closes like
+        // Escape, back to the destination field.
+        match self.active_input_route().1 {
+            super::input_dispatch::ActiveInputOwner::ExportPath => {
+                self.cancel_export();
+                return;
+            }
+            super::input_dispatch::ActiveInputOwner::ExportReplace => {
+                self.return_to_export_path();
+                return;
+            }
+            _ => {}
+        }
         self.cancel_screenshot_takeover();
         self.palette = None;
         self.global_delivery = None;
@@ -319,22 +332,34 @@ impl BoardApp {
         if let Some(undo) = palette_query_history(Some(command)) {
             return self.update_palette_query(|query| move_query_history(query, undo));
         }
-        let selection_handoff = self
-            .palette
-            .as_mut()
-            .and_then(|palette| palette.context.take_selection_handoff());
-        let merge_handoff = self
-            .palette
-            .as_mut()
-            .and_then(|palette| palette.context.take_merge_handoff());
-        self.palette = None;
-        self.execute_command(
+        let retain_palette = command_requests_quit(Some(command)) && self.screenshot_retry_ready();
+        let (selection_handoff, merge_handoff) = if retain_palette {
+            (None, None)
+        } else {
+            let selection = self
+                .palette
+                .as_mut()
+                .and_then(|palette| palette.context.take_selection_handoff());
+            let merge = self
+                .palette
+                .as_mut()
+                .and_then(|palette| palette.context.take_merge_handoff());
+            (selection, merge)
+        };
+        if !retain_palette {
+            self.palette = None;
+        }
+        let effects = self.execute_command(
             command,
             selection_handoff,
             merge_handoff.as_deref(),
             ids,
             clock,
-        )
+        );
+        if self.quit {
+            self.palette = None;
+        }
+        effects
     }
 
     pub(super) fn execute_palette_visible_index(
@@ -392,6 +417,7 @@ impl BoardApp {
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        use crate::domain::ExportDisposition;
         use crate::ui::shortcut_registry::PaletteBoardCommand as BoardCommand;
         match command {
             BoardCommand::New => {
@@ -399,14 +425,21 @@ impl BoardApp {
             }
             BoardCommand::InsertAbove => self.insert_relative_to_focus(false, ids, clock),
             BoardCommand::InsertBelow => self.insert_relative_to_focus(true, ids, clock),
+            BoardCommand::InsertSeparator => self.insert_separator(ids, clock),
             BoardCommand::RenameSession => {
                 self.begin_session_rename();
                 Vec::new()
             }
+            BoardCommand::RenameThought => self.begin_thought_rename(ids, clock),
             BoardCommand::CopySessionId => self.copy_session_id(ids),
             BoardCommand::CopyResume => self.copy_resume_command(ids),
             BoardCommand::SendSession => self.begin_session_transfer(false, ids, clock),
             BoardCommand::SendSessionRemove => self.begin_session_transfer(true, ids, clock),
+            BoardCommand::Export => self.begin_export(ExportDisposition::Keep, ids, clock),
+            BoardCommand::ExportRemove => self.begin_export(ExportDisposition::Remove, ids, clock),
+            BoardCommand::ExportReplace => {
+                self.begin_export(ExportDisposition::ReplaceWithReference, ids, clock)
+            }
             BoardCommand::Delete => self.delete(ids, clock),
             BoardCommand::Copy => self.copy_active(ids),
             BoardCommand::Cut => self.cut_active(ids, clock),
@@ -428,9 +461,18 @@ impl BoardApp {
                 self.help = true;
                 Vec::new()
             }
-            BoardCommand::Quit => self.request_quit_after_edit_flush(ids, clock),
+            BoardCommand::Quit => self.request_global_quit(ids, clock),
         }
     }
+}
+
+fn command_requests_quit(command: Option<CommandExecution>) -> bool {
+    matches!(
+        command,
+        Some(CommandExecution::Board(
+            crate::ui::shortcut_registry::PaletteBoardCommand::Quit
+        ))
+    )
 }
 
 fn palette_query_history(command: Option<CommandExecution>) -> Option<bool> {

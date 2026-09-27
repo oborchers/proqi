@@ -6,7 +6,7 @@ use crate::{
     domain::RequestId,
     ports::{
         control::{ControlMetadataReceipt, ControlMutation, ControlRejectionCode, ControlResult},
-        store::StoreError,
+        store::{BrowserCommitReceipt, StoreError},
     },
     ui::BoardApp,
 };
@@ -84,13 +84,13 @@ fn queue_rename(
 pub(in crate::adapters::terminal::runner) fn complete_noop_rename(
     pending: &mut PendingWork,
     request_id: RequestId,
-    result: Result<(), StoreError>,
+    result: Result<BrowserCommitReceipt, StoreError>,
 ) {
     let Some(envelope) = pending.metadata_controls.remove(&request_id) else {
         return;
     };
     let response = match result {
-        Ok(()) => renamed(&envelope),
+        Ok(receipt) => renamed(&envelope, &receipt),
         Err(error) => ControlResult::Rejected {
             code: lookup_error_code(&error).to_owned(),
             message: error.to_string(),
@@ -110,7 +110,7 @@ const fn lookup_error_code(error: &StoreError) -> &'static str {
 pub(in crate::adapters::terminal::runner) fn complete(
     pending: &mut PendingWork,
     request_id: Option<RequestId>,
-    result: &Result<(), StoreError>,
+    result: &Result<BrowserCommitReceipt, StoreError>,
 ) {
     let Some(request_id) = request_id else {
         return;
@@ -119,7 +119,7 @@ pub(in crate::adapters::terminal::runner) fn complete(
         return;
     };
     let response = match result {
-        Ok(()) => renamed(&envelope),
+        Ok(receipt) => renamed(&envelope, receipt),
         Err(error) => ControlResult::Rejected {
             code: lookup_error_code(error).to_owned(),
             message: error.to_string(),
@@ -128,12 +128,15 @@ pub(in crate::adapters::terminal::runner) fn complete(
     envelope.respond(response);
 }
 
-fn renamed(envelope: &ControlEnvelope) -> ControlResult {
+fn renamed(envelope: &ControlEnvelope, receipt: &BrowserCommitReceipt) -> ControlResult {
     let name = match &envelope.request.mutation {
         ControlMutation::RenameSession { name, .. } => name.clone(),
         _ => None,
     };
-    ControlResult::Metadata(ControlMetadataReceipt::SessionRenamed { name })
+    ControlResult::Metadata(ControlMetadataReceipt::SessionRenamed {
+        name,
+        idempotent_replay: receipt.idempotent_replay,
+    })
 }
 
 pub(in crate::adapters::terminal::runner) fn complete_sync(pending: &mut PendingWork) {
@@ -218,5 +221,50 @@ mod tests {
             ControlResult::Rejected { code, .. }
                 if code == ControlRejectionCode::IdempotencyConflict.as_str()
         ));
+    }
+
+    #[test]
+    fn an_overlapping_duplicate_rename_reports_the_store_replay() {
+        let mut ids = FakeIdGenerator::new(1_725_208_200_000);
+        let operation_id = ids.operation_id();
+        let session_id = ids.session_id();
+        let mut pending = PendingWork::default();
+        let mut responses = Vec::new();
+        for replay in [false, true] {
+            let request_id = ids.request_id();
+            let (envelope, response) = pending_for_test(ControlRequest {
+                protocol: CONTROL_PROTOCOL_VERSION,
+                request_id,
+                session_id,
+                mutation: ControlMutation::RenameSession {
+                    operation_id,
+                    name: Some("durable".to_owned()),
+                },
+            });
+            pending.metadata_controls.insert(request_id, envelope);
+            let receipt = BrowserCommitReceipt {
+                operation_id,
+                cursor: 1,
+                idempotent_replay: replay,
+            };
+            if replay {
+                complete_noop_rename(&mut pending, request_id, Ok(receipt));
+            } else {
+                complete(&mut pending, Some(request_id), &Ok(receipt));
+            }
+            responses.push(response.recv().expect("owner response").response.result);
+        }
+
+        let flags = responses
+            .iter()
+            .map(|result| match result {
+                ControlResult::Metadata(ControlMetadataReceipt::SessionRenamed {
+                    idempotent_replay,
+                    ..
+                }) => *idempotent_replay,
+                other => panic!("unexpected owner result {other:?}"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(flags, [false, true]);
     }
 }

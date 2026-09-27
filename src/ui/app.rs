@@ -9,10 +9,12 @@ mod attachments;
 mod boundary_insertion;
 mod clipboard;
 mod commands;
+mod continuity;
 mod control;
 mod creation;
 mod duplicate;
 mod editing;
+mod export;
 mod folds;
 pub(in crate::ui) mod global_delivery;
 mod help;
@@ -25,6 +27,9 @@ mod pending_types;
 mod pointer;
 mod pointer_activation;
 mod pointer_editor;
+mod pointer_hover;
+mod pointer_separator;
+mod pointer_target;
 mod presentation;
 pub(in crate::ui) mod query;
 mod recovery;
@@ -35,6 +40,7 @@ mod search;
 mod selection;
 mod session;
 mod state_bridge;
+mod thought_name;
 mod transfer;
 mod transformations;
 mod update;
@@ -46,23 +52,24 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{
-    application::{AppState, Effect, InteractionMode},
-    domain::{OperationId, OperationSequence, RequestId, SubmissionId, ThoughtId},
-    ports::{
-        agent::AgentTarget,
-        editor::{CursorMovement, EditCommand, Editor, EditorFactory, TextViewport},
-        environment::{Clock, IdGenerator},
-        invocation::InvocationCompletenessAggregate,
-    },
-};
-
 use super::{
     HitTarget, LayoutSnapshot, UiSettings,
     input::{PointerButton, PointerInput, PointerKind, RoutedInput as UiInput, UiKey},
     layout::scroll::{BoardViewport, ScrollGeometry},
 };
+use crate::{
+    application::{AppState, Effect, InteractionMode},
+    domain::{BoardItemId, OperationId, OperationSequence, RequestId, SubmissionId, ThoughtId},
+    ports::{
+        agent::AgentTarget,
+        editor::{CursorMovement, Editor, EditorFactory, TextViewport},
+        environment::{Clock, IdGenerator},
+        invocation::InvocationCompletenessAggregate,
+    },
+};
 
+use super::layout::FooterChromeVisibility;
+pub(in crate::ui) use export::ExportView;
 use input_dispatch::ActiveInputOwner as Owner;
 pub(in crate::ui) use invocation::InvocationChoiceView;
 pub(in crate::ui) use palette::CommandPaletteView;
@@ -125,9 +132,11 @@ pub struct BoardApp {
     editor_factory: Box<dyn EditorFactory>,
     compose_presentation: ComposePresentation,
     pending_edit: Option<editing::PendingEdit>,
+    pending_recovery_editor: Option<crate::ports::runtime::InputRecoveryEditorState>,
     edit_generation: u64,
     edit_owner_generation: u64,
     compose_generation: u64,
+    pending_first_control_focus: Option<control::FirstControlFocus>,
     /// Whether the user requested a clean exit.
     pub quit: bool,
     /// Whether contextual help is visible.
@@ -140,11 +149,12 @@ pub struct BoardApp {
     scroll_geometry: Option<ScrollGeometry>,
     layout: Option<LayoutSnapshot>,
     frame_presentation: Option<crate::ui::projection::FramePresentation>,
-    dragged_thought: Option<ThoughtId>,
+    dragged_item: Option<BoardItemId>,
     drag_target: Option<usize>,
     pointer_click: Option<pointer::PointerClick>,
     overlay_activation: Option<pointer_activation::OverlayActivation>,
     hovered: Option<HitTarget>,
+    pointer_position: Option<(u16, u16)>,
     insertion_focus: InsertionFocus,
     insertion_confirmation: InsertionConfirmation,
     edit_boundary: Option<CursorMovement>,
@@ -153,10 +163,13 @@ pub struct BoardApp {
     invocation_popup: Option<invocation::InvocationPopup>,
     search: Option<search::SearchState>,
     rename: Option<query::QueryEditor>,
+    thought_rename: Option<thought_name::ThoughtNameState>,
     session_rename_persistence: SessionRenamePersistence,
     transfer: Option<transfer::TransferState>,
     transfer_generation: u64,
+    export: export::ExportOwner,
     settings: UiSettings,
+    footer_chrome_visibility: crate::ui::layout::FooterChromeVisibility,
     selection: selection::BoardSelection,
     expanded_folds: BTreeSet<(ThoughtId, usize)>,
     pending_editor_clipboard: BTreeMap<RequestId, PendingEditorClipboard>,
@@ -164,6 +177,7 @@ pub struct BoardApp {
     pending_clipboard_reads: BTreeMap<RequestId, pending_types::PendingClipboardRead>,
     pending_recovery_exports: BTreeSet<RequestId>,
     recovery_exported_for: Option<OperationSequence>,
+    recovery_export_path: Option<PathBuf>,
     agent_targets: Vec<AgentTarget>,
     agent_refresh_in_flight: bool,
     global_delivery: Option<global_delivery::GlobalDeliveryState>,
@@ -172,7 +186,8 @@ pub struct BoardApp {
     deferred_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     preflight_submissions: BTreeMap<SubmissionId, DeferredSubmissionIntent>,
     pending_submissions: BTreeMap<SubmissionId, PendingSubmission>,
-    pending_transfer_removals: BTreeMap<OperationId, ThoughtId>,
+    pending_transfer_batches:
+        BTreeMap<OperationId, crate::ports::transfer::SessionTransferBatchRequest>,
     screenshot: screenshot::ScreenshotInbox,
     update_barrier: Option<update::UpdateBarrier>,
     update_restart: Option<crate::domain::StableVersion>,
@@ -195,7 +210,6 @@ impl BoardApp {
     pub fn new(state: AppState, editor_factory: impl EditorFactory + 'static) -> Self {
         Self::with_settings(state, UiSettings::default(), editor_factory)
     }
-
     /// Construct a board with validated user settings.
     #[must_use]
     pub fn with_settings(
@@ -205,7 +219,6 @@ impl BoardApp {
     ) -> Self {
         Self::with_settings_and_cwd(state, settings, PathBuf::new(), editor_factory)
     }
-
     /// Construct a board with validated settings and an explicit discovery cwd.
     #[must_use]
     pub fn with_settings_and_cwd(
@@ -214,7 +227,7 @@ impl BoardApp {
         invocation_cwd: PathBuf,
         editor_factory: impl EditorFactory + 'static,
     ) -> Self {
-        let insertion_focus = InsertionFocus::Inactive;
+        let footer_chrome_visibility = FooterChromeVisibility::from_hidden(settings.footer_hidden);
         let editor_factory: Box<dyn EditorFactory> = Box::new(editor_factory);
         let editor = if matches!(state.mode, InteractionMode::Compose) {
             Some((EditorOwner::Compose, editor_factory.create("")))
@@ -227,9 +240,11 @@ impl BoardApp {
             editor_factory,
             compose_presentation: ComposePresentation::Prompt,
             pending_edit: None,
+            pending_recovery_editor: None,
             edit_generation: 0,
             edit_owner_generation: 0,
             compose_generation: 0,
+            pending_first_control_focus: None,
             quit: false,
             help: false,
             help_scroll: 0,
@@ -239,12 +254,13 @@ impl BoardApp {
             scroll_geometry: None,
             layout: None,
             frame_presentation: None,
-            dragged_thought: None,
+            dragged_item: None,
             drag_target: None,
             pointer_click: None,
             overlay_activation: None,
             hovered: None,
-            insertion_focus,
+            pointer_position: None,
+            insertion_focus: InsertionFocus::Inactive,
             insertion_confirmation: InsertionConfirmation::Idle,
             edit_boundary: None,
             palette_selection_handoff: None,
@@ -252,10 +268,13 @@ impl BoardApp {
             invocation_popup: None,
             search: None,
             rename: None,
+            thought_rename: None,
             session_rename_persistence: SessionRenamePersistence::Idle,
             transfer: None,
             transfer_generation: 0,
+            export: export::ExportOwner::default(),
             settings,
+            footer_chrome_visibility,
             selection: selection::BoardSelection::default(),
             expanded_folds: BTreeSet::new(),
             pending_editor_clipboard: BTreeMap::new(),
@@ -263,6 +282,7 @@ impl BoardApp {
             pending_clipboard_reads: BTreeMap::new(),
             pending_recovery_exports: BTreeSet::new(),
             recovery_exported_for: None,
+            recovery_export_path: None,
             agent_targets: Vec::new(),
             agent_refresh_in_flight: false,
             global_delivery: None,
@@ -271,7 +291,7 @@ impl BoardApp {
             deferred_submissions: BTreeMap::new(),
             preflight_submissions: BTreeMap::new(),
             pending_submissions: BTreeMap::new(),
-            pending_transfer_removals: BTreeMap::new(),
+            pending_transfer_batches: BTreeMap::new(),
             screenshot: screenshot::ScreenshotInbox::default(),
             update_barrier: None,
             update_restart: None,
@@ -298,18 +318,21 @@ impl BoardApp {
     ) -> Vec<Effect> {
         self.handle_routed(UiInput::from(input), ids, clock)
     }
-
     fn handle_routed(
         &mut self,
         input: UiInput,
         ids: &mut impl IdGenerator,
         clock: &impl Clock,
     ) -> Vec<Effect> {
+        self.track_hover_input(&input);
+        let ready_quit_was_armed = self.screenshot_ready_quit_armed();
         let (owner, input, preserves_handoff) = match self.prepare_input(input, ids, clock) {
             Ok(prepared) => prepared,
             Err(effects) => return effects,
         };
+        let deliberate = input.is_deliberate_interaction();
         if let Some(effects) = self.handle_quit_input(&input, ids, clock) {
+            self.finish_screenshot_interaction(deliberate, ready_quit_was_armed);
             return effects;
         }
         if self.update_barrier.is_some()
@@ -318,9 +341,12 @@ impl BoardApp {
                 UiInput::Resize { .. } | UiInput::HostFocusGained | UiInput::HostFocusLost
             )
         {
+            self.finish_screenshot_interaction(deliberate, ready_quit_was_armed);
             return Vec::new();
         }
-        self.handle_routable_input(owner, input, preserves_handoff, ids, clock)
+        let effects = self.handle_routable_input(owner, input, preserves_handoff, ids, clock);
+        self.finish_screenshot_interaction(deliberate, ready_quit_was_armed);
+        effects
     }
 
     fn prepare_input(
@@ -382,6 +408,9 @@ impl BoardApp {
             UiInput::Key(UiKey::Move {
                 movement: CursorMovement::VisualUp | CursorMovement::VisualDown,
                 extend_selection: false,
+            }) | UiInput::Pointer(PointerInput {
+                kind: PointerKind::Move,
+                ..
             })
         ) {
             self.edit_boundary = None;
@@ -400,7 +429,11 @@ impl BoardApp {
                 self.handle_invocation_input(&input, ids, clock)
             }
             Owner::Transfer => self.handle_transfer_input(&input, ids, clock),
+            Owner::ExportPath | Owner::ExportReplace => {
+                self.handle_export_input(&input, ids, clock)
+            }
             Owner::Rename => self.handle_session_rename(&input, ids, clock),
+            Owner::ThoughtRename => self.handle_thought_rename(&input, ids, clock),
             Owner::Search => self.handle_search_input(&input, ids, clock),
             Owner::Direction => self
                 .handle_submission_input(&input, ids, clock)
@@ -421,53 +454,6 @@ impl BoardApp {
             self.accept_update_input(sequence)
         } else {
             self.accept_release_highlights_input(sequence)
-        }
-    }
-
-    /// Rebuild the editor adapter when reducer state changes externally.
-    pub fn sync_editor_from_state(&mut self) {
-        let thought_id = match self.state.mode {
-            InteractionMode::Board => {
-                self.editor = None;
-                return;
-            }
-            InteractionMode::Compose => {
-                if !matches!(self.editor, Some((EditorOwner::Compose, _))) {
-                    let mut editor = self.editor_factory.create("");
-                    editor.set_viewport(self.viewport);
-                    self.editor = Some((EditorOwner::Compose, editor));
-                    self.compose_presentation = ComposePresentation::Prompt;
-                }
-                return;
-            }
-            InteractionMode::Edit { thought_id } => thought_id,
-        };
-        let Some(thought) = self.state.board.thought(thought_id) else {
-            self.editor = None;
-            return;
-        };
-        let content = thought.content.clone();
-        let restored_state = self.state.restored_editor_state(thought_id);
-        if let Some((EditorOwner::Thought(current), editor)) = &mut self.editor
-            && *current == thought_id
-        {
-            if self.pending_edit.is_none() && editor.snapshot().content != content {
-                let (cursor, anchor) = restored_state.unwrap_or_default();
-                let _outcome = editor.replace_state(content, cursor, anchor);
-            }
-        } else {
-            self.edit_owner_generation = self.edit_owner_generation.wrapping_add(1);
-            let mut editor = self.editor_factory.create(&content);
-            editor.set_viewport(self.viewport);
-            if let Some((cursor, anchor)) = restored_state {
-                let _outcome = editor.replace_state(content, cursor, anchor);
-            } else {
-                let _outcome = editor.apply(EditCommand::Move {
-                    movement: CursorMovement::DocumentEnd,
-                    extend_selection: false,
-                });
-            }
-            self.editor = Some((EditorOwner::Thought(thought_id), editor));
         }
     }
 }

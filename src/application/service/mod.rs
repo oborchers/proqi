@@ -1,15 +1,24 @@
 //! Terminal-independent session lifecycle and scriptable mutation service.
 
+mod board_items;
+mod export;
 mod external_edits;
 mod sessions;
 mod thoughts;
+mod transformations;
+
+pub(crate) use board_items::derived_duplicate_item_ids;
+pub use sessions::{
+    BrowserHistoryMovement, NamedSession, NamedSessionDisposition, RenameAdmission,
+    SessionAdministrationReceipt,
+};
 
 use std::path::PathBuf;
 
 use thiserror::Error;
 
 use crate::{
-    domain::{DomainError, SessionId, ThoughtId},
+    domain::{BoardItemId, DomainError, SessionId, ThoughtId},
     ports::{
         control::{ControlMutation, ControlReceipt},
         environment::{Clock, IdGenerator},
@@ -18,7 +27,7 @@ use crate::{
     },
 };
 
-use super::{AppState, ApplicationError, Effect};
+use super::{AppState, ApplicationError, SequencedMutationEffects};
 use super::{ControlReplay, match_control_replay};
 
 fn match_replay(
@@ -81,18 +90,18 @@ where
         Ok(AppState::from_snapshot(snapshot)?)
     }
 
-    fn commit_single_effect(
+    fn commit_control_effects(
         &mut self,
-        effects: &[Effect],
+        effects: Vec<super::Effect>,
+        session_id: SessionId,
+        mutation: &ControlMutation,
     ) -> Result<CommitReceipt, SessionServiceError> {
-        let [effect] = effects else {
-            return Err(SessionServiceError::NoDurableMutation);
-        };
-        let batch = effect
-            .persistence_batch()
-            .ok_or(SessionServiceError::NoDurableMutation)?;
+        let routed = SequencedMutationEffects::new(effects)
+            .map_err(|_| SessionServiceError::NoDurableMutation)?;
+        let routed = super::attach_control_fingerprint(routed, session_id, mutation)?;
+        drop(routed.auxiliary);
         self.store
-            .commit(&batch)?
+            .commit(&routed.batch)?
             .ok_or(SessionServiceError::NoDurableMutation)
     }
 }
@@ -127,6 +136,15 @@ pub struct ThoughtMutation {
     pub receipt: CommitReceipt,
 }
 
+/// Durable result of one mixed Board-item mutation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BoardItemMutation {
+    /// Created or affected items in canonical Board order.
+    pub item_ids: Vec<BoardItemId>,
+    /// Durable operation receipt.
+    pub receipt: CommitReceipt,
+}
+
 /// Session service failure with stable semantic categories.
 #[derive(Debug, Error)]
 pub enum SessionServiceError {
@@ -145,6 +163,14 @@ pub enum SessionServiceError {
     /// No matching session exists.
     #[error("session not found: {0}")]
     SessionNotFound(String),
+    /// The requested session name belongs only to sessions from other directories.
+    #[error("session name is already used for another directory: {name}")]
+    SessionNameConflict {
+        /// Exact requested name.
+        name: String,
+        /// Live sessions that already use the name.
+        sessions: Vec<crate::ports::store::NamedSessionMatch>,
+    },
     /// More than one session has the requested name.
     #[error("session name is ambiguous: {reference}")]
     AmbiguousSession {

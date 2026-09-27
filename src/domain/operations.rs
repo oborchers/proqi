@@ -1,15 +1,15 @@
 //! Reversible board operations and the session board aggregate.
 
-use std::collections::HashSet;
-
 use serde::{Deserialize, Serialize};
 
 use super::{
-    DomainError, OperationId, OperationSequence, Session, SessionId, Thought, ThoughtId,
-    ThoughtPosition, ThoughtPresentation, Timestamp, validate_annotations,
+    DomainError, OperationId, OperationSequence, Separator, SeparatorId, Session, SessionId,
+    Thought, ThoughtId, ThoughtName, ThoughtPosition, ThoughtPresentation, Timestamp,
+    validate_annotations,
 };
 
 mod addressing;
+mod items;
 mod mutation;
 mod operation_kind;
 
@@ -64,6 +64,11 @@ pub enum BoardMutation {
         /// Directional selection anchor after materialization.
         selection_anchor: Option<super::TextPosition>,
     },
+    /// Add a new visual separator or restore the same previously undone creation.
+    AddSeparator {
+        /// Complete payload-free separator snapshot.
+        separator: Separator,
+    },
     /// Change recoverable deletion state and restore position when needed.
     SetDeletion {
         /// Affected thought.
@@ -90,10 +95,28 @@ pub enum BoardMutation {
         /// Position occupied before deletion or desired after restoration.
         position: ThoughtPosition,
     },
+    /// Change recoverable separator deletion state and restore position when needed.
+    SetSeparatorDeletion {
+        /// Affected separator.
+        separator_id: SeparatorId,
+        /// Deletion time, or `None` to restore.
+        deleted_at: Option<Timestamp>,
+        /// Position occupied before deletion or desired after restoration.
+        position: ThoughtPosition,
+    },
     /// Move a live thought between normalized positions.
     MoveThought {
         /// Affected thought.
         thought_id: ThoughtId,
+        /// Required current position.
+        from: ThoughtPosition,
+        /// Desired position.
+        to: ThoughtPosition,
+    },
+    /// Move a live separator between normalized positions.
+    MoveSeparator {
+        /// Affected separator.
+        separator_id: SeparatorId,
         /// Required current position.
         from: ThoughtPosition,
         /// Desired position.
@@ -118,6 +141,15 @@ pub enum BoardMutation {
         thought_id: ThoughtId,
         /// New preference.
         presentation: ThoughtPresentation,
+    },
+    /// Replace optional organizational metadata with an exact precondition.
+    SetName {
+        /// Affected thought.
+        thought_id: ThoughtId,
+        /// Required current name.
+        before: Option<ThoughtName>,
+        /// Replacement name.
+        after: Option<ThoughtName>,
     },
     /// Legacy v0.1.x payload retained only for lossless history migration.
     #[doc(hidden)]
@@ -163,8 +195,12 @@ impl BoardMutation {
                 ..
             } => validate_annotations(expected_content, expected_annotations),
             Self::SetDeletion { .. }
+            | Self::AddSeparator { .. }
+            | Self::SetSeparatorDeletion { .. }
             | Self::MoveThought { .. }
+            | Self::MoveSeparator { .. }
             | Self::SetPresentation { .. }
+            | Self::SetName { .. }
             | Self::LegacySetCollapsed { .. } => Ok(()),
         }
     }
@@ -240,6 +276,7 @@ pub struct SessionBoard {
     /// Session metadata.
     pub session: Session,
     thoughts: Vec<Thought>,
+    separators: Vec<Separator>,
     attachment_counters: super::AttachmentCounters,
 }
 
@@ -250,9 +287,23 @@ impl SessionBoard {
     ///
     /// Returns a domain error when ownership, identity, or live positions are invalid.
     pub fn new(session: Session, thoughts: Vec<Thought>) -> Result<Self, DomainError> {
+        Self::with_separators(session, thoughts, Vec::new())
+    }
+
+    /// Validate and construct a session Board with durable structural separators.
+    ///
+    /// # Errors
+    ///
+    /// Returns a domain error when ownership, identity, or live positions are invalid.
+    pub fn with_separators(
+        session: Session,
+        thoughts: Vec<Thought>,
+        separators: Vec<Separator>,
+    ) -> Result<Self, DomainError> {
         let mut board = Self {
             session,
             thoughts,
+            separators,
             attachment_counters: super::AttachmentCounters::default(),
         };
         board.observe_attachments()?;
@@ -347,14 +398,13 @@ impl SessionBoard {
         at: Timestamp,
     ) -> Result<(), DomainError> {
         match mutation {
-            BoardMutation::Batch { mutations } => {
-                for mutation in mutations {
-                    self.apply_mutation_in_place(mutation, at)?;
-                }
-            }
+            BoardMutation::Batch { mutations } => self.apply_mutation_batch(mutations, at)?,
             BoardMutation::AddThought { thought }
             | BoardMutation::AddThoughtFromCompose { thought, .. } => {
                 self.add_or_restore(thought.clone(), at)?;
+            }
+            BoardMutation::AddSeparator { separator } => {
+                self.add_or_restore_separator(separator.clone(), at)?;
             }
             BoardMutation::SetDeletion {
                 thought_id,
@@ -379,11 +429,21 @@ impl SessionBoard {
                 *position,
                 at,
             )?,
+            BoardMutation::SetSeparatorDeletion {
+                separator_id,
+                deleted_at,
+                position,
+            } => self.set_separator_deletion(*separator_id, *deleted_at, *position, at)?,
             BoardMutation::MoveThought {
                 thought_id,
                 from,
                 to,
             } => self.move_thought(*thought_id, *from, *to, at)?,
+            BoardMutation::MoveSeparator {
+                separator_id,
+                from,
+                to,
+            } => self.move_separator(*separator_id, *from, *to, at)?,
             BoardMutation::ReplaceContent {
                 thought_id,
                 before_content,
@@ -401,61 +461,28 @@ impl SessionBoard {
             BoardMutation::SetPresentation {
                 thought_id,
                 presentation,
-            } => {
-                let thought = self
-                    .thought_mut(*thought_id)
-                    .ok_or(DomainError::ThoughtNotFound(*thought_id))?;
-                thought.presentation = *presentation;
-                thought.updated_at = at;
-            }
+            } => self.set_presentation(*thought_id, *presentation, at)?,
+            BoardMutation::SetName {
+                thought_id,
+                before,
+                after,
+            } => self.set_name(*thought_id, before.as_ref(), after.clone(), at)?,
             BoardMutation::LegacySetCollapsed {
                 thought_id,
                 collapsed,
-            } => {
-                let thought = self
-                    .thought_mut(*thought_id)
-                    .ok_or(DomainError::ThoughtNotFound(*thought_id))?;
-                thought.presentation = if *collapsed {
-                    ThoughtPresentation::Collapsed
-                } else {
-                    ThoughtPresentation::Automatic
-                };
-                thought.updated_at = at;
-            }
+            } => self.set_legacy_collapsed(*thought_id, *collapsed, at)?,
         }
         self.session.last_active_at = self.session.last_active_at.max(at);
         Ok(())
     }
 
-    /// Validate ownership and normalized live ordering.
-    ///
-    /// # Errors
-    ///
-    /// Returns a domain error for duplicate identities, wrong ownership, or invalid positions.
-    pub fn validate(&self) -> Result<(), DomainError> {
-        self.session.validate()?;
-        let mut identities = HashSet::with_capacity(self.thoughts.len());
-        for thought in &self.thoughts {
-            if !identities.insert(thought.id) {
-                return Err(DomainError::DuplicateThoughtId(thought.id));
-            }
-            if thought.session_id != self.session.id {
-                return Err(DomainError::WrongSession {
-                    thought_id: thought.id,
-                    session_id: self.session.id,
-                });
-            }
-            validate_annotations(&thought.content, &thought.annotations)?;
-        }
-        let mut attachment_ids = HashSet::new();
-        for (expected, thought) in self.live_thoughts().into_iter().enumerate() {
-            super::attachment_numbering::validate_unique(
-                &thought.annotations,
-                &mut attachment_ids,
-            )?;
-            if usize::try_from(thought.position.get()).ok() != Some(expected) {
-                return Err(DomainError::NonNormalizedPositions);
-            }
+    fn apply_mutation_batch(
+        &mut self,
+        mutations: &[BoardMutation],
+        at: Timestamp,
+    ) -> Result<(), DomainError> {
+        for mutation in mutations {
+            self.apply_mutation_in_place(mutation, at)?;
         }
         Ok(())
     }

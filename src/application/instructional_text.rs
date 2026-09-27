@@ -32,6 +32,7 @@ impl InstructionalText {
             operation_id,
             self.content,
             self.annotations,
+            None,
             insertion_index,
             at,
         ))

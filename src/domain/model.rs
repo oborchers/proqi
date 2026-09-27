@@ -1,12 +1,19 @@
 //! Principal domain records and aggregate invariants.
 
-use std::path::{Path, PathBuf};
+mod direction;
+mod session;
+
+pub use direction::Direction;
+pub use session::{Session, validate_session_name};
+
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{
-    ContentAnnotation, RevisionId, SessionId, TextPosition, ThoughtId, validate_annotations,
+    ContentAnnotation, RevisionId, SeparatorId, SessionId, TextPosition, ThoughtId,
+    validate_annotations,
 };
 
 /// UTC milliseconds since the Unix epoch.
@@ -59,13 +66,13 @@ impl OperationSequence {
     }
 }
 
-/// Zero-based position among live thoughts in a session.
+/// Zero-based position among live Board items in a session.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ThoughtPosition(u32);
 
 impl ThoughtPosition {
-    /// Construct a thought position.
+    /// Construct a Board item position.
     #[must_use]
     pub const fn new(value: u32) -> Self {
         Self(value)
@@ -75,122 +82,6 @@ impl ThoughtPosition {
     #[must_use]
     pub const fn get(self) -> u32 {
         self.0
-    }
-}
-
-/// Cardinal direction to an adjacent terminal pane.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Direction {
-    /// Pane above Proqi.
-    Up,
-    /// Pane to the right of Proqi.
-    Right,
-    /// Pane below Proqi.
-    Down,
-    /// Pane to the left of Proqi.
-    Left,
-}
-
-impl Direction {
-    /// Stable lowercase representation used at external and durable boundaries.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Up => "up",
-            Self::Right => "right",
-            Self::Down => "down",
-            Self::Left => "left",
-        }
-    }
-}
-
-/// A scratchpad session.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Session {
-    /// Stable identity.
-    pub id: SessionId,
-    /// Optional user-assigned name.
-    pub name: Option<String>,
-    /// Directory from which the session was created.
-    pub origin_cwd: PathBuf,
-    /// Directory from which it was most recently opened.
-    pub last_opened_cwd: PathBuf,
-    /// Creation time.
-    pub created_at: Timestamp,
-    /// Most recent successful opening time.
-    pub last_opened_at: Timestamp,
-    /// Most recent content activity time.
-    pub last_active_at: Timestamp,
-    /// Last operation acknowledged as durable.
-    pub last_durable_sequence: OperationSequence,
-    /// Soft-deletion time, if in recoverable trash.
-    pub deleted_at: Option<Timestamp>,
-}
-
-impl Session {
-    /// Create a live, unnamed session.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DomainError::RelativeDirectory`] when `cwd` is not absolute.
-    pub fn new(id: SessionId, cwd: PathBuf, now: Timestamp) -> Result<Self, DomainError> {
-        validate_absolute_path(&cwd)?;
-        Ok(Self {
-            id,
-            name: None,
-            origin_cwd: cwd.clone(),
-            last_opened_cwd: cwd,
-            created_at: now,
-            last_opened_at: now,
-            last_active_at: now,
-            last_durable_sequence: OperationSequence::ZERO,
-            deleted_at: None,
-        })
-    }
-
-    /// Rename the session, or clear its optional name.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DomainError::BlankSessionName`] for whitespace-only names.
-    pub fn rename(&mut self, name: Option<String>) -> Result<(), DomainError> {
-        if name.as_deref().is_some_and(|value| value.trim().is_empty()) {
-            return Err(DomainError::BlankSessionName);
-        }
-        self.name = name;
-        Ok(())
-    }
-
-    /// Validate restored session paths and optional naming invariants.
-    ///
-    /// # Errors
-    ///
-    /// Returns a domain error when persisted state bypassed constructor invariants.
-    pub fn validate(&self) -> Result<(), DomainError> {
-        validate_absolute_path(&self.origin_cwd)?;
-        validate_absolute_path(&self.last_opened_cwd)?;
-        if self
-            .name
-            .as_deref()
-            .is_some_and(|value| value.trim().is_empty())
-        {
-            return Err(DomainError::BlankSessionName);
-        }
-        Ok(())
-    }
-
-    /// Record a successful open after a lease has been acquired.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DomainError::RelativeDirectory`] when `cwd` is not absolute.
-    pub fn record_open(&mut self, cwd: PathBuf, now: Timestamp) -> Result<(), DomainError> {
-        validate_absolute_path(&cwd)?;
-        self.last_opened_cwd = cwd;
-        self.last_opened_at = now;
-        self.last_active_at = self.last_active_at.max(now);
-        Ok(())
     }
 }
 
@@ -272,10 +163,13 @@ pub struct Thought {
     pub session_id: SessionId,
     /// Exact current content.
     pub content: String,
+    /// Optional organizational metadata, separate from authored content.
+    #[serde(default)]
+    pub name: Option<super::ThoughtName>,
     /// Durable presentation metadata over exact UTF-8 byte ranges.
     #[serde(default)]
     pub annotations: Vec<ContentAnnotation>,
-    /// Current order among live thoughts.
+    /// Current order among live Board items.
     pub position: ThoughtPosition,
     /// Creation time.
     pub created_at: Timestamp,
@@ -306,6 +200,7 @@ impl Thought {
             id,
             session_id,
             content,
+            name: None,
             annotations: Vec::new(),
             position,
             created_at: now,
@@ -334,6 +229,11 @@ impl Thought {
         validate_annotations(&self.content, &annotations)?;
         self.annotations = annotations;
         Ok(())
+    }
+
+    /// Replace the optional organizational name.
+    pub fn set_name(&mut self, name: Option<super::ThoughtName>) {
+        self.name = name;
     }
 }
 
@@ -408,6 +308,9 @@ pub struct IntegrationContext {
 /// Domain validation failure.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum DomainError {
+    /// Thought names must be short, trimmed, single-line text.
+    #[error("thought name must be non-blank, single-line, and at most 80 characters")]
+    InvalidThoughtName,
     /// A durable thought presentation value was unknown.
     #[error("invalid thought presentation: {0}")]
     InvalidThoughtPresentation(String),
@@ -428,25 +331,42 @@ pub enum DomainError {
         /// Expected session.
         session_id: SessionId,
     },
+    /// A separator was applied to another session.
+    #[error("separator {separator_id} does not belong to session {session_id}")]
+    WrongSeparatorSession {
+        /// Separator with the invalid ownership.
+        separator_id: SeparatorId,
+        /// Expected session.
+        session_id: SessionId,
+    },
     /// A referenced thought is not present.
     #[error("thought not found: {0}")]
     ThoughtNotFound(ThoughtId),
     /// A live thought with that identity is already present.
     #[error("thought already exists: {0}")]
     ThoughtAlreadyExists(ThoughtId),
+    /// A referenced separator is not present.
+    #[error("separator not found: {0}")]
+    SeparatorNotFound(SeparatorId),
+    /// A live separator with that identity is already present.
+    #[error("separator already exists: {0}")]
+    SeparatorAlreadyExists(SeparatorId),
     /// The aggregate contains two retained records with one identity.
     #[error("duplicate retained thought identity: {0}")]
     DuplicateThoughtId(ThoughtId),
+    /// The aggregate contains two retained separators with one identity.
+    #[error("duplicate retained separator identity: {0}")]
+    DuplicateSeparatorId(SeparatorId),
     /// A requested position is outside the live board.
-    #[error("thought position {requested} exceeds board length {len}")]
+    #[error("Board item position {requested} exceeds board length {len}")]
     InvalidPosition {
         /// Requested zero-based position.
         requested: usize,
         /// Current live board length.
         len: usize,
     },
-    /// Live thought positions are not unique and contiguous.
-    #[error("live thought positions are not normalized")]
+    /// Live Board item positions are not unique and contiguous.
+    #[error("live Board item positions are not normalized")]
     NonNormalizedPositions,
     /// The operation sequence cannot increase further.
     #[error("operation sequence exhausted")]
@@ -466,12 +386,7 @@ pub enum DomainError {
     /// A reversible replacement no longer matches current thought content.
     #[error("thought content changed before transformation: {0}")]
     ThoughtContentConflict(ThoughtId),
-}
-
-fn validate_absolute_path(path: &Path) -> Result<(), DomainError> {
-    if path.is_absolute() {
-        Ok(())
-    } else {
-        Err(DomainError::RelativeDirectory(path.to_path_buf()))
-    }
+    /// A reversible metadata replacement no longer matches the current name.
+    #[error("thought name changed before rename: {0}")]
+    ThoughtNameConflict(ThoughtId),
 }

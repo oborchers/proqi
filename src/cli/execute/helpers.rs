@@ -4,7 +4,7 @@ use std::{io::Read as _, str::FromStr as _};
 
 use sha2::Digest as _;
 
-use crate::domain::{OperationId, RevisionId, ThoughtId};
+use crate::domain::{BoardItemId, OperationId, RevisionId, SeparatorId, ThoughtId};
 
 use super::CliError;
 
@@ -15,6 +15,22 @@ pub(super) fn parse_thought_id(value: &str) -> Result<ThoughtId, CliError> {
     ThoughtId::from_str(value).map_err(|error| {
         CliError::identifier(format!("invalid thought identifier {value}: {error}"))
     })
+}
+
+pub(super) fn parse_item_id(value: &str) -> Result<BoardItemId, CliError> {
+    if value.starts_with("tht_") {
+        return parse_thought_id(value).map(BoardItemId::Thought);
+    }
+    if value.starts_with("sep_") {
+        return SeparatorId::from_str(value)
+            .map(BoardItemId::Separator)
+            .map_err(|error| {
+                CliError::identifier(format!("invalid separator identifier {value}: {error}"))
+            });
+    }
+    Err(CliError::identifier(format!(
+        "invalid Board item identifier {value}: expected tht_ or sep_"
+    )))
 }
 
 pub(super) fn parse_operation_id(value: Option<&str>) -> Result<Option<OperationId>, CliError> {

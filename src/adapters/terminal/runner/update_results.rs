@@ -158,6 +158,35 @@ mod tests {
     use super::execution_message;
 
     #[test]
+    fn preinstall_abort_reports_that_installation_did_not_run() {
+        let mut ids = FakeIdGenerator::new(1_800_000_000_000);
+        let execution = UpdateExecution {
+            operation_id: ids.request_id(),
+            selected_participants: 25,
+            prepared_participants: 12,
+            restart_requests: 0,
+            quiescence_requests: 0,
+            quiesced_participants: 0,
+            quiescence_failed: Vec::new(),
+            restart_accepted: 0,
+            replacement_ready: 0,
+            replacement_missing: 0,
+            restart_failed: Vec::new(),
+            resumable_sessions: Vec::new(),
+            convergence_state_recorded: true,
+            status: UpdateExecutionStatus::Aborted {
+                blocker: Some(ids.instance_id()),
+                code: "save_failed".to_owned(),
+            },
+        };
+
+        assert_eq!(
+            execution_message(&execution).expect_err("preinstall abort"),
+            "Update stopped safely before installation (save_failed). Every session remains usable."
+        );
+    }
+
+    #[test]
     fn partial_restart_reports_a_safe_recovery_message() {
         let mut ids = FakeIdGenerator::new(1_800_000_000_000);
         let execution = UpdateExecution {

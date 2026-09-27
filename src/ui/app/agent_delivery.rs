@@ -42,11 +42,16 @@ impl BoardApp {
         if matches!(self.state.mode, InteractionMode::Edit { .. }) {
             return self.begin_edit_delivery(disposition, ids, clock);
         }
+        let thought_ids = self.action_thought_ids();
+        if thought_ids.is_empty() && self.action_has_separator() {
+            self.set_warning("separator has no text to submit");
+            return Vec::new();
+        }
         let mut effects = match self.flush_edit_boundary(ids, clock) {
             EditFlush::Complete(effects) => effects,
             EditFlush::Blocked(effects) => return effects,
         };
-        effects.extend(self.begin_delivery_for(disposition, self.action_thought_ids(), ids, clock));
+        effects.extend(self.begin_delivery_for(disposition, thought_ids, ids, clock));
         effects
     }
 

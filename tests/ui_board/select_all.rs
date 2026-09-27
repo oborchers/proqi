@@ -88,15 +88,15 @@ fn select_all_works_from_the_insertion_row_and_is_empty_on_an_empty_board() {
 }
 
 #[test]
-fn command_palette_exposes_the_exact_select_all_thoughts_action() {
+fn command_palette_exposes_the_exact_select_all_items_action() {
     let mut fixture = Fixture::new();
     populate(&mut fixture);
     fixture.input(crate::key_input(UiKey::Character(':')));
-    for character in "select all thoughts".chars() {
+    for character in "select all items".chars() {
         fixture.input(crate::key_input(UiKey::Character(character)));
     }
     let (_, entries, selected) = fixture.app.palette_view().expect("palette");
-    assert_eq!(entries, vec!["Select all thoughts"]);
+    assert_eq!(entries, vec!["Select all items"]);
     assert_eq!(selected, 0);
 
     fixture.input(crate::key_input(UiKey::Enter));

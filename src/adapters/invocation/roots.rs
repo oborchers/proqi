@@ -242,13 +242,30 @@ const fn catalog_only_global(relative: &'static str, precedence: u16) -> Compati
 }
 
 pub(super) fn project_bases(cwd: &Path) -> Vec<PathBuf> {
+    let root = crate::adapters::filesystem::repository_root(cwd);
     let mut bases = Vec::new();
-    let mut current = cwd.to_path_buf();
-    loop {
-        bases.push(current.clone());
-        if current.join(".git").exists() || !current.pop() {
+    for ancestor in cwd.ancestors() {
+        bases.push(ancestor.to_path_buf());
+        if Some(ancestor) == root.as_deref() {
             break;
         }
     }
     bases
+}
+
+pub(super) fn global_owns_project_path_at_home(
+    spec: &CompatibilityRoot,
+    base: &Path,
+    global_home: Option<&Path>,
+) -> bool {
+    spec.scope == InvocationScope::Project
+        && global_home == Some(base)
+        && COMPATIBILITY_ROOTS.iter().any(|candidate| {
+            candidate.scope == InvocationScope::Global
+                && candidate.relative == spec.relative
+                && candidate.harness == spec.harness
+                && candidate.kind == spec.kind
+                && candidate.shape == spec.shape
+                && candidate.insertable == spec.insertable
+        })
 }

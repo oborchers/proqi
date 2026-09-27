@@ -27,7 +27,7 @@ fn run(binary: &str, state: &std::path::Path, session: &str, script: &str) {
 }
 
 fn contents(binary: &str, state: &std::path::Path, session: &str) -> Vec<String> {
-    json_command(binary, state, &["thoughts", "list", session])["data"]["thoughts"]
+    json_command(binary, state, &["thoughts", "list", session])["data"]["items"]
         .as_array()
         .expect("thought list")
         .iter()

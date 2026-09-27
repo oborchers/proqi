@@ -26,12 +26,14 @@
   <img src="assets/proqi-demo.gif" width="1000" alt="Proqi refining, reordering, recovering, and copying independent prompt thoughts">
 </p>
 
+[Documentation](https://oborchers.github.io/proqi/) ·
 [Why Proqi](#do-you-hate-this-editor) ·
 [Workflow](#one-board-many-prompts) ·
 [Install](#install) ·
 [Controls](#board-controls) ·
 [Screenshots](#screenshot-inbox-on-macos) ·
 [Herdr](#native-submission-with-herdr) ·
+[Herdr plugin](#as-a-herdr-plugin) ·
 [CLI](#json-cli-and-agent-skill) ·
 [Privacy](#privacy-durability-and-recovery) ·
 [Configuration](#configuration)
@@ -62,8 +64,9 @@ accidental prompt. What looked like a safe draft becomes part of another
 agent's message without a distinct turn boundary.
 
 **Proqi is the solution: an agent-ready prompt editor on steroids, built for
-power users.** Capture independently; edit, select, duplicate, reorder, recover,
-and discover local skills and commands later.
+power users.** Capture independently; edit, select, duplicate, reorder, add
+persistent visual separators, recover, and discover local skills and commands
+later.
 
 On macOS, the same board becomes a Screenshot Inbox. Captures arrive as private,
 annotatable thoughts: no dragging across panes and no accidental drop into the
@@ -87,58 +90,38 @@ agents, or multiplexers.
 
 ## Install
 
-Install the latest supported release with one command. This downloads the
-release-attached installer and its checksum separately, verifies the installer,
-then lets that verified installer select and verify the exact native archive:
-
-```shell
-sh -c 'set -eu
-version=${1:-latest}
-case "$version" in
-  latest) release=latest/download ;;
-  v*)
-    numbers=${version#v}; case "$numbers" in *[!0-9.]*|.*|*.|*..*) printf "invalid Proqi version\n" >&2; exit 1 ;; esac
-    saved_ifs=$IFS; IFS=.; set -- $numbers; IFS=$saved_ifs; test "$#" = 3 || { printf "invalid Proqi version\n" >&2; exit 1; }
-    for component in "$@"; do case "$component" in ""|*[!0-9]*|0[0-9]*) printf "invalid Proqi version\n" >&2; exit 1 ;; esac; done
-    release="download/$version"
-    ;;
-  *) printf "invalid Proqi version\n" >&2; exit 1 ;;
-esac
-temporary=$(mktemp -d "${TMPDIR:-/tmp}/proqi-bootstrap.XXXXXX")
-trap '\''rm -rf "$temporary"'\'' EXIT HUP INT TERM
-base="https://github.com/oborchers/proqi/releases/$release"
-for file in proqi-installer.sh.sha256 proqi-installer.sh; do
-  case "$file" in *.sha256) maximum=512 ;; *) maximum=131072 ;; esac
-  curl --fail --silent --show-error --location --proto "=https" --proto-redir "=https" --tlsv1.2 --connect-timeout 10 --max-time 60 --max-redirs 3 --retry 2 --max-filesize "$maximum" --output "$temporary/$file" "$base/$file"
-done
-test "$(wc -l < "$temporary/proqi-installer.sh.sha256" | tr -d " ")" = 1
-record=$(cat "$temporary/proqi-installer.sh.sha256")
-set -f; set -- $record; set +f
-test "$#" = 2 && test "$2" = proqi-installer.sh && test "${#1}" = 64
-case "$1" in *[!0-9a-f]*) printf "invalid installer checksum\n" >&2; exit 1 ;; esac
-expected=$1
-if command -v sha256sum >/dev/null 2>&1; then output=$(sha256sum "$temporary/proqi-installer.sh"); elif command -v shasum >/dev/null 2>&1; then output=$(shasum -a 256 "$temporary/proqi-installer.sh"); else printf "sha256sum or shasum is required\n" >&2; exit 1; fi
-actual=${output%% *}; test "$actual" = "$expected" || { printf "installer checksum verification failed\n" >&2; exit 1; }
-sh "$temporary/proqi-installer.sh" --version "$version"' sh latest
-```
-
-Replace the final `latest` with an exact stable tag from the Releases page to
-require that version. The default destination is `$HOME/.local/bin`; set
-`PROQI_INSTALL_DIR` to another absolute directory below `$HOME`. The installer
-never uses `sudo` or modifies `PATH`. If the destination is not already on
-`PATH`, it prints the required addition.
-
-Homebrew remains supported:
+### macOS (recommended)
 
 ```shell
 brew install oborchers/tap/proqi
 ```
 
-Scope Homebrew trust to this formula:
+Scope Homebrew trust to this formula when upgrading:
 
 ```shell
 brew trust --formula oborchers/tap/proqi
 brew upgrade --formula oborchers/tap/proqi
+```
+
+### Linux and macOS without Homebrew
+
+Proqi 0.10.0 and newer releases include the standalone installer:
+
+```shell
+curl -LsSf https://github.com/oborchers/proqi/releases/latest/download/proqi-installer.sh | sh
+```
+
+It selects the native archive, verifies its checksum and version, and installs
+Proqi without `sudo`. The default destination is `$HOME/.local/bin`; set
+`PROQI_INSTALL_DIR` to another absolute directory below `$HOME`. The installer
+does not modify `PATH`. If necessary, it prints the required addition.
+
+To inspect the installer before running it:
+
+```shell
+curl -LsSf https://github.com/oborchers/proqi/releases/latest/download/proqi-installer.sh -o proqi-installer.sh
+less proqi-installer.sh
+sh proqi-installer.sh
 ```
 
 Or use Rust 1.88+:
@@ -166,6 +149,54 @@ glibc 2.35 or newer receives the GNU build. musl systems and older glibc
 receive the statically linked musl fallback. Ambiguous environments stop with
 an explanation. Uninstalling preserves data.
 
+### As a Herdr plugin
+
+<span class="version-scope">Proqi 0.14.0</span>
+
+Proqi is an agent-optimized terminal scratchpad for follow-up prompts next to
+coding-agent sessions. The Herdr plugin opens it beside the focused pane with
+one action:
+
+```shell
+herdr plugin install oborchers/proqi
+```
+
+The plugin needs Proqi 0.14.0 or newer and Herdr 0.8.0 or newer on macOS or
+Linux. If an older Proqi is already installed, upgrade it through its existing
+installation channel before using the toggle.
+
+Herdr previews the plugin before it runs anything. When `proqi` is already
+installed, the plugin uses it and installs nothing, so Homebrew, Cargo, Debian,
+and standalone installations keep their own update channel. Otherwise the
+install step uses `curl` to fetch the standalone installer from the latest
+release and checks it against the SHA-256 record published beside it. Both
+files come from the same release, so that check proves integrity, not
+authenticity; the trust model equals `curl ... | sh` above. Herdr hides the
+output of a successful install: a fresh Proqi lands in `$HOME/.local/bin`,
+which the plugin finds even when your shell's `PATH` lacks it. If Proqi comes
+from Homebrew or Cargo, start the Herdr server from a shell where
+`command -v proqi` works.
+
+Bind the toggle in Herdr's `config.toml`:
+
+```toml
+[[keys.command]]
+key = "prefix+i"
+type = "plugin_action"
+command = "proqi.toggle"
+description = "toggle Proqi"
+```
+
+The toggle opens one Proqi pane to the right of the focused pane, focuses it
+when it is already open, and closes it once Proqi confirms its edits are saved
+when it is focused. Each tab keeps one Proqi session, whichever pane is
+focused. A tab's first session is named after the tab's agent when exactly one
+agent there has a Herdr name, else after the tab label, or after the stable tab
+identity when that label is only Herdr's position number. Herdr does not
+restore plugin panes after a cold server restart; the next toggle reopens the
+same session and closes the leftover shell if it is still idle. See the
+[Herdr plugin guide](docs/guides/herdr-plugin.md).
+
 ## Start and resume
 
 ```shell
@@ -182,6 +213,10 @@ prompt files or unsaved Sublime scratch document.
 Changes autosave; exit prints the resume command. Boards rename, trash, restore,
 and run in parallel; one lease prevents concurrent editing.
 
+Thoughts may have a short optional name for organization. The name is separate
+from the exact body: copying or submitting a thought never prepends it, and
+creating a thought never opens a naming prompt.
+
 A genuinely empty board opens with `+ Start typing`. Type or paste immediately
 to create the first thought, or click the insertion row to reveal the ordinary
 empty editor first. Nothing is saved until content is produced. Press `Esc` to
@@ -193,6 +228,26 @@ elsewhere. Proqi receives modifiers only after the operating system, keyboard
 remapper, and terminal have handled the key. Raw `Ctrl` is not a second Primary
 modifier on macOS.
 
+Complete user documentation for the published 0.14.0 product starts at the
+[Proqi documentation home](https://oborchers.github.io/proqi/). Use the
+[complete feature index](https://oborchers.github.io/proqi/reference/features.html)
+to discover the full
+surface, or begin with a workflow:
+
+- [Capture and edit thoughts](https://oborchers.github.io/proqi/guides/capture-and-edit.html)
+- [Select and act on thoughts](https://oborchers.github.io/proqi/guides/selection.html)
+- [Transform and organize thoughts](https://oborchers.github.io/proqi/guides/edit-and-transform.html)
+- [Configure and troubleshoot shortcuts](https://oborchers.github.io/proqi/guides/shortcuts.html)
+- [Paste, clean up, and attach files](https://oborchers.github.io/proqi/guides/paste-and-attachments.html)
+- [Discover commands, skills, and collaborators](https://oborchers.github.io/proqi/guides/discovery-and-invocations.html)
+- [Deliver prompts to agents](https://oborchers.github.io/proqi/guides/agent-delivery.html)
+- [Organize sessions and recover work](https://oborchers.github.io/proqi/guides/organization-and-recovery.html)
+- [Browse every Commands action](https://oborchers.github.io/proqi/reference/commands.html)
+- [Use the complete CLI](https://oborchers.github.io/proqi/reference/cli.html)
+
+The Markdown source remains available from
+[`docs/index.md`](docs/index.md) for offline reading and contribution.
+
 The tables below describe the factory map. The complete stable action and
 context inventory is in [context/KEYMAP_ACTIONS.md](context/KEYMAP_ACTIONS.md).
 Help and footer labels always show the bindings resolved from the active
@@ -203,12 +258,15 @@ configuration.
 | Input | Action |
 | --- | --- |
 | `n`, `Enter` on `+ New thought`, paste, or click | Create a thought |
+| Commands: `Insert separator` | Insert a persistent visual separator below the focused item |
+| Commands: `Export to file...` and its remove and replace variants | Save the focused thought or selection as a plain-text file (next release) |
 | `Primary+V` / `p` with no selection | Paste exactly as a new thought |
 | `j` / `k` or arrows | Focus next / previous; twice at a blocked bottom / top edge creates there |
 | `Ctrl+↓` / `↑` or `Ctrl+j` / `k` | Focus the last / first live thought without wrapping |
 | macOS `Ctrl+N` / `Ctrl+Shift+N`; elsewhere `Alt+↓` / `↑` or `Alt+j` / `k` | Insert a blank below / above the focused thought and edit it |
 | `Page Up` / `Page Down` | Move five thoughts previous / next |
 | `Enter` or `e` | Edit |
+| `Ctrl+R` | Edit or clear the focused thought's optional name |
 | macOS `Option+Shift+↓` / `↑`; `Primary+J` / `Primary+K`, `Primary+Shift+↓` / `↑`, or drag | Reorder |
 | `Primary+C` / `y`; `Primary+X` / `x` | Copy; safe cut |
 | `d` or `Del` (`Entf` on German keyboards) | Delete |
@@ -220,7 +278,7 @@ configuration.
 | macOS `Ctrl+Z`; `Primary+Z` / `u` | Undo a board operation |
 | macOS `Ctrl+Shift+Z` / `Ctrl+Y`; `Primary+Shift+Z` / `Primary+Y` | **Redo a board operation** |
 | `Primary+Shift+V` / `Shift+P` | Paste and clean up spacing |
-| `f` | Clean up spacing in the focused thought |
+| `f` | Clean up spacing in selected Board thoughts or the focused thought |
 | `c`; `/`; `:`; `i`; `?` | Collapse; search; commands; Screenshot Inbox; help |
 | `Esc`; `Primary+Q` / `q` | Clear selection; exit after durable flush |
 
@@ -229,6 +287,7 @@ configuration.
 | Input | Action |
 | --- | --- |
 | `Esc` | Return to the board |
+| `Ctrl+R` | Edit or clear this thought's optional name without changing the body selection |
 | `Primary+A`; `Primary+U` | Select all; delete logical line |
 | `Primary+Shift+U` | Delete containing sentence |
 | macOS `Ctrl+Z`; `Ctrl+Shift+Z` / `Ctrl+Y`; retained Primary aliases elsewhere | Undo; redo |
@@ -257,7 +316,8 @@ configuration.
 | Direction chooser | Arrows or `h` / `j` / `k` / `l`; `Enter`; `Esc` |
 | Global-delivery disposition | `↑` / `↓` or `k` / `j`; page keys; `Enter`; `Esc` |
 | Session Browser and Browser query | Type to filter; `↑` / `↓`; `Home` / `End`; `Alt+↑` / `↓` or page keys; `Enter`; `Backspace` / `Delete`; `F2` rename and `F8` trash while the query is empty; `Esc` |
-| Rename and Browser rename | Type and use text cursor, `Backspace`, or `Delete`; `Enter` confirms; `Esc` cancels |
+| Thought name, Rename, and Browser rename | Type and use text cursor, `Backspace`, or `Delete`; `Enter` confirms; `Esc` cancels |
+| Export destination (next release) | Type a path; `Tab` / `Shift+Tab` complete and cycle; `Enter` saves; `Esc` cancels. Replace confirmation: `↑` / `↓` or `k` / `j`; `Enter`; `Esc` |
 | Recovery | `r` retry storage; `w` export recovery; `q` or `Primary+Q` exits through durability handling; `Esc` remains the invariant close route |
 | Empty insertion boundary | Board controls remain available; `Enter` or `n` creates; range and reorder actions are thought-only no-ops; `Esc` returns to the final thought |
 
@@ -433,8 +493,16 @@ The CLI also exposes versioned JSON:
 ```shell
 proqi --json capabilities
 printf '%s' 'Review this.' | proqi --json thoughts add <session-id>
+proqi --json thoughts rename <session-id> <thought-id> 'Release plan'
 proqi --json thoughts send <source> <thought-id> <destination> --remove
+proqi --json thoughts export <session-id> <thought-id> --output notes.txt
 ```
+
+Thought list and inspect JSON include nullable `name` metadata. Cross-session
+send preserves it, while human inspect and agent submission remain body-only.
+Thought listings retain their content-bearing `thoughts` projection and also
+return an ordered typed `items` projection. A separator is reported as
+`kind: "separator"` with its own `sep_` identity and never as an empty thought.
 
 The [Proqi skill](skills/proqi/SKILL.md) uses it without scraping the TUI:
 
@@ -450,6 +518,22 @@ For read-only-first failure investigation:
 npx skills add oborchers/proqi --skill proqi-debug -g
 ```
 
+### Claude Code plugin
+
+Claude Code can install both skills from this repository's plugin marketplace
+instead:
+
+```text
+/plugin marketplace add oborchers/proqi
+/plugin install proqi@proqi
+```
+
+The plugin ships the same `skills/proqi` and `skills/proqi-debug` files, invoked
+as `/proqi:proqi` and `/proqi:proqi-debug`. It follows the default branch and
+reports a new version when a release changes the Cargo version. Update with
+`/plugin marketplace update proqi`, then `/plugin update proqi@proqi`. It does
+not install the Proqi executable.
+
 ## Privacy, durability, and recovery
 
 Thoughts, attachments, settings, and redacted logs stay local. No telemetry,
@@ -457,6 +541,20 @@ cloud sync, collaboration service, or upload.
 
 The footer reports durability. Failures block destructive exit and remain
 retryable/exportable. Editor and board history survive restart.
+
+If the terminal watchdog confirms that only the Crossterm input lane has
+stopped making progress while the pane is still usable, Proqi first drains
+accepted work and restores the terminal. On macOS and Linux it then makes one
+same-pane replacement attempt for the exact session. Board, Compose, and Edit
+state resume in the inherited PTY. A replacement that cannot prove fresh input
+progress exits with an exact manual resume command. The per-session circuit
+allows at most two automatic recoveries in any rolling ten-minute window.
+If persistence has already failed, Proqi does not replace the process. It first
+writes the existing private recovery export, with a bounded fallback under the
+private runtime root if the primary recovery directory is unavailable. It then
+exits with both the exact resume command and the optimistic-state recovery path.
+Recovery format 2 retains thoughts and payload-free separators, including their
+exact identities, shared ordering, timestamps, and recoverable deletion state.
 
 ```shell
 proqi doctor
@@ -470,6 +568,9 @@ Collected update diagnostics include only closed lifecycle stages, aggregate
 participant and replacement counts, stable failure codes, and convergence.
 Finalization diagnostics distinguish unavailable control, unavailable private
 cache state, and an exact-state mismatch without recording local identifiers.
+Input recovery diagnostics contain only a stable stage, reason, attempt count,
+and outcome. They never contain session identity, paths, pane identity, terminal
+bytes, or thought content.
 
 ## Configuration
 
@@ -481,6 +582,7 @@ theme = "auto" # auto, light, dark, limited, or a bounded local theme file
 density = "comfortable" # or compact
 merge_separator = "\n\n" # one blank line between merged thoughts
 mouse_capture = true # set false if your terminal/multiplexer mishandles mouse reporting
+footer_hidden = false # set true to reclaim optional persistent footer chrome
 
 [keymap]
 schema_version = 1
@@ -493,6 +595,7 @@ schema_version = 1
 ]
 "submission.submit_keep" = [] # keyboard aliases disabled; Commands stays available
 "thought.delete" = [{ key = "d" }, { key = "Delete" }]
+"thought.rename" = [{ key = "r", modifiers = ["Control"] }]
 
 [keymap.macos.edit]
 "submission.submit_remove" = [{ key = "Enter", modifiers = ["Super", "Alt"] }]
@@ -500,6 +603,12 @@ schema_version = 1
 [keymap.portable.edit]
 "submission.submit_remove" = [{ key = "F5" }]
 ```
+
+`footer_hidden` sets the startup state. In Board, the unmodified `h` key (the remappable
+`footer.toggle` action) changes visibility only for the current Proqi process;
+restart restores the configured state.
+Because configuration rejects unknown fields, remove `footer_hidden` before
+running an older Proqi release.
 
 Each supplied context/action list replaces all its default aliases. Omitted
 pairs retain defaults; platform overrides replace common lists. Control, Alt,

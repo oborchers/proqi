@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use crate::{
     domain::{
-        InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,
-        Timestamp,
+        InstanceId, OperationId, RequestId, RevisionId, SeparatorId, SessionId, SubmissionId,
+        ThoughtId, Timestamp,
     },
     ports::environment::{
         AppPaths, Clock, Environment, IdGenerator, MonotonicClock, PathError, Paths, ProcessError,
@@ -112,6 +112,10 @@ impl IdGenerator for FakeIdGenerator {
         generate!(self, ThoughtId)
     }
 
+    fn separator_id(&mut self) -> SeparatorId {
+        generate!(self, SeparatorId)
+    }
+
     fn revision_id(&mut self) -> RevisionId {
         generate!(self, RevisionId)
     }
@@ -153,6 +157,8 @@ pub struct FakeEnvironment {
     pub current_directory: Result<PathBuf, PathError>,
     /// Current-executable result returned by every call.
     pub current_executable: Result<PathBuf, PathError>,
+    /// Home directory returned by every call.
+    pub home_directory: Option<PathBuf>,
 }
 
 impl Environment for FakeEnvironment {
@@ -162,6 +168,10 @@ impl Environment for FakeEnvironment {
 
     fn current_executable(&self) -> Result<PathBuf, PathError> {
         self.current_executable.clone()
+    }
+
+    fn home_directory(&self) -> Option<PathBuf> {
+        self.home_directory.clone()
     }
 }
 

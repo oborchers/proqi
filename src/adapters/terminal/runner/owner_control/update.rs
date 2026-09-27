@@ -64,8 +64,19 @@ pub(super) fn handle(
             Ok(queue_restart(app, lanes, pending, envelope, request))
         }
         ControlMutation::Add { .. }
+        | ControlMutation::ExportThoughts { .. }
         | ControlMutation::PreserveAdd { .. }
+        | ControlMutation::PreserveAddMany { .. }
         | ControlMutation::RenameSession { .. }
+        | ControlMutation::RenameThought { .. }
+        | ControlMutation::InsertSeparator { .. }
+        | ControlMutation::DeleteItems { .. }
+        | ControlMutation::MoveItem { .. }
+        | ControlMutation::DuplicateItems { .. }
+        | ControlMutation::SplitThought { .. }
+        | ControlMutation::ExtractThought { .. }
+        | ControlMutation::MergeThoughts { .. }
+        | ControlMutation::ReflowThought { .. }
         | ControlMutation::Sync
         | ControlMutation::Replace { .. }
         | ControlMutation::SetCollapsed { .. }

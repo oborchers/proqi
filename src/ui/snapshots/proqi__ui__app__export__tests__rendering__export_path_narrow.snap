@@ -1,0 +1,17 @@
+---
+source: src/ui/app/export/tests/rendering.rs
+assertion_line: 85
+expression: "snapshot(&mut path_stage(), 34, 12)"
+---
+00││
+01│┌ export and replace with refer[x]│
+02││>notes/Grüße.txt                ││
+03││Save and replace 2 thoughts wit…││
+04││                                ││
+05│└────────────────────────────────┘│
+06│           + New thought│
+07││
+08││
+09│  project│
+10│  2 thoughts · board · saved│
+11│  n New   : Commands│

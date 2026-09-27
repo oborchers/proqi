@@ -1,14 +1,14 @@
 //! Typed messages crossing the ordered persistence lane.
 
 use crate::{
-    application::ThoughtMutation,
     domain::{BrowserOperation, OperationSequence, RequestId, SessionId, SubmissionId, Timestamp},
     ports::{
         store::{
-            CaptureCommit, CaptureCommitOutcome, CommitReceipt, OperationBatch, SessionHit,
-            StoreError, StoredOperationRequest, SubmissionAttempt, SubmissionOutcome,
+            BrowserCommitReceipt, CaptureCommit, CaptureCommitOutcome, CommitReceipt,
+            OperationBatch, SessionHit, StoreError, StoredOperationRequest, SubmissionAttempt,
+            SubmissionOutcome,
         },
-        transfer::SessionTransferRequest,
+        transfer::SessionTransferBatchRequest,
     },
 };
 
@@ -26,15 +26,21 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
     SessionRenamed {
         request_id: Option<RequestId>,
         previous_name: Option<String>,
-        result: Result<(), StoreError>,
+        result: Result<BrowserCommitReceipt, StoreError>,
     },
     TransferSessions {
         generation: u64,
         result: Result<Vec<SessionHit>, StoreError>,
     },
-    ThoughtTransferred {
-        request: SessionTransferRequest,
-        result: Result<ThoughtMutation, String>,
+    ThoughtsTransferred {
+        request: SessionTransferBatchRequest,
+        result: Result<CommitReceipt, String>,
+    },
+    TransferFinished {
+        operation_id: crate::domain::OperationId,
+        sequence: Option<OperationSequence>,
+        result: Result<Option<CommitReceipt>, StoreError>,
+        retried: bool,
     },
     Lookup {
         request_id: RequestId,
@@ -42,7 +48,7 @@ pub(in crate::adapters::terminal) enum PersistenceResult {
     },
     BrowserNoOpRename {
         request_id: RequestId,
-        result: Result<(), StoreError>,
+        result: Result<BrowserCommitReceipt, StoreError>,
     },
     SubmissionPrepared {
         submission_id: SubmissionId,
@@ -73,7 +79,12 @@ pub(super) enum PersistenceRequest {
         current_session_id: SessionId,
         generation: u64,
     },
-    TransferThought(SessionTransferRequest),
+    TransferThoughts(SessionTransferBatchRequest),
+    FinishTransfer {
+        request: SessionTransferBatchRequest,
+        removal: Option<Box<crate::domain::BoardOperation>>,
+        reason: &'static str,
+    },
     Retry(OperationSequence),
     Lookup {
         request_id: RequestId,

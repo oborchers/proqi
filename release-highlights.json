@@ -106,12 +106,81 @@
     {
       "version": "0.9.0",
       "highlights": [
-        "Use terminal-safe macOS Control+Enter submission and revised defaults that avoid common Ghostty and Herdr shortcut collisions.",
+        "Use revised terminal-safe default shortcuts that avoid common collisions in the macOS, Ghostty, and Herdr delivery chain.",
         "Replace every semantic shortcut and fallback through one contextual keymap with aliases, platform overrides, safe disabling, and matching Help and Commands guidance.",
         "Find installed invocations through deterministic Unicode-aware fuzzy matching across the complete bounded result set.",
         "Submit selected thoughts to an eligible agent pane anywhere on the current Herdr server through one verified Commands workflow.",
         "Clean up pasted or existing thought spacing while preserving recognized structure, annotations, Unicode, undo, and large-paste folding.",
         "Track files and screenshots with session-wide numbers and truthful macOS in iCloud or downloading states."
+      ]
+    },
+    {
+      "version": "0.10.0",
+      "highlights": [
+        "Undo and redo through the active text field, thought editor, Board, or session Browser, with durable local history surviving restart.",
+        "Open Commands to see the actions relevant now, expand the categorized inventory, or search all 57 commands with truthful availability.",
+        "Install through one verified script on six macOS and Linux target combinations, including ARM64, static musl, and Debian arm64.",
+        "Update verified standalone installations in app and restore every active process by its exact session through schema-changing restarts.",
+        "Recover an exact active Board, Compose, or Edit session after a confirmed terminal input stall without entering a restart loop.",
+        "Use terminal-safe macOS Control submission aliases, precise wrapped-row boundaries, and an optional mouse-capture handshake."
+      ]
+    },
+    {
+      "version": "0.10.1",
+      "highlights": [
+        "Recover safely after Homebrew or a verified standalone installer replaces Proqi while cached installation state still names the previous version.",
+        "Resume exact sessions after stale installation state is reconciled automatically, without requiring a separate update check.",
+        "See exact blocking SessionIds and versions when an older live process must close before migration can continue.",
+        "Fail closed if a hidden writer, installation race, cache-write failure, or concurrent starter makes external upgrade ownership uncertain."
+      ]
+    },
+    {
+      "version": "0.10.2",
+      "highlights": [
+        "Reopen existing sessions with numbered attachments after an upgrade without the erroneous ordinal in legacy schema failure.",
+        "Keep existing attachment numbers, numbering counters, thought content, and undo history intact during migration.",
+        "Preserve the recorded dates of earlier database migrations when applying a new migration."
+      ]
+    },
+    {
+      "version": "0.11.0",
+      "highlights": [
+        "Give thoughts optional names with Ctrl+R without changing the text copied or submitted to an agent.",
+        "Insert persistent visual separators through Commands, then select, move, duplicate, delete, undo, or redo them alongside thoughts.",
+        "See immediate hover feedback on enabled controls across the Board, session Browser, footers, and overlays without changing keyboard focus.",
+        "Copy or move thoughts with attachments into an open session with durable acknowledgement before source removal.",
+        "Find global Agent Skills outside Git repositories without losing their supported dollar and slash invocation forms."
+      ]
+    },
+    {
+      "version": "0.12.0",
+      "highlights": [
+        "Create, move, delete, and duplicate mixed Board items through the public CLI, and split, extract, merge, or reflow thought text with stale-edit checks.",
+        "Retry newly recorded semantic operations after restart or history compaction without applying them twice, with updated agent skills and capability reporting.",
+        "Hide optional footer chrome with footer_hidden, or toggle it temporarily with h in Board mode, while required status and recovery controls stay visible.",
+        "Complete 19 shared Codex and Claude commands at the start of a thought, including /clear, /compact, /review, and /status, without executing them.",
+        "Keep bounded automatic input recovery available after executable upgrades and ordinary session resumes, with clearer content-free diagnostics.",
+        "Explore task-oriented user guides for editing, selection, attachments, delivery, sessions, recovery, shortcuts, and configuration."
+      ]
+    },
+    {
+      "version": "0.13.0",
+      "highlights": [
+        "Move selected Board items together with the existing reorder keys while preserving their order and making one undoable change.",
+        "Clean up spacing in selected thoughts as one undoable action without changing separators.",
+        "Send selected thoughts to another Proqi session as one durable cohort, removing sources only after the complete destination is accepted.",
+        "Focus the first item added through the public API to an untouched empty Board without opening its text editor.",
+        "Find or create named sessions atomically, create named thoughts in one action, and retry session changes with operation IDs.",
+        "Page JSON session and Board-item lists, use structured help and version output, and discover documented error codes."
+      ]
+    },
+    {
+      "version": "0.14.0",
+      "highlights": [
+        "Install Proqi as a Herdr plugin on Herdr 0.8.0 or newer, using an existing Proqi installation or installing it when missing.",
+        "Toggle one Proqi pane per Herdr tab, focus it again, or close it after Proqi confirms edits are saved.",
+        "Install the shipped Proqi and Proqi Debug agent skills through the Claude Code plugin marketplace.",
+        "See Session is ready during a continuing multi-session update instead of an incorrect cancellation message."
       ]
     }
   ]

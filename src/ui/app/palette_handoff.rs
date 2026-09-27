@@ -26,7 +26,7 @@ impl EditorSelectionHandoff {
 
 impl BoardApp {
     pub(super) fn palette_handoff_is_current(&self, handoff: &EditorSelectionHandoff) -> bool {
-        self.state.focused_thought == Some(handoff.thought_id)
+        self.state.focused_thought_id() == Some(handoff.thought_id)
             && self
                 .state
                 .board

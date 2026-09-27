@@ -1,5 +1,12 @@
 //! Active-session CLI mutations forwarded to the verified reducer owner.
 
+use crate::cli::error_code::ErrorCode;
+mod board;
+pub(super) use board::{
+    export_thoughts, extract_thought, insert_separator, merge_thoughts, move_item, mutate_items,
+    reflow_thought, split_thought,
+};
+
 use serde_json::json;
 
 use crate::{
@@ -16,18 +23,25 @@ use crate::{
 
 use super::super::{output::CliError, runtime::RuntimeContext};
 
+struct ForwardedAdd<'a> {
+    body: &'a str,
+    annotations: Vec<ContentAnnotation>,
+    name: Option<crate::domain::ThoughtName>,
+    position: Option<usize>,
+    supplied: Option<OperationId>,
+    preserve: bool,
+}
+
 pub(super) fn rename_session(
     context: &mut RuntimeContext,
     session_id: SessionId,
     name: Option<String>,
-) -> Result<bool, CliError> {
+    operation_id: OperationId,
+) -> Result<Option<bool>, CliError> {
     let Some(owner) = owner(context, session_id)? else {
-        return Ok(false);
+        return Ok(None);
     };
-    let mutation = ControlMutation::RenameSession {
-        operation_id: context.ids.operation_id(),
-        name,
-    };
+    let mutation = ControlMutation::RenameSession { operation_id, name };
     let protocol = required_protocol(&owner, &mutation)?;
     let request = ControlRequest {
         protocol,
@@ -35,18 +49,53 @@ pub(super) fn rename_session(
         session_id,
         mutation,
     };
-    LocalControlClient::send_metadata(&owner, &request)
-        .map(|_| true)
-        .map_err(|error| map_error(error, &owner))
+    match LocalControlClient::send_metadata(&owner, &request) {
+        Ok(crate::ports::control::ControlMetadataReceipt::SessionRenamed {
+            idempotent_replay,
+            ..
+        }) => Ok(Some(idempotent_replay)),
+        Ok(crate::ports::control::ControlMetadataReceipt::Synchronized) => Err(CliError::new(
+            ErrorCode::ProtocolMismatch,
+            "owner returned a synchronization receipt for a rename".to_owned(),
+        )),
+        Err(error) => Err(map_error(error, &owner, false)),
+    }
 }
 
 pub(super) fn sync(context: &mut RuntimeContext, session_id: SessionId) -> Result<(), CliError> {
+    sync_owner(context, session_id, false)
+}
+
+/// Flush an active owner and fail unless it confirms, before its process is closed.
+pub(super) fn sync_confirmed(
+    context: &mut RuntimeContext,
+    session_id: SessionId,
+) -> Result<(), CliError> {
+    sync_owner(context, session_id, true)
+}
+
+fn sync_owner(
+    context: &mut RuntimeContext,
+    session_id: SessionId,
+    required: bool,
+) -> Result<(), CliError> {
+    let unconfirmed = || {
+        if required {
+            Err(CliError::new(
+                ErrorCode::SessionBusy,
+                "Proqi did not confirm that its pending edits are saved, so its pane stays open"
+                    .to_owned(),
+            ))
+        } else {
+            Ok(())
+        }
+    };
     let Some(owner) = owner(context, session_id)? else {
-        return Ok(());
+        return unconfirmed();
     };
     let mutation = ControlMutation::Sync;
     let Some(protocol) = sync_protocol(owner.control_protocol)? else {
-        return Ok(());
+        return unconfirmed();
     };
     let request = ControlRequest {
         protocol,
@@ -58,12 +107,11 @@ pub(super) fn sync(context: &mut RuntimeContext, session_id: SessionId) -> Resul
         Ok(crate::ports::control::ControlMetadataReceipt::Synchronized) => Ok(()),
         Ok(crate::ports::control::ControlMetadataReceipt::SessionRenamed { .. }) => {
             Err(CliError::new(
-                "protocol_mismatch",
+                ErrorCode::ProtocolMismatch,
                 "owner returned a rename receipt".to_owned(),
-                6,
             ))
         }
-        Err(error) => Err(map_error(error, &owner)),
+        Err(error) => Err(map_error(error, &owner, false)),
     }
 }
 
@@ -77,11 +125,14 @@ pub(super) fn add(
     add_with_kind(
         context,
         session_id,
-        body,
-        Vec::new(),
-        position,
-        supplied,
-        false,
+        ForwardedAdd {
+            body,
+            annotations: Vec::new(),
+            name: None,
+            position,
+            supplied,
+            preserve: false,
+        },
     )
 }
 
@@ -90,50 +141,51 @@ pub(super) fn preserve_add(
     session_id: SessionId,
     body: &str,
     annotations: Vec<ContentAnnotation>,
+    name: Option<crate::domain::ThoughtName>,
     position: Option<usize>,
     supplied: Option<OperationId>,
 ) -> Result<Option<ThoughtMutation>, CliError> {
     add_with_kind(
         context,
         session_id,
-        body,
-        annotations,
-        position,
-        supplied,
-        true,
+        ForwardedAdd {
+            body,
+            annotations,
+            name,
+            position,
+            supplied,
+            preserve: true,
+        },
     )
 }
 
 fn add_with_kind(
     context: &mut RuntimeContext,
     session_id: SessionId,
-    body: &str,
-    annotations: Vec<ContentAnnotation>,
-    position: Option<usize>,
-    supplied: Option<OperationId>,
-    preserve: bool,
+    add: ForwardedAdd<'_>,
 ) -> Result<Option<ThoughtMutation>, CliError> {
     let Some(owner) = owner(context, session_id)? else {
         return Ok(None);
     };
-    let operation_id = supplied.unwrap_or_else(|| context.ids.operation_id());
+    let operation_id = add.supplied.unwrap_or_else(|| context.ids.operation_id());
     let thought_id = ThoughtId::from_database_bytes(operation_id.database_bytes())
         .map_err(|error| CliError::identifier(error.to_string()))?;
-    let mutation = if preserve {
+    let mutation = if add.preserve {
         ControlMutation::PreserveAdd {
             operation_id,
             thought_id,
-            content: body.to_owned(),
-            annotations,
-            position,
+            content: add.body.to_owned(),
+            annotations: add.annotations,
+            name: add.name,
+            position: add.position,
         }
     } else {
         ControlMutation::Add {
             operation_id,
             thought_id,
-            content: body.to_owned(),
+            content: add.body.to_owned(),
             annotations: Vec::new(),
-            position,
+            position: add.position,
         }
     };
     let receipt = send(context, &owner, session_id, mutation)?;
@@ -158,6 +210,33 @@ pub(super) fn delete(
         thought_id,
     };
     let receipt = send(context, &owner, session_id, mutation)?;
+    Ok(Some(ThoughtMutation {
+        thought_id,
+        receipt,
+    }))
+}
+
+pub(super) fn rename_thought(
+    context: &mut RuntimeContext,
+    session_id: SessionId,
+    thought_id: ThoughtId,
+    name: Option<crate::domain::ThoughtName>,
+    supplied: Option<OperationId>,
+) -> Result<Option<ThoughtMutation>, CliError> {
+    let Some(owner) = owner(context, session_id)? else {
+        return Ok(None);
+    };
+    let operation_id = supplied.unwrap_or_else(|| context.ids.operation_id());
+    let receipt = send(
+        context,
+        &owner,
+        session_id,
+        ControlMutation::RenameThought {
+            operation_id,
+            thought_id,
+            name,
+        },
+    )?;
     Ok(Some(ThoughtMutation {
         thought_id,
         receipt,
@@ -252,6 +331,25 @@ pub(super) fn history(
     send(context, &owner, session_id, mutation).map(Some)
 }
 
+/// Refuse early when an active owner cannot represent `mutation`, so no side
+/// effect happens before a request that the owner would reject.
+pub(super) fn ensure_owner_supports(
+    context: &RuntimeContext,
+    session_id: SessionId,
+    mutation: &ControlMutation,
+) -> Result<(), CliError> {
+    owner_supports(owner(context, session_id)?.as_ref(), mutation)
+}
+
+fn owner_supports(
+    owner: Option<&InstanceInfo>,
+    mutation: &ControlMutation,
+) -> Result<(), CliError> {
+    owner.map_or(Ok(()), |owner| {
+        required_protocol(owner, mutation).map(|_| ())
+    })
+}
+
 fn owner(
     context: &RuntimeContext,
     session_id: SessionId,
@@ -269,6 +367,27 @@ fn send(
     session_id: SessionId,
     mutation: ControlMutation,
 ) -> Result<CommitReceipt, CliError> {
+    send_control(context, owner, session_id, mutation).map(|receipt| receipt.durable)
+}
+
+fn send_control(
+    context: &mut RuntimeContext,
+    owner: &InstanceInfo,
+    session_id: SessionId,
+    mutation: ControlMutation,
+) -> Result<crate::ports::control::ControlReceipt, CliError> {
+    let reports_invalid_state = matches!(
+        mutation,
+        ControlMutation::InsertSeparator { .. }
+            | ControlMutation::DeleteItems { .. }
+            | ControlMutation::MoveItem { .. }
+            | ControlMutation::DuplicateItems { .. }
+            | ControlMutation::SplitThought { .. }
+            | ControlMutation::ExtractThought { .. }
+            | ControlMutation::MergeThoughts { .. }
+            | ControlMutation::ReflowThought { .. }
+            | ControlMutation::ExportThoughts { .. }
+    );
     let protocol = required_protocol(owner, &mutation)?;
     let request = ControlRequest {
         protocol,
@@ -278,27 +397,35 @@ fn send(
     };
     LocalControlClient
         .send(owner, &request)
-        .map(|receipt| receipt.durable)
-        .map_err(|error| map_error(error, owner))
+        .map_err(|error| map_error(error, owner, reports_invalid_state))
+}
+
+/// The active owner cannot represent the request, so a retry cannot succeed.
+fn protocol_mismatch(owner: &InstanceInfo, message: &str) -> CliError {
+    CliError::new(ErrorCode::ProtocolMismatch, message.to_owned()).with_details(json!({
+        "session_id": owner.session_id,
+        "holder": owner,
+    }))
 }
 
 fn required_protocol(owner: &InstanceInfo, mutation: &ControlMutation) -> Result<u32, CliError> {
+    // A holder without an advertised protocol may be another short-lived CLI
+    // mutation or an owner still publishing control, so a retry can succeed.
     let protocol = owner.control_protocol.ok_or_else(|| {
         CliError::new(
-            "session_busy",
+            ErrorCode::SessionBusy,
             "active owner does not advertise a control protocol".to_owned(),
-            5,
         )
+        .with_details(json!({ "session_id": owner.session_id, "holder": owner }))
     })?;
     if !(crate::ports::control::MIN_CONTROL_PROTOCOL_VERSION
         ..=crate::ports::control::CONTROL_PROTOCOL_VERSION)
         .contains(&protocol)
         || protocol < mutation.minimum_protocol()
     {
-        return Err(CliError::new(
-            "session_busy",
-            "active owner does not support the required control protocol".to_owned(),
-            5,
+        return Err(protocol_mismatch(
+            owner,
+            "active owner does not support the required control protocol",
         ));
     }
     Ok(protocol)
@@ -313,36 +440,41 @@ fn sync_protocol(advertised: Option<u32>) -> Result<Option<u32>, CliError> {
         .contains(&protocol)
     {
         return Err(CliError::new(
-            "session_busy",
+            ErrorCode::ProtocolMismatch,
             "active owner advertises an unsupported control protocol".to_owned(),
-            5,
         ));
     }
     Ok((protocol >= ControlMutation::Sync.minimum_protocol()).then_some(protocol))
 }
 
-fn map_error(error: ControlError, owner: &InstanceInfo) -> CliError {
+fn map_error(error: ControlError, owner: &InstanceInfo, reports_invalid_state: bool) -> CliError {
     let details = json!({
         "session_id": owner.session_id,
         "holder": owner,
     });
     match error {
         ControlError::Rejected { code, message } => match code.as_str() {
-            "thought_not_found" => CliError::new("thought_not_found", message, 3),
-            "content_conflict" => CliError::new("content_conflict", message, 7),
-            "thought_locked" => CliError::new("thought_locked", message, 7),
-            "storage_failed" => CliError::new("storage_failed", message, 1),
-            "storage_busy" => CliError::new("storage_busy", message, 5),
-            "storage_full" => CliError::new("storage_full", message, 1),
-            "idempotency_conflict" => CliError::new("idempotency_conflict", message, 7),
-            "no_durable_mutation" | "no_change" => CliError::new("no_change", message, 7),
+            "thought_not_found" => CliError::new(ErrorCode::ThoughtNotFound, message),
+            "content_conflict" => CliError::new(ErrorCode::ContentConflict, message),
+            "thought_locked" => CliError::new(ErrorCode::ThoughtLocked, message),
+            "storage_failed" => CliError::new(ErrorCode::StorageFailed, message),
+            "storage_busy" => CliError::new(ErrorCode::StorageBusy, message),
+            "storage_full" => CliError::new(ErrorCode::StorageFull, message),
+            "idempotency_conflict" => CliError::new(ErrorCode::IdempotencyConflict, message),
+            "no_durable_mutation" | "no_change" => CliError::new(ErrorCode::NoChange, message),
+            "invalid_state" if reports_invalid_state => {
+                CliError::new(ErrorCode::InvalidState, message)
+            }
             "outcome_unknown" => {
-                CliError::new("operation_indeterminate", message, 8).with_details(details)
+                CliError::new(ErrorCode::OperationIndeterminate, message).with_details(details)
             }
-            "owner_busy" | "protocol_mismatch" | "wrong_session" => {
-                CliError::new("session_busy", message, 5).with_details(details)
+            "protocol_mismatch" => {
+                CliError::new(ErrorCode::ProtocolMismatch, message).with_details(details)
             }
-            _ => CliError::new("mutation_rejected", message, 7),
+            "owner_busy" | "wrong_session" => {
+                CliError::new(ErrorCode::SessionBusy, message).with_details(details)
+            }
+            _ => CliError::new(ErrorCode::MutationRejected, message),
         },
         ControlError::MessageTooLarge => CliError::input(error.to_string()),
         ControlError::Unsupported
@@ -350,27 +482,10 @@ fn map_error(error: ControlError, owner: &InstanceInfo) -> CliError {
         | ControlError::Protocol(_)
         | ControlError::Timeout
         | ControlError::Io(_) => {
-            CliError::new("session_busy", error.to_string(), 5).with_details(details)
+            CliError::new(ErrorCode::SessionBusy, error.to_string()).with_details(details)
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::sync_protocol;
-
-    #[test]
-    fn read_sync_degrades_for_legacy_owners_but_rejects_newer_protocols() {
-        assert_eq!(
-            sync_protocol(None).expect("unadvertised legacy owner"),
-            None
-        );
-        assert_eq!(sync_protocol(Some(3)).expect("protocol three owner"), None);
-        assert_eq!(
-            sync_protocol(Some(4)).expect("protocol four owner"),
-            Some(4)
-        );
-        assert_eq!(sync_protocol(Some(7)).expect("current owner"), Some(7));
-        assert!(sync_protocol(Some(crate::ports::control::CONTROL_PROTOCOL_VERSION + 1)).is_err());
-    }
-}
+mod tests;

@@ -4,9 +4,201 @@ use std::{fs, os::unix::fs::symlink};
 
 use crate::ports::invocation::{
     InvocationCatalog as _, InvocationDiscoveryRequest, InvocationHarness, InvocationKind,
+    InvocationScope,
 };
 
 use super::{FilesystemInvocationCatalog, discover, write};
+
+#[test]
+fn global_external_agent_skill_retains_both_forms_below_non_git_home() {
+    let fixture = tempfile::tempdir().expect("tempdir");
+    let home = fixture.path().join("home");
+    let cwd = home.join("projects/non-git/nested");
+    let external = home.join("agent-os/skills/example");
+    fs::create_dir_all(&cwd).expect("nested non-Git cwd");
+    write(
+        &external.join("SKILL.md"),
+        "---\nname: aos-example\ndescription: Synthetic Grüße 界\n---\nbody",
+    );
+    fs::create_dir_all(home.join(".agents/skills")).expect("agent skills root");
+    fs::create_dir_all(home.join(".claude/skills")).expect("Claude skills root");
+    symlink(
+        "../../agent-os/skills/example",
+        home.join(".agents/skills/aos-example"),
+    )
+    .expect("external Agent Skills alias");
+    symlink(
+        "../../.agents/skills/aos-example",
+        home.join(".claude/skills/aos-example"),
+    )
+    .expect("Claude alias through Agent Skills");
+
+    let result = discover(&home, &cwd);
+    let canonical_external = fs::canonicalize(&external).expect("canonical external skill");
+
+    assert!(
+        result
+            .project
+            .iter()
+            .all(|entry| entry.canonical_path != canonical_external)
+    );
+    let [entry] = result.global.as_slice() else {
+        panic!("one consolidated global skill");
+    };
+    assert_eq!(entry.scope, InvocationScope::Global);
+    assert_eq!(entry.source, InvocationHarness::AgentSkills);
+    assert_eq!(entry.description.as_deref(), Some("Synthetic Grüße 界"));
+    assert_eq!(
+        entry
+            .forms
+            .iter()
+            .map(|form| (form.token.as_str(), form.harness, form.precedence))
+            .collect::<Vec<_>>(),
+        vec![
+            ("/aos-example", InvocationHarness::ClaudeCode, 5),
+            ("$aos-example", InvocationHarness::Codex, 40),
+        ]
+    );
+}
+
+#[test]
+fn global_scope_stays_stable_at_home_git_and_worktree_boundaries() {
+    let fixture = tempfile::tempdir().expect("tempdir");
+    let home = fixture.path().join("home");
+    let external = home.join("agent-os/skills/shared");
+    write(
+        &external.join("SKILL.md"),
+        "---\nname: shared\ndescription: Global skill\n---\nbody",
+    );
+    fs::create_dir_all(home.join(".agents/skills")).expect("agent skills root");
+    fs::create_dir_all(home.join(".claude/skills")).expect("Claude skills root");
+    symlink(
+        "../../agent-os/skills/shared",
+        home.join(".agents/skills/shared"),
+    )
+    .expect("external Agent Skills alias");
+    symlink(
+        "../../.agents/skills/shared",
+        home.join(".claude/skills/shared"),
+    )
+    .expect("Claude alias through Agent Skills");
+    let canonical_external = fs::canonicalize(&external).expect("canonical external skill");
+
+    let repository = home.join("projects/repository");
+    let worktree = home.join("projects/worktree");
+    write(&repository.join(".git/HEAD"), "ref: refs/heads/main\n");
+    write(&worktree.join(".git"), "gitdir: /fixture/repository.git\n");
+    for cwd in [home.clone(), repository, worktree] {
+        let result = discover(&home, &cwd);
+        assert!(
+            result
+                .project
+                .iter()
+                .all(|entry| entry.canonical_path != canonical_external),
+            "cwd={}",
+            cwd.display()
+        );
+        let [entry] = result.global.as_slice() else {
+            panic!("one global skill for cwd={}", cwd.display());
+        };
+        assert_eq!(entry.scope, InvocationScope::Global);
+        assert_eq!(entry.precedence, 5);
+        assert_eq!(
+            entry
+                .forms
+                .iter()
+                .map(|form| form.token.as_str())
+                .collect::<Vec<_>>(),
+            vec!["/shared", "$shared"]
+        );
+    }
+}
+
+#[test]
+fn project_only_home_roots_survive_non_git_and_home_repository_contexts() {
+    let fixture = tempfile::tempdir().expect("tempdir");
+    let home = fixture.path().join("home");
+    let nested = home.join("projects/non-git");
+    write(
+        &home.join(".pi/skills/home-skill/SKILL.md"),
+        "---\nname: home-skill\ndescription: Project-only home skill\n---\nbody",
+    );
+    write(
+        &home.join(".opencode/commands/home-command.md"),
+        "---\ndescription: Project-only home command\n---\nbody",
+    );
+    fs::create_dir_all(&nested).expect("nested non-Git cwd");
+    let canonical_home = fs::canonicalize(&home).expect("canonical fixture home");
+
+    let nested_result = discover(&home, &nested);
+    assert!(nested_result.global.is_empty());
+    assert_eq!(
+        nested_result
+            .project
+            .iter()
+            .filter(|entry| entry.canonical_path.starts_with(&canonical_home))
+            .flat_map(|entry| entry.forms.iter().map(|form| form.token.as_str()))
+            .collect::<Vec<_>>(),
+        vec!["/home-command", "/skill:home-skill"]
+    );
+
+    write(&home.join(".git/HEAD"), "ref: refs/heads/main\n");
+    let repository_result = discover(&home, &home);
+    assert!(repository_result.global.is_empty());
+    assert_eq!(
+        repository_result
+            .project
+            .iter()
+            .filter(|entry| entry.canonical_path.starts_with(&canonical_home))
+            .flat_map(|entry| entry.forms.iter().map(|form| form.token.as_str()))
+            .collect::<Vec<_>>(),
+        vec!["/home-command", "/skill:home-skill"]
+    );
+}
+
+#[test]
+fn distinct_project_and_global_same_name_skills_do_not_share_forms() {
+    let fixture = tempfile::tempdir().expect("tempdir");
+    let home = fixture.path().join("home");
+    let cwd = fixture.path().join("outside-home/repository");
+    write(&cwd.join(".git"), "gitdir: /fixture/repository.git\n");
+    write(
+        &cwd.join(".agents/skills/shared/SKILL.md"),
+        "---\nname: shared\ndescription: Project skill\n---\nbody",
+    );
+    write(
+        &home.join(".agents/skills/shared/SKILL.md"),
+        "---\nname: shared\ndescription: Global skill\n---\nbody",
+    );
+    fs::create_dir_all(home.join(".claude/skills")).expect("Claude skills root");
+    symlink(
+        "../../.agents/skills/shared",
+        home.join(".claude/skills/shared"),
+    )
+    .expect("global Claude alias through Agent Skills");
+
+    let result = discover(&home, &cwd);
+
+    let [project] = result.project.as_slice() else {
+        panic!("one project definition");
+    };
+    assert_eq!(project.description.as_deref(), Some("Project skill"));
+    assert_eq!(project.forms.len(), 1);
+    assert_eq!(project.forms[0].token, "$shared");
+    let [global] = result.global.as_slice() else {
+        panic!("one global definition");
+    };
+    assert_eq!(global.description.as_deref(), Some("Global skill"));
+    assert_eq!(
+        global
+            .forms
+            .iter()
+            .map(|form| form.token.as_str())
+            .collect::<Vec<_>>(),
+        vec!["/shared", "$shared"]
+    );
+    assert_ne!(project.canonical_path, global.canonical_path);
+}
 
 #[test]
 fn external_agent_skill_with_a_claude_alias_retains_both_harness_forms() {

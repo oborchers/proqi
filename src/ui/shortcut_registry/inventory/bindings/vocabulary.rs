@@ -20,6 +20,8 @@ pub(in crate::ui::shortcut_registry) const KEYBOARD_CONTEXTS: &[Context] = &[
     Context::BrowserQuery,
     Context::Rename,
     Context::BrowserRename,
+    Context::ExportPath,
+    Context::ExportReplace,
     Context::Update,
     Context::Screenshot,
     Context::Recovery,
@@ -108,6 +110,7 @@ pub(super) fn is_query_cursor_context(context: Context) -> bool {
             | Context::BrowserQuery
             | Context::Rename
             | Context::BrowserRename
+            | Context::ExportPath
     )
 }
 
@@ -122,6 +125,8 @@ pub(super) fn is_list_context(context: Context) -> bool {
             | Context::Transfer
             | Context::GlobalDeliveryQuery
             | Context::GlobalDeliveryDisposition
+            | Context::ExportPath
+            | Context::ExportReplace
             | Context::Browser
             | Context::BrowserQuery
             | Context::Update
@@ -145,6 +150,7 @@ pub(in crate::ui::shortcut_registry) fn is_text_context(context: Context) -> boo
             | Context::BrowserQuery
             | Context::Rename
             | Context::BrowserRename
+            | Context::ExportPath
     )
 }
 

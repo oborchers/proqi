@@ -3,7 +3,10 @@
 use std::{io::Write as _, sync::mpsc::TryRecvError};
 
 use crate::{
-    adapters::terminal::{TerminalError, external::ExternalResult},
+    adapters::terminal::{
+        TerminalError,
+        external::{ExternalResult, ThoughtExportResult},
+    },
     application::FailureCode,
     ports::clipboard::{ClipboardError, ClipboardWrite},
     ui::BoardApp,
@@ -87,6 +90,7 @@ fn complete(
         ExternalResult::Exported { request_id, result } => {
             app.complete_recovery_export(request_id, result.map_err(|error| error.to_string()))
         }
+        ExternalResult::ThoughtExport(result) => complete_thought_export(result, app, ids, clock),
         ExternalResult::AgentsDiscovered { pane_id, result } => {
             publish_discovered_identity(pane_heartbeat, pane_id, external);
             app.complete_agent_discovery(result);
@@ -126,6 +130,23 @@ fn complete(
                 },
             );
             app.complete_submission(submission_id, *result)
+        }
+    }
+}
+
+fn complete_thought_export(
+    result: ThoughtExportResult,
+    app: &mut BoardApp,
+    ids: &mut crate::adapters::runtime::SystemIdGenerator,
+    clock: SystemClock,
+) -> Vec<crate::application::Effect> {
+    match result {
+        ThoughtExportResult::Written { request_id, result } => {
+            app.complete_export_write(request_id, result, ids, &clock)
+        }
+        ThoughtExportResult::Listed { generation, result } => {
+            app.complete_export_listing(generation, result);
+            Vec::new()
         }
     }
 }

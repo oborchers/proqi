@@ -6,32 +6,41 @@ mod compaction;
 mod error;
 mod migration;
 mod onboarding;
+mod operation;
 mod receipt;
 mod session;
+mod session_request;
 mod submission_route;
 
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    BoardOperation, BrowserOperation, IntegrationContext, OperationId, OperationSequence,
-    RevisionId, Session, SessionId, SubmissionId, ThoughtId, ThoughtRevision, Timestamp, UndoScope,
+    BrowserOperation, OperationId, OperationSequence, RevisionId, SessionId, SubmissionId,
+    ThoughtId, Timestamp,
 };
 use crate::ports::agent::{AgentState, SubmissionDisposition};
 
 pub use browser_history::{BrowserCommitReceipt, BrowserHistoryEntry, BrowserHistoryStatus};
 pub use capture::{CaptureCommit, CaptureCommitOutcome, CaptureReceipt};
-pub use compaction::{CompactedOperationRequest, thought_payload_digest};
+pub use compaction::{
+    CompactedOperationRequest, thought_payload_digest, thought_payload_digest_with_name,
+};
 pub use error::{StoreError, StoreFailureCode};
 pub use migration::MigrationMode;
 pub use onboarding::{FirstRunBoard, FirstRunOutcome, OnboardingVersion};
+pub use operation::{OperationBatch, SemanticRequestFingerprint, StoredOperationRequest};
 pub use receipt::{CommitReceipt, DurableIdentity};
 pub use session::{SessionHit, SessionQuery, SessionSnapshot};
+pub use session_request::{
+    NamedSessionCreation, NamedSessionMatch, NamedSessionOutcome, NamedSessionPolicy,
+    SessionRequest, SessionRequestReceipt, StoredSessionRequest, session_create_digest,
+};
 pub use submission_route::{SUBMISSION_ROUTE_VERSION, SubmissionJournalRoute};
 
 /// Current storage schema understood by this binary.
-pub const SUPPORTED_SCHEMA_VERSION: u32 = 16;
+pub const SUPPORTED_SCHEMA_VERSION: u32 = 22;
 /// Current local storage protocol understood by this binary.
-pub const STORAGE_PROTOCOL_VERSION: u32 = 15;
+pub const STORAGE_PROTOCOL_VERSION: u32 = 21;
 
 /// One ordered, content-redacted source included in a submission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -117,89 +126,6 @@ pub struct SubmissionOutcome {
     pub deletion_operation_id: Option<OperationId>,
     /// Transition time.
     pub at: Timestamp,
-}
-
-/// Previously committed request associated with a durable operation identity.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum StoredOperationRequest {
-    /// Reversible board mutation.
-    Board {
-        /// Original operation payload.
-        operation: Box<BoardOperation>,
-        /// Original durable receipt.
-        receipt: CommitReceipt,
-    },
-    /// Persistent undo or redo request.
-    HistoryMove {
-        /// Owning session.
-        session_id: SessionId,
-        /// Addressed history scope.
-        scope: UndoScope,
-        /// Undo when true, redo when false.
-        undo: bool,
-        /// Original durable receipt.
-        receipt: CommitReceipt,
-    },
-    /// Exact editor replacement revision.
-    Revision {
-        /// Original editor revision.
-        revision: Box<ThoughtRevision>,
-        /// Original durable receipt.
-        receipt: CommitReceipt,
-    },
-    /// Content-redacted semantic replay data retained after history compaction.
-    Compacted {
-        /// Minimal fields required to compare a replay safely.
-        replay: CompactedOperationRequest,
-        /// Original durable receipt.
-        receipt: CommitReceipt,
-    },
-}
-
-/// One atomic persistence request.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum OperationBatch {
-    /// Insert a new session.
-    CreateSession(Session),
-    /// Apply and retain one reversible board operation.
-    Board(BoardOperation),
-    /// Apply and retain one reversible editor revision.
-    Revision(ThoughtRevision),
-    /// Move one persistent undo or redo cursor.
-    HistoryMove {
-        /// Idempotent durable operation identity.
-        operation_id: OperationId,
-        /// Owning session.
-        session_id: SessionId,
-        /// Board or one thought's editor history.
-        scope: UndoScope,
-        /// Undo when true, redo when false.
-        undo: bool,
-        /// Next monotonic sequence.
-        sequence: OperationSequence,
-        /// Event time.
-        at: Timestamp,
-    },
-    /// Store recognition-only integration context.
-    IntegrationContext {
-        /// Owning session.
-        session_id: SessionId,
-        /// New context, or `None` to clear it.
-        context: Option<IntegrationContext>,
-    },
-}
-
-impl OperationBatch {
-    /// Return the ordered session sequence carried by a mutable operation.
-    #[must_use]
-    pub const fn sequence(&self) -> Option<OperationSequence> {
-        match self {
-            Self::Board(operation) => Some(operation.sequence),
-            Self::Revision(revision) => Some(revision.sequence),
-            Self::HistoryMove { sequence, .. } => Some(*sequence),
-            Self::CreateSession(_) | Self::IntegrationContext { .. } => None,
-        }
-    }
 }
 
 /// Local durable store used by the TUI and CLI.
@@ -313,6 +239,64 @@ pub trait Store {
         _operation_id: OperationId,
     ) -> Result<Option<BrowserOperation>, StoreError> {
         Ok(None)
+    }
+
+    /// Atomically create one named session under its name-collision policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation, contention, or persistence failure.
+    fn create_named_session(
+        &mut self,
+        _creation: &NamedSessionCreation,
+    ) -> Result<NamedSessionOutcome, StoreError> {
+        Err(StoreError::Integrity(
+            "named session creation is unavailable".to_owned(),
+        ))
+    }
+
+    /// Look up the request that already owns one session-administration identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption or persistence failure.
+    fn session_request(
+        &mut self,
+        _operation_id: OperationId,
+    ) -> Result<Option<StoredSessionRequest>, StoreError> {
+        Ok(None)
+    }
+
+    /// Durably reserve one trash request for a session that is already trashed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict when the session is live or the identity is reused.
+    fn commit_noop_trash(
+        &mut self,
+        _operation_id: OperationId,
+        _session_id: SessionId,
+        _at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        Err(StoreError::Integrity(
+            "session administration receipts are unavailable".to_owned(),
+        ))
+    }
+
+    /// Permanently prune one trashed session and retain its request receipt.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict when the session is live, otherwise a typed storage failure.
+    fn prune_session_request(
+        &mut self,
+        _session_id: SessionId,
+        _operation_id: OperationId,
+        _at: Timestamp,
+    ) -> Result<BrowserCommitReceipt, StoreError> {
+        Err(StoreError::Integrity(
+            "session administration receipts are unavailable".to_owned(),
+        ))
     }
 
     /// Look up a prior operation request for cross-process idempotency.

@@ -28,8 +28,6 @@ pub(in crate::application) fn split_thought(
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
     let thought = exact_source(state, source)?.clone();
-    let (left_annotations, right_annotations) =
-        partition_annotations(&source.content, &source.annotations, at_byte)?;
     let left = source
         .content
         .get(..at_byte)
@@ -40,6 +38,8 @@ pub(in crate::application) fn split_thought(
         .get(at_byte..)
         .ok_or(ApplicationError::InvalidState)?
         .to_owned();
+    let (left_annotations, right_annotations) =
+        partition_annotations(&source.content, &source.annotations, at_byte)?;
     transform_into_neighbor(
         state,
         operation_id,
@@ -63,8 +63,9 @@ pub(in crate::application) fn extract_thought(
     at: Timestamp,
 ) -> ApplicationResult<Vec<Effect>> {
     let thought = exact_source(state, source)?.clone();
-    let (remaining_annotations, extracted_annotations) =
-        extract_annotations(&source.content, &source.annotations, range.clone())?;
+    if range.start >= range.end {
+        return Err(ApplicationError::InvalidState);
+    }
     let prefix = source
         .content
         .get(..range.start)
@@ -78,6 +79,8 @@ pub(in crate::application) fn extract_thought(
         .content
         .get(range.end..)
         .ok_or(ApplicationError::InvalidState)?;
+    let (remaining_annotations, extracted_annotations) =
+        extract_annotations(&source.content, &source.annotations, range.clone())?;
     let remaining = [prefix, suffix].concat();
     transform_into_neighbor(
         state,
@@ -155,7 +158,7 @@ pub(in crate::application) fn merge_thoughts(
         at,
     )?;
     record_transform(state, &operation, thought_ids)?;
-    state.focused_thought = Some(first.id);
+    state.focused_item = Some(crate::domain::BoardItemId::Thought(first.id));
     state.mode = crate::application::InteractionMode::Board;
     Ok(vec![Effect::CommitBoardOperation(operation)])
 }
@@ -206,7 +209,7 @@ fn transform_into_neighbor(
     ];
     let operation = operation(state, operation_id, kind, forward, inverse, at)?;
     record_transform(state, &operation, &[source.id])?;
-    state.focused_thought = Some(new_thought_id);
+    state.focused_item = Some(crate::domain::BoardItemId::Thought(new_thought_id));
     state.mode = crate::application::InteractionMode::Edit {
         thought_id: new_thought_id,
     };
@@ -235,9 +238,19 @@ fn contiguous_sources(
         .iter()
         .map(|thought_id| state.live_thought(*thought_id).cloned())
         .collect::<ApplicationResult<Vec<_>>>()?;
-    let contiguous = selected
-        .windows(2)
-        .all(|pair| pair[1].position.get() == pair[0].position.get().saturating_add(1));
+    let live_items = state.board.live_items();
+    let positions = thought_ids
+        .iter()
+        .filter_map(|id| {
+            live_items
+                .iter()
+                .position(|item| item.id() == crate::domain::BoardItemId::Thought(*id))
+        })
+        .collect::<Vec<_>>();
+    let contiguous = positions.len() == thought_ids.len()
+        && positions
+            .windows(2)
+            .all(|pair| pair[1] == pair[0].saturating_add(1));
     if !contiguous {
         return Err(ApplicationError::NoncontiguousSelection);
     }
@@ -274,7 +287,7 @@ fn replacement_values(
     }
 }
 
-fn deletion(thought: &Thought, at: Timestamp) -> BoardMutation {
+pub(super) fn deletion(thought: &Thought, at: Timestamp) -> BoardMutation {
     BoardMutation::SetDeletionExact {
         thought_id: thought.id,
         expected_content: thought.content.clone(),
@@ -286,7 +299,7 @@ fn deletion(thought: &Thought, at: Timestamp) -> BoardMutation {
     }
 }
 
-fn restoration(thought: &Thought, deleted_at: Timestamp) -> BoardMutation {
+pub(super) fn restoration(thought: &Thought, deleted_at: Timestamp) -> BoardMutation {
     BoardMutation::SetDeletionExact {
         thought_id: thought.id,
         expected_content: thought.content.clone(),
@@ -298,7 +311,7 @@ fn restoration(thought: &Thought, deleted_at: Timestamp) -> BoardMutation {
     }
 }
 
-fn operation(
+pub(super) fn operation(
     state: &AppState,
     id: OperationId,
     kind: BoardOperationKind,
@@ -363,5 +376,58 @@ pub(in crate::application) fn reflow_thought(
         reflow.at,
     )?;
     record_transform(state, &operation, &[source.id])?;
+    Ok(vec![Effect::CommitBoardOperation(operation)])
+}
+
+pub(in crate::application) fn reflow_thoughts(
+    state: &mut AppState,
+    batch: crate::application::OwnedThoughtReflowBatch,
+) -> ApplicationResult<Vec<Effect>> {
+    if batch.changes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut changed = Vec::new();
+    let mut forward = Vec::new();
+    let mut inverse = Vec::new();
+    let mut previous_position = None;
+    for reflow in batch.changes {
+        if reflow.operation_id != batch.operation_id || reflow.at != batch.at {
+            return Err(ApplicationError::InvalidState);
+        }
+        let source = state.live_thought(reflow.thought_id)?.clone();
+        if source.content != reflow.before_content
+            || source.annotations != reflow.before_annotations
+            || previous_position.is_some_and(|position| source.position <= position)
+        {
+            return Err(ApplicationError::ContentConflict(source.id));
+        }
+        if source.content == reflow.after_content && source.annotations == reflow.after_annotations
+        {
+            return Err(ApplicationError::InvalidState);
+        }
+        previous_position = Some(source.position);
+        forward.push(replacement(
+            &source,
+            reflow.after_content.clone(),
+            reflow.after_annotations.clone(),
+        ));
+        inverse.push(replacement_values(
+            source.id,
+            reflow.after_content,
+            reflow.after_annotations,
+            source.content,
+            source.annotations,
+        ));
+        changed.push(source.id);
+    }
+    let operation = operation(
+        state,
+        batch.operation_id,
+        BoardOperationKind::Reflow,
+        forward,
+        inverse,
+        batch.at,
+    )?;
+    record_transform(state, &operation, &changed)?;
     Ok(vec![Effect::CommitBoardOperation(operation)])
 }

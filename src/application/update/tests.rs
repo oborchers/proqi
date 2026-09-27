@@ -1,14 +1,17 @@
 use std::{cell::RefCell, collections::BTreeSet, path::PathBuf};
 
 use crate::{
-    application::test_support::TestClock,
+    application::test_support::{TestClock, TestIds},
     domain::{
-        Installation, InstallationIdentity, InstallationKind, ReleaseHighlightAnnouncement,
-        StableVersion, Timestamp, UpdateCacheState,
+        ExternalRestartExpectation, ExternalRestartPending, Installation, InstallationIdentity,
+        InstallationKind, ReleaseHighlightAnnouncement, StableVersion, Timestamp, UpdateCacheState,
     },
-    ports::update::{
-        InstallDetector, ReleaseObservation, ReleaseSource, RestartCompletion, UpdateError,
-        UpdateLease, UpdateLockKind, UpdateStateStore,
+    ports::{
+        environment::IdGenerator as _,
+        update::{
+            ExternalCacheTransition, InstallDetector, ReleaseObservation, ReleaseSource,
+            RestartCompletion, UpdateError, UpdateLease, UpdateLockKind, UpdateStateStore,
+        },
     },
 };
 
@@ -73,7 +76,11 @@ impl UpdateStateStore for State {
             cache.etag = etag;
         }
         cache.dismissed_version = None;
-        cache.observed_installed_version = Some(installed);
+        if cache.observed_installed_version.is_none()
+            || cache.observed_installed_version.as_ref() == Some(&installed)
+        {
+            cache.observed_installed_version = Some(installed);
+        }
         cache.last_checked_at = Some(checked_at);
         Ok(cache.clone())
     }
@@ -105,7 +112,43 @@ impl UpdateStateStore for State {
         let mut cache = self.cache.borrow_mut();
         cache.observed_installed_version = Some(installed);
         cache.restart_needed = restart_needed;
+        cache.external_restart = None;
         Ok(cache.clone())
+    }
+
+    fn reconcile_external_upgrade(
+        &self,
+        _: InstallationIdentity,
+        _: &StableVersion,
+        _: &StableVersion,
+        _: Option<&ExternalRestartPending>,
+    ) -> Result<ExternalCacheTransition, UpdateError> {
+        Err(UpdateError::State(
+            "external reconciliation is outside this fixture".to_owned(),
+        ))
+    }
+
+    fn complete_external_restart(
+        &self,
+        _: InstallationIdentity,
+        _: &StableVersion,
+        _: &ExternalRestartPending,
+    ) -> Result<ExternalCacheTransition, UpdateError> {
+        Err(UpdateError::State(
+            "external reconciliation is outside this fixture".to_owned(),
+        ))
+    }
+
+    fn acknowledge_external_resume(
+        &self,
+        _: InstallationIdentity,
+        _: &StableVersion,
+        _: &ExternalRestartPending,
+        _: crate::domain::SessionId,
+    ) -> Result<ExternalCacheTransition, UpdateError> {
+        Err(UpdateError::State(
+            "external reconciliation is outside this fixture".to_owned(),
+        ))
     }
 
     fn complete_restart(
@@ -321,6 +364,48 @@ fn exact_suppression_does_not_hide_a_later_release() {
 
     assert_eq!(result.availability, UpdateAvailability::Available);
     assert_eq!(source.calls, 1);
+}
+
+#[test]
+fn pending_external_restart_suppresses_a_later_release_prompt() {
+    let mut ids = TestIds::new(1_800_000_000_000);
+    let installed = StableVersion::parse("0.2.0").expect("installed");
+    let pending = ExternalRestartPending::new(
+        installed.clone(),
+        ids.request_id(),
+        vec![ExternalRestartExpectation::new(
+            ids.session_id(),
+            ids.instance_id(),
+            42,
+            StableVersion::parse("0.1.0").expect("previous"),
+        )],
+    )
+    .expect("pending external restart");
+    let state = State::default();
+    state.cache.replace(UpdateCacheState {
+        latest_stable: Some(StableVersion::parse("0.3.0").expect("latest")),
+        observed_installed_version: Some(installed.clone()),
+        restart_needed: true,
+        external_restart: Some(pending.clone()),
+        ..UpdateCacheState::default()
+    });
+    let detector = Detector(InstallationKind::StandaloneArchive);
+    let clock = TestClock(Timestamp::from_millis(2));
+    let mut source = Source {
+        calls: 0,
+        result: Ok(ReleaseObservation::Latest {
+            version: StableVersion::parse("0.3.0").expect("latest"),
+            etag: None,
+        }),
+    };
+
+    let result = UpdateService::new(&state, &mut source, &detector, &clock)
+        .check(installed, UpdateCheckMode::Explicit)
+        .expect("pending-cohort check");
+
+    assert_eq!(result.availability, UpdateAvailability::Suppressed);
+    assert_eq!(source.calls, 1);
+    assert_eq!(state.cache.borrow().external_restart, Some(pending));
 }
 
 #[test]

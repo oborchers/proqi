@@ -52,7 +52,7 @@ impl InstallDetector for SystemInstallDetector {
             .map_err(|error| UpdateError::Installation(error.to_string()))?;
         let executable = fs::canonicalize(&executable)
             .map_err(|error| UpdateError::Installation(error.to_string()))?;
-        let (kind, identity_path, restart_executable) = homebrew_context(&executable)
+        let (kind, identity_path, restart_executable) = homebrew_context(&executable)?
             .map(|(root, active)| (InstallationKind::HomebrewFormula, root, Some(active)))
             .or_else(|| {
                 standalone_root(&executable).map(|root| {
@@ -74,21 +74,41 @@ impl InstallDetector for SystemInstallDetector {
     }
 }
 
-fn homebrew_context(executable: &Path) -> Option<(PathBuf, PathBuf)> {
-    let bin = executable.parent()?;
-    let keg = bin.parent()?;
-    let formula = keg.parent()?;
-    let cellar = formula.parent()?;
-    let valid_shape = executable.file_name()? == "proqi"
-        && bin.file_name()? == "bin"
-        && formula.file_name()? == "proqi"
-        && cellar.file_name()? == "Cellar";
+fn homebrew_context(executable: &Path) -> Result<Option<(PathBuf, PathBuf)>, UpdateError> {
+    let Some(bin) = executable.parent() else {
+        return Ok(None);
+    };
+    let Some(keg) = bin.parent() else {
+        return Ok(None);
+    };
+    let Some(formula) = keg.parent() else {
+        return Ok(None);
+    };
+    let Some(cellar) = formula.parent() else {
+        return Ok(None);
+    };
+    let valid_shape = executable.file_name().is_some_and(|name| name == "proqi")
+        && bin.file_name().is_some_and(|name| name == "bin")
+        && formula.file_name().is_some_and(|name| name == "proqi")
+        && cellar.file_name().is_some_and(|name| name == "Cellar");
     if !valid_shape || !regular_bounded_file(&keg.join("INSTALL_RECEIPT.json")) {
-        return None;
+        return Ok(None);
     }
-    let prefix = cellar.parent()?;
+    let Some(prefix) = cellar.parent() else {
+        return Ok(None);
+    };
     let active = prefix.join("opt/proqi/bin/proqi");
-    Some((formula.to_path_buf(), active))
+    let active_executable = fs::canonicalize(&active).map_err(|error| {
+        UpdateError::Installation(format!(
+            "active Homebrew executable is unavailable: {error}"
+        ))
+    })?;
+    if active_executable != executable {
+        return Err(UpdateError::Installation(
+            "running executable does not match the active Homebrew installation".to_owned(),
+        ));
+    }
+    Ok(Some((formula.to_path_buf(), active)))
 }
 
 #[derive(Deserialize)]
@@ -138,14 +158,14 @@ fn identity_path_bytes(path: &Path) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, os::unix::fs::symlink};
 
     use crate::{domain::InstallationKind, ports::update::InstallDetector as _};
 
     use super::SystemInstallDetector;
 
     #[test]
-    fn homebrew_versions_share_identity_only_with_a_receipt() {
+    fn homebrew_versions_share_identity_only_when_each_is_active() {
         let temporary = tempfile::tempdir().expect("installation root");
         let formula = temporary.path().join("Cellar/proqi");
         let first = formula.join("0.1.0/bin/proqi");
@@ -164,21 +184,32 @@ mod tests {
             )
             .expect("write receipt");
         }
-        let first = SystemInstallDetector::for_executable(first)
+        let active = fs::canonicalize(temporary.path())
+            .expect("canonical root")
+            .join("opt/proqi/bin/proqi");
+        fs::create_dir_all(active.parent().expect("active parent")).expect("create active root");
+        symlink(&first, &active).expect("activate first keg");
+        let first_installation = SystemInstallDetector::for_executable(first.clone())
             .detect()
             .expect("first install");
-        let second = SystemInstallDetector::for_executable(second)
+        fs::remove_file(&active).expect("remove first link");
+        symlink(&second, &active).expect("activate second keg");
+        let second_installation = SystemInstallDetector::for_executable(second.clone())
             .detect()
             .expect("second install");
-        assert_eq!(first.kind, InstallationKind::HomebrewFormula);
-        assert_eq!(first.identity, second.identity);
-        assert_eq!(
-            first.restart_executable,
-            Some(
-                fs::canonicalize(temporary.path())
-                    .expect("canonical root")
-                    .join("opt/proqi/bin/proqi")
-            )
+        assert_eq!(first_installation.kind, InstallationKind::HomebrewFormula);
+        assert_eq!(first_installation.identity, second_installation.identity);
+        assert_eq!(first_installation.restart_executable, Some(active.clone()));
+        assert!(
+            SystemInstallDetector::for_executable(first)
+                .detect()
+                .is_err(),
+            "an inactive keg cannot claim authority for the active installation"
+        );
+        assert!(
+            SystemInstallDetector::for_executable(second)
+                .detect()
+                .is_ok()
         );
     }
 

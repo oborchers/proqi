@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     domain::{RequestId, SessionId},
-    ports::transfer::SessionTransferRequest,
+    ports::transfer::SessionTransferBatchRequest,
 };
 use std::sync::mpsc::{RecvTimeoutError, TrySendError};
 
@@ -108,11 +108,24 @@ impl PersistenceLane {
         })
     }
 
-    pub(in crate::adapters::terminal) fn transfer_thought(
+    pub(in crate::adapters::terminal) fn transfer_thoughts(
         &self,
-        request: SessionTransferRequest,
+        request: SessionTransferBatchRequest,
     ) -> Result<(), TerminalError> {
-        self.send(PersistenceRequest::TransferThought(request))
+        self.send(PersistenceRequest::TransferThoughts(request))
+    }
+
+    pub(in crate::adapters::terminal) fn finish_transfer(
+        &self,
+        request: SessionTransferBatchRequest,
+        removal: Option<crate::domain::BoardOperation>,
+        reason: &'static str,
+    ) -> Result<(), TerminalError> {
+        self.send(PersistenceRequest::FinishTransfer {
+            request,
+            removal: removal.map(Box::new),
+            reason,
+        })
     }
 
     pub(in crate::adapters::terminal) fn lookup(
@@ -301,8 +314,11 @@ mod tests {
         let [Effect::CommitBoardOperation(operation)] = effects.as_slice() else {
             panic!("expected durable board operation");
         };
-        lane.commit(OperationBatch::Board(operation.clone()))
-            .expect("queue commit");
+        lane.commit(OperationBatch::Board {
+            operation: operation.clone(),
+            semantic_fingerprint: None,
+        })
+        .expect("queue commit");
 
         lane.stop(ShutdownDeadline::after(std::time::Duration::from_secs(1)))
             .expect("drain and stop lane");

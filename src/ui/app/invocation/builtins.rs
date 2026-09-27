@@ -2,7 +2,7 @@
 
 use crate::{
     application::{
-        SHARED_PROMPT_STARTERS, supports_shared_starters as agent_supports_shared_starters,
+        SHARED_HARNESS_COMMANDS, supports_shared_commands as agent_supports_shared_commands,
     },
     ports::text_layout::byte_for_position,
     ui::app::BoardApp,
@@ -11,18 +11,18 @@ use crate::{
 use super::{Choice, InvocationPopup, matcher};
 
 pub(super) fn choices(app: &BoardApp, popup: &InvocationPopup) -> Vec<Choice> {
-    if !starts_prompt(app, popup) || !app_supports_shared_starters(app) {
+    if !starts_prompt(app, popup) || !app_supports_shared_commands(app) {
         return Vec::new();
     }
-    SHARED_PROMPT_STARTERS
+    SHARED_HARNESS_COMMANDS
         .iter()
         .copied()
-        .filter_map(|starter| {
-            matcher::token(starter.token, popup.query.text()).map(|rank| (starter, rank))
+        .filter_map(|command| {
+            matcher::token(command.token, popup.query.text()).map(|rank| (command, rank))
         })
-        .map(|(starter, rank)| Choice {
-            token: starter.token.to_owned(),
-            insertion: starter.token.to_owned(),
+        .map(|(command, rank)| Choice {
+            token: command.token.to_owned(),
+            insertion: command.token.to_owned(),
             annotation_display: None,
             separate_from_prefix: false,
             qualifier: "Shared Command".to_owned(),
@@ -34,17 +34,17 @@ pub(super) fn choices(app: &BoardApp, popup: &InvocationPopup) -> Vec<Choice> {
 }
 
 pub(super) fn tokens(app: &BoardApp) -> impl Iterator<Item = &'static str> {
-    let available = app_supports_shared_starters(app);
-    SHARED_PROMPT_STARTERS
+    let available = app_supports_shared_commands(app);
+    SHARED_HARNESS_COMMANDS
         .iter()
         .filter(move |_| available)
-        .map(|starter| starter.token)
+        .map(|command| command.token)
 }
 
-pub(super) fn is_shared_starter(token: &str) -> bool {
-    SHARED_PROMPT_STARTERS
+pub(super) fn is_shared_command(token: &str) -> bool {
+    SHARED_HARNESS_COMMANDS
         .iter()
-        .any(|starter| starter.token == token)
+        .any(|command| command.token == token)
 }
 
 pub(super) fn starts_prompt(app: &BoardApp, popup: &InvocationPopup) -> bool {
@@ -59,9 +59,9 @@ pub(super) fn starts_prompt(app: &BoardApp, popup: &InvocationPopup) -> bool {
     )
 }
 
-fn app_supports_shared_starters(app: &BoardApp) -> bool {
+fn app_supports_shared_commands(app: &BoardApp) -> bool {
     app.agent_targets()
         .iter()
         .filter(|target| target.delivery.supports())
-        .any(|target| agent_supports_shared_starters(target.agent_kind().as_str()))
+        .any(|target| agent_supports_shared_commands(target.agent_kind().as_str()))
 }

@@ -258,7 +258,7 @@ fn two_consecutive_blocked_vertical_moves_leave_edit_mode_for_a_neighbor() {
         fixture.app.interaction_mode(),
         proqi::application::InteractionMode::Board
     );
-    assert_eq!(fixture.app.state.focused_thought, Some(first));
+    assert_eq!(fixture.app.state.focused_thought_id(), Some(first));
 }
 
 #[test]
@@ -314,7 +314,7 @@ fn expanded_overflow_reaches_later_thoughts_and_insertion_without_blank_overscro
     fixture.input(crate::key_input(UiKey::Character('c')));
     durable_thought(&mut fixture, "final thought");
     fixture.input(crate::key_input(UiKey::Character('k')));
-    assert_eq!(fixture.app.state.focused_thought, Some(first));
+    assert_eq!(fixture.app.state.focused_thought_id(), Some(first));
 
     for _ in 0..40 {
         fixture.app.prepare_frame(Rect::new(0, 0, 42, 12));

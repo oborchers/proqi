@@ -2,6 +2,8 @@
   "schema_version": 1,
   "ok": true,
   "data": {
-    "sessions": []
+    "sessions": [],
+    "total": 0,
+    "next_after": null
   }
 }

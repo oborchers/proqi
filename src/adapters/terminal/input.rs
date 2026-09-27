@@ -25,6 +25,8 @@ use super::{
 use translation::translate;
 
 mod inspection;
+mod observation;
+use observation::{LeaseDecision, ReaderProgress, SourceLease};
 mod translation;
 pub(crate) use inspection::inspect_keypress;
 
@@ -69,6 +71,48 @@ impl EventSource for CrosstermEventSource {
     }
 }
 
+struct StallInjectingEventSource {
+    inner: CrosstermEventSource,
+    trigger: Option<PathBuf>,
+    stall_on_first_poll: bool,
+}
+
+impl StallInjectingEventSource {
+    fn new(runtime_directory: Option<&Path>) -> Self {
+        let trigger = std::env::var_os("PROQI_TEST_INPUT_STALL").and_then(|_| {
+            std::env::var_os("PROQI_TEST_INPUT_STALL_TRIGGER")
+                .map(PathBuf::from)
+                .or_else(|| runtime_directory.map(|root| root.join("input-stall-trigger")))
+        });
+        Self {
+            inner: CrosstermEventSource,
+            trigger,
+            stall_on_first_poll: std::env::var_os("PROQI_TEST_INPUT_STALL_PROBATION").is_some()
+                && std::env::var_os("PROQI_INPUT_RECOVERY_SESSION").is_some(),
+        }
+    }
+}
+
+impl EventSource for StallInjectingEventSource {
+    fn poll(&mut self, timeout: Duration) -> io::Result<bool> {
+        if std::mem::take(&mut self.stall_on_first_poll)
+            || self
+                .trigger
+                .as_ref()
+                .is_some_and(|path| fs::remove_file(path).is_ok())
+        {
+            loop {
+                thread::park();
+            }
+        }
+        self.inner.poll(timeout)
+    }
+
+    fn read(&mut self) -> io::Result<Event> {
+        self.inner.read()
+    }
+}
+
 pub(super) enum InputMessage {
     Event { sequence: u64, input: UiInput },
     Failed(InputFailure),
@@ -78,39 +122,52 @@ pub(super) struct InputLane {
     pub(super) receiver: Receiver<InputMessage>,
     stop: Arc<AtomicBool>,
     latest_sequence: Arc<AtomicU64>,
+    completed_polls: Arc<AtomicU64>,
     test_acceptance_path: Option<PathBuf>,
     handle: Option<JoinHandle<()>>,
 }
 
 impl InputLane {
     pub(super) fn spawn() -> Self {
-        Self::spawn_with_state_root(Box::new(CrosstermEventSource), None)
+        Self::spawn_source(Box::new(StallInjectingEventSource::new(None)), None)
     }
 
-    pub(super) fn spawn_with_test_acceptance(state_root: Option<&Path>) -> Self {
-        Self::spawn_with_state_root(Box::new(CrosstermEventSource), state_root)
+    pub(super) fn spawn_with_test_acceptance(runtime_directory: &Path) -> Self {
+        Self::spawn_source(
+            Box::new(StallInjectingEventSource::new(Some(runtime_directory))),
+            Some(runtime_directory),
+        )
     }
 
     #[cfg(test)]
     fn spawn_with_source(source: Box<dyn EventSource>) -> Self {
-        Self::spawn_with_state_root(source, None)
+        Self::spawn_source(source, None)
     }
 
-    fn spawn_with_state_root(source: Box<dyn EventSource>, state_root: Option<&Path>) -> Self {
+    fn spawn_source(source: Box<dyn EventSource>, runtime_directory: Option<&Path>) -> Self {
         let (sender, receiver) = sync_channel(64);
         let stop = Arc::new(AtomicBool::new(false));
         let latest_sequence = Arc::new(AtomicU64::new(0));
+        let completed_polls = Arc::new(AtomicU64::new(0));
         let worker_stop = Arc::clone(&stop);
         let worker_sequence = Arc::clone(&latest_sequence);
+        let worker_polls = Arc::clone(&completed_polls);
         let handle = thread::spawn(move || {
-            supervise_input(source, &sender, &worker_stop, &worker_sequence);
+            supervise_input(
+                source,
+                &sender,
+                &worker_stop,
+                &worker_sequence,
+                &worker_polls,
+            );
         });
         Self {
             receiver,
             stop,
             latest_sequence,
+            completed_polls,
             test_acceptance_path: std::env::var_os("PROQI_TEST_INPUT_ACCEPTANCE")
-                .and_then(|_| state_root.map(|root| root.join("runtime/input-accepted"))),
+                .and_then(|_| runtime_directory.map(|root| root.join("input-accepted"))),
             handle: Some(handle),
         }
     }
@@ -133,10 +190,15 @@ impl InputLane {
         self.latest_sequence.load(Ordering::Acquire)
     }
 
+    pub(super) fn completed_polls(&self) -> u64 {
+        self.completed_polls.load(Ordering::Acquire)
+    }
+
     pub(super) fn record_test_acceptance(&self, sequence: u64, mode: &str) {
         let Some(path) = &self.test_acceptance_path else {
             return;
         };
+        wait_for_test_input_release();
         let result = fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -147,6 +209,32 @@ impl InputLane {
             "test input-acceptance probe must be writable"
         );
     }
+}
+
+fn wait_for_test_input_release() {
+    if std::env::var_os("PROQI_TEST_INPUT_STALL").is_none() {
+        return;
+    }
+    let Some(arm) = std::env::var_os("PROQI_TEST_INPUT_BARRIER_ARM").map(PathBuf::from) else {
+        return;
+    };
+    if fs::remove_file(arm).is_err() {
+        return;
+    }
+    let Some(pending) = std::env::var_os("PROQI_TEST_INPUT_BARRIER_PENDING").map(PathBuf::from)
+    else {
+        return;
+    };
+    let Some(release) = std::env::var_os("PROQI_TEST_INPUT_BARRIER_RELEASE").map(PathBuf::from)
+    else {
+        return;
+    };
+    let _written = fs::write(pending, b"pending");
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !release.exists() && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(2));
+    }
+    debug_assert!(release.exists(), "test input barrier was not released");
 }
 
 impl Drop for InputLane {
@@ -161,58 +249,20 @@ enum SourceMessage {
     Failed(InputFailure),
 }
 
-#[derive(Debug, Eq, PartialEq)]
-enum LeaseDecision {
-    Continue,
-    ResetAfterSupervisorGap { gap: Duration },
-    Unresponsive,
-}
-
-struct SourceLease {
-    last_response: Instant,
-    last_observation: Instant,
-}
-
-impl SourceLease {
-    fn new(now: Instant) -> Self {
-        Self {
-            last_response: now,
-            last_observation: now,
-        }
-    }
-
-    fn observe(&mut self, now: Instant, reader_responded: bool) -> LeaseDecision {
-        let supervisor_gap = now.saturating_duration_since(self.last_observation);
-        self.last_observation = now;
-        if reader_responded {
-            self.last_response = now;
-            return LeaseDecision::Continue;
-        }
-        if supervisor_gap >= SOURCE_STALL_LIMIT {
-            self.last_response = now;
-            return LeaseDecision::ResetAfterSupervisorGap {
-                gap: supervisor_gap,
-            };
-        }
-        if now.saturating_duration_since(self.last_response) >= SOURCE_STALL_LIMIT {
-            LeaseDecision::Unresponsive
-        } else {
-            LeaseDecision::Continue
-        }
-    }
-}
-
 fn supervise_input(
     mut source: Box<dyn EventSource>,
     sender: &SyncSender<InputMessage>,
     stop: &AtomicBool,
     latest_sequence: &AtomicU64,
+    completed_polls: &AtomicU64,
 ) {
     let (source_sender, source_receiver) = sync_channel(64);
     let source_stop = Arc::new(AtomicBool::new(false));
     let reader_stop = Arc::clone(&source_stop);
+    let progress = Arc::new(ReaderProgress::new(Instant::now()));
+    let reader_progress = Arc::clone(&progress);
     let reader = thread::spawn(move || {
-        read_source(&mut *source, &source_sender, &reader_stop);
+        read_source(&mut *source, &source_sender, &reader_stop, &reader_progress);
     });
     let mut pending_resize = None;
     let mut lease = SourceLease::new(Instant::now());
@@ -220,9 +270,11 @@ fn supervise_input(
         flush_resize(sender, &mut pending_resize);
         match source_receiver.recv_timeout(MONITOR_INTERVAL) {
             Ok(SourceMessage::Responsive) => {
+                completed_polls.fetch_add(1, Ordering::AcqRel);
                 let _decision = lease.observe(Instant::now(), true);
             }
             Ok(SourceMessage::Event(event)) => {
+                completed_polls.fetch_add(1, Ordering::AcqRel);
                 let _decision = lease.observe(Instant::now(), true);
                 deliver(event, sender, stop, &mut pending_resize, latest_sequence);
             }
@@ -230,22 +282,25 @@ fn supervise_input(
                 let _sent = send_lossless(sender, InputMessage::Failed(failure), stop);
                 break;
             }
-            Err(RecvTimeoutError::Timeout) => match lease.observe(Instant::now(), false) {
-                LeaseDecision::Continue => {}
-                LeaseDecision::ResetAfterSupervisorGap { gap } => {
-                    crate::adapters::diagnostics::record_input_lease_reset(
-                        u64::try_from(gap.as_millis()).unwrap_or(u64::MAX),
-                    );
+            Err(RecvTimeoutError::Timeout) => {
+                let now = Instant::now();
+                let evidence = lease.evidence(now, &progress);
+                match lease.observe(now, false) {
+                    LeaseDecision::Continue => {}
+                    LeaseDecision::ResetAfterSupervisorGap { .. } => {
+                        observation::record_supervisor_gap(evidence);
+                    }
+                    LeaseDecision::Unresponsive => {
+                        observation::record_stall(evidence);
+                        let _sent = send_lossless(
+                            sender,
+                            InputMessage::Failed(InputFailure::Unresponsive),
+                            stop,
+                        );
+                        break;
+                    }
                 }
-                LeaseDecision::Unresponsive => {
-                    let _sent = send_lossless(
-                        sender,
-                        InputMessage::Failed(InputFailure::Unresponsive),
-                        stop,
-                    );
-                    break;
-                }
-            },
+            }
             Err(RecvTimeoutError::Disconnected) => {
                 let _sent = send_lossless(
                     sender,
@@ -271,21 +326,37 @@ fn read_source(
     source: &mut dyn EventSource,
     sender: &SyncSender<SourceMessage>,
     stop: &AtomicBool,
+    progress: &ReaderProgress,
 ) {
+    use crate::adapters::diagnostics::InputReaderStage::{Delivery, Poll, Read, Stopped};
     while !stop.load(Ordering::Acquire) {
-        let message = match source.poll(SOURCE_POLL_INTERVAL) {
+        progress.enter(Poll, Instant::now());
+        let polled = source.poll(SOURCE_POLL_INTERVAL);
+        progress.complete(Instant::now());
+        let message = match polled {
             Ok(false) => SourceMessage::Responsive,
-            Ok(true) => match source.read() {
-                Ok(event) => SourceMessage::Event(event),
-                Err(error) => SourceMessage::Failed(classify_input_error(&error)),
-            },
+            Ok(true) => {
+                progress.enter(Read, Instant::now());
+                let read = source.read();
+                progress.complete(Instant::now());
+                match read {
+                    Ok(event) => SourceMessage::Event(event),
+                    Err(error) => SourceMessage::Failed(classify_input_error(&error)),
+                }
+            }
             Err(error) => SourceMessage::Failed(classify_input_error(&error)),
         };
         let failed = matches!(message, SourceMessage::Failed(_));
-        if !send_source(message, sender, stop) || failed {
-            return;
+        progress.enter(Delivery, Instant::now());
+        let delivered = send_source(message, sender, stop);
+        if delivered {
+            progress.complete(Instant::now());
+        }
+        if !delivered || failed {
+            break;
         }
     }
+    progress.enter(Stopped, Instant::now());
 }
 
 fn send_source(

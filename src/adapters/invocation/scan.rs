@@ -166,6 +166,8 @@ impl InvocationCatalog for FilesystemInvocationCatalog {
 }
 
 fn compatible_roots(cwd: &Path, home: Option<&Path>) -> Vec<ScanRoot> {
+    let canonical_home =
+        home.map(|path| fs::canonicalize(path).unwrap_or_else(|_| path.to_owned()));
     let project_bases = roots::project_bases(cwd);
     roots::COMPATIBILITY_ROOTS
         .iter()
@@ -173,6 +175,9 @@ fn compatible_roots(cwd: &Path, home: Option<&Path>) -> Vec<ScanRoot> {
             InvocationScope::Project => project_bases
                 .iter()
                 .enumerate()
+                .filter(|(_, base)| {
+                    !roots::global_owns_project_path_at_home(spec, base, canonical_home.as_deref())
+                })
                 .map(|(distance, base)| from_spec(base, spec, distance))
                 .collect::<Vec<_>>(),
             InvocationScope::Global => home

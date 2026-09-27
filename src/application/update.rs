@@ -190,10 +190,11 @@ fn result(
         .latest_stable
         .as_ref()
         .is_some_and(|latest| latest > &installed_version);
-    let suppressed = state.latest_stable.as_ref().is_some_and(|latest| {
-        state.skipped_version.as_ref() == Some(latest)
-            || state.dismissed_version.as_ref() == Some(latest)
-    });
+    let suppressed = state.external_restart.is_some()
+        || state.latest_stable.as_ref().is_some_and(|latest| {
+            state.skipped_version.as_ref() == Some(latest)
+                || state.dismissed_version.as_ref() == Some(latest)
+        });
     let availability = if !update_available {
         UpdateAvailability::Current
     } else if suppressed {

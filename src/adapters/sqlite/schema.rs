@@ -1,5 +1,13 @@
 //! Forward-only SQLite schema.
 
+mod late;
+mod protocol_stamps;
+
+pub(super) use late::{MIGRATION_17, MIGRATION_18, MIGRATION_19, MIGRATION_20};
+pub(super) use protocol_stamps::{
+    MIGRATION_9, MIGRATION_10, MIGRATION_12, MIGRATION_15, MIGRATION_21, MIGRATION_22,
+};
+
 pub(super) const MIGRATION_1: &str = r"
 CREATE TABLE schema_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -37,6 +45,7 @@ CREATE TABLE thoughts (
     id BLOB PRIMARY KEY CHECK (length(id) = 16),
     session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
+    name TEXT,
     annotations_json TEXT NOT NULL DEFAULT '[]',
     position INTEGER NOT NULL CHECK (position >= 0),
     created_at INTEGER NOT NULL,
@@ -53,6 +62,21 @@ ON thoughts(session_id, position)
 WHERE deleted_at IS NULL;
 
 CREATE INDEX thoughts_session ON thoughts(session_id);
+
+CREATE TABLE separators (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER
+) STRICT;
+
+CREATE UNIQUE INDEX separators_live_position
+ON separators(session_id, position)
+WHERE deleted_at IS NULL;
+
+CREATE INDEX separators_session ON separators(session_id);
 
 CREATE TABLE board_operations (
     id BLOB PRIMARY KEY CHECK (length(id) = 16),
@@ -81,6 +105,9 @@ CREATE TABLE commit_receipts (
     entity_kind TEXT NOT NULL,
     external_id BLOB NOT NULL CHECK (length(external_id) = 16),
     request_json TEXT NOT NULL,
+    semantic_fingerprint BLOB CHECK (
+        semantic_fingerprint IS NULL OR length(semantic_fingerprint) = 32
+    ),
     created_at INTEGER NOT NULL,
     PRIMARY KEY(session_id, sequence),
     UNIQUE(entity_kind, external_id)
@@ -174,6 +201,23 @@ CREATE UNIQUE INDEX submission_attempt_items_active_thought
 ON submission_attempt_items(thought_id)
 WHERE active = 1;
 
+CREATE TABLE transfer_attempts (
+    operation_id BLOB PRIMARY KEY CHECK (length(operation_id) = 16),
+    source_session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    destination_session_id BLOB NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    removal_operation_id BLOB NOT NULL UNIQUE CHECK (length(removal_operation_id) = 16),
+    request_json TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('prepared', 'sending', 'accepted', 'completed')),
+    destination_receipt_json TEXT,
+    completed_reason TEXT,
+    created_at INTEGER NOT NULL,
+    CHECK ((status IN ('accepted', 'completed')) = (destination_receipt_json IS NOT NULL))
+) STRICT;
+CREATE TABLE transfer_source_claims (
+    source_thought_id BLOB PRIMARY KEY CHECK (length(source_thought_id) = 16),
+    operation_id BLOB NOT NULL REFERENCES transfer_attempts(operation_id) ON DELETE CASCADE
+) STRICT;
+
 CREATE VIRTUAL TABLE session_search USING fts5(
     session_id UNINDEXED,
     name,
@@ -201,6 +245,12 @@ INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
 INSERT INTO migration_history(version, applied_at) VALUES (16, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (17, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (18, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (19, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (20, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (21, 0);
+INSERT INTO migration_history(version, applied_at) VALUES (22, 0);
 ";
 
 pub(super) const MIGRATION_2: &str = r"
@@ -304,16 +354,6 @@ UPDATE schema_meta SET schema_version = 8, storage_protocol = 8;
 INSERT INTO migration_history(version, applied_at) VALUES (8, 0);
 ";
 
-pub(super) const MIGRATION_9: &str = r"
-UPDATE schema_meta SET schema_version = 9, storage_protocol = 9;
-INSERT INTO migration_history(version, applied_at) VALUES (9, 0);
-";
-
-pub(super) const MIGRATION_10: &str = r"
-UPDATE schema_meta SET schema_version = 10, storage_protocol = 10;
-INSERT INTO migration_history(version, applied_at) VALUES (10, 0);
-";
-
 pub(super) const MIGRATION_11: &str = r"
 CREATE TABLE onboarding_state (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -322,11 +362,6 @@ CREATE TABLE onboarding_state (
 INSERT INTO onboarding_state(singleton, completed_version) VALUES (1, 1);
 UPDATE schema_meta SET schema_version = 11;
 INSERT INTO migration_history(version, applied_at) VALUES (11, 0);
-";
-
-pub(super) const MIGRATION_12: &str = r"
-UPDATE schema_meta SET schema_version = 12, storage_protocol = 11;
-INSERT INTO migration_history(version, applied_at) VALUES (12, 0);
 ";
 
 pub(super) const MIGRATION_13: &str = r"
@@ -394,16 +429,13 @@ UPDATE schema_meta SET schema_version = 13, storage_protocol = 12;
 INSERT INTO migration_history(version, applied_at) VALUES (13, 0);
 ";
 
+/// First schema whose durable attachments already carry stable session ordinals.
+pub(super) const ATTACHMENT_ORDINAL_SCHEMA_VERSION: u32 = 14;
+
 pub(super) const MIGRATION_14: &str = r"
 ALTER TABLE sessions ADD COLUMN attachment_image_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_image_high >= 0);
 ALTER TABLE sessions ADD COLUMN attachment_file_high INTEGER NOT NULL DEFAULT 0 CHECK (attachment_file_high >= 0);
 INSERT INTO migration_history(version, applied_at) VALUES (14, 0);
-";
-
-// Register the Reflow operation kind after the attachment numbering schema.
-pub(super) const MIGRATION_15: &str = r"
-UPDATE schema_meta SET schema_version = 15, storage_protocol = 14;
-INSERT INTO migration_history(version, applied_at) VALUES (15, 0);
 ";
 
 // Add the installation-wide session Browser history after Reflow's schema.

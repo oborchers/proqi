@@ -176,7 +176,11 @@ fn palette_submit_all_keep_and_remove_share_one_exact_ordered_request() {
     populate_exact_board(&mut fixture);
     fixture.input(crate::key_input(UiKey::Character('k')));
     fixture.input(crate::key_input(UiKey::Character(' ')));
-    let selected = fixture.app.state.focused_thought.expect("selected source");
+    let selected = fixture
+        .app
+        .state
+        .focused_thought_id()
+        .expect("selected source");
     let target = super::agent::target(Direction::Left, "w1:p2");
     fixture
         .app
@@ -266,7 +270,11 @@ fn ambiguous_direction_keeps_selection_stable_through_pointer_and_resize() {
     }
     fixture.acknowledge_all_persistence();
     fixture.input(crate::key_input(UiKey::Character(' ')));
-    let selected = fixture.app.state.focused_thought.expect("selected thought");
+    let selected = fixture
+        .app
+        .state
+        .focused_thought_id()
+        .expect("selected thought");
     let left = super::agent::target(Direction::Left, "w1:p2");
     let right = super::agent::target(Direction::Right, "w1:p3");
     fixture
@@ -365,7 +373,11 @@ fn target_change_during_direction_choice_sends_nothing_and_preserves_selection()
     }
     fixture.acknowledge_all_persistence();
     fixture.input(crate::key_input(UiKey::Character(' ')));
-    let selected = fixture.app.state.focused_thought.expect("selected thought");
+    let selected = fixture
+        .app
+        .state
+        .focused_thought_id()
+        .expect("selected thought");
     fixture.app.complete_agent_discovery(Ok(vec![
         super::agent::target(Direction::Left, "w1:p2"),
         super::agent::target(Direction::Right, "w1:p3"),

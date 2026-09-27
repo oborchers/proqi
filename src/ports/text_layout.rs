@@ -88,6 +88,19 @@ pub(crate) fn cursor_cell(value: &str, cursor_byte: usize) -> usize {
     cells
 }
 
+/// Resolve one terminal cell in a single displayed line to a grapheme boundary.
+pub(crate) fn byte_at_display_cell(value: &str, target: usize) -> usize {
+    let mut cells = 0_usize;
+    for (byte, grapheme) in value.grapheme_indices(true) {
+        let width = grapheme_cell_width(grapheme, cells);
+        if target < cells.saturating_add(width) {
+            return byte;
+        }
+        cells = cells.saturating_add(width);
+    }
+    value.len()
+}
+
 /// Move to the preceding Unicode word start, or the start of the field.
 pub(crate) fn word_back(value: &str, cursor: usize) -> usize {
     word_segments(value)

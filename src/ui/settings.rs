@@ -35,6 +35,8 @@ pub struct UiSettings {
     pub keyboard_enhancement: KeyboardEnhancement,
     /// Request terminal mouse capture (xterm SGR mouse reporting) on entry.
     pub mouse_capture: bool,
+    /// Hide optional persistent footer chrome while retaining safety status and recovery controls.
+    pub footer_hidden: bool,
     /// Fully resolved and validated contextual keyboard map.
     pub shortcuts: super::ShortcutRegistry,
     /// Vertical separation between thoughts.
@@ -51,6 +53,7 @@ impl Default for UiSettings {
             merge_separator: "\n\n".to_owned(),
             keyboard_enhancement: KeyboardEnhancement::default(),
             mouse_capture: true,
+            footer_hidden: false,
             shortcuts: super::ShortcutRegistry::default(),
             density: BoardDensity::default(),
         }

@@ -118,6 +118,40 @@ The canonical image repository is checked in at `tools/ci-linux/image.json`.
 Mutable image tags are rejected. Neither container path is part of routine
 release-input preparation.
 
+## Build the user documentation
+
+The user site uses MkDocs Material with documentation-only Python dependencies
+locked below `docs/`. Install [uv](https://docs.astral.sh/uv/), then run:
+
+```shell
+cargo xtask docs
+```
+
+The coverage check reads the shipped Rust registries and fails when a Commands
+action or public CLI surface is absent from its reference page. The strict
+build validates navigation and writes the ignored static artifact to
+`target/docs-site/`. The rendered-site check then verifies every local HTML
+link, fragment, script, stylesheet, image, and image alt attribute in that exact
+artifact.
+
+For a local preview:
+
+```shell
+UV_PROJECT_ENVIRONMENT=../target/docs-venv uv run --project docs mkdocs serve
+```
+
+The `Docs` workflow runs the same command after a push to `main`, uploads the
+exact checked artifact, and deploys it to
+<https://oborchers.github.io/proqi/> through GitHub Pages. Pull requests build
+and preserve a preview artifact through the ordinary Documentation gate but do
+not publish it. Pages must use **GitHub Actions** as its repository publishing
+source; no generated site branch is committed.
+
+`cargo xtask check` includes the documentation build whenever classified inputs
+affect it. The canonical `cargo xtask check-full` remains exactly quality plus
+tests, so run `cargo xtask docs` separately during final qualification for a
+documentation change.
+
 ## Code guardrails
 
 - Format Rust with the checked-in rustfmt configuration.

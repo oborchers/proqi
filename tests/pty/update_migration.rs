@@ -34,8 +34,30 @@ use rusqlite::Connection;
 mod automatic;
 #[path = "update_migration/cohort.rs"]
 mod cohort;
+#[path = "update_migration/cohort_tests.rs"]
+mod cohort_tests;
+#[path = "update_migration/evidence.rs"]
+mod evidence;
+#[path = "update_migration/external_compatible.rs"]
+mod external_compatible;
+#[path = "update_migration/external_recovery.rs"]
+mod external_recovery;
+#[path = "update_migration/external_source.rs"]
+mod external_source;
+#[path = "update_migration/external_upgrade.rs"]
+mod external_upgrade;
+#[path = "update_migration/fixture_lock.rs"]
+mod fixture_lock;
+#[path = "update_migration/gateway_trace.rs"]
+mod gateway_trace;
+#[path = "update_migration/gateway_trace_tests.rs"]
+mod gateway_trace_tests;
+#[path = "update_migration/historical_fixture.rs"]
+mod historical_fixture;
 #[path = "update_migration/old_fixture.rs"]
 mod old_fixture;
+#[path = "update_migration/recovery_upgrade.rs"]
+mod recovery_upgrade;
 
 use cohort::{OWNER_TIMEOUT, Owners, active_instances, control_ready};
 
@@ -280,12 +302,19 @@ fn downgrade_to_schema_eleven(state: &Path) {
     Connection::open(state.join("data/proqi.sqlite3"))
         .expect("database")
         .execute_batch(
-            "DROP TABLE browser_history_receipts;
+            "ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
+             ALTER TABLE thoughts DROP COLUMN name;
+             DROP INDEX separators_session;
+             DROP INDEX separators_live_position;
+             DROP TABLE separators;
+             DROP TABLE browser_history_receipts;
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
              DROP TABLE browser_history_state;
              ALTER TABLE sessions DROP COLUMN attachment_image_high;
              ALTER TABLE sessions DROP COLUMN attachment_file_high;
+             DROP TABLE IF EXISTS transfer_source_claims;
+             DROP TABLE IF EXISTS transfer_attempts;
              DELETE FROM migration_history WHERE version >= 12;
              UPDATE schema_meta SET schema_version = 11, storage_protocol = 10;",
         )

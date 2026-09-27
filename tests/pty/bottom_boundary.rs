@@ -102,7 +102,7 @@ fn run_workflow(binary: &str, state: &std::path::Path, session: &str, script: &s
 
 fn assert_durable_order(binary: &str, state: &std::path::Path, session: &str) {
     let listed = json_command(binary, state, &["thoughts", "list", session]);
-    let thoughts = listed["data"]["thoughts"].as_array().expect("thoughts");
+    let thoughts = listed["data"]["items"].as_array().expect("thoughts");
     assert_eq!(thoughts.len(), 12);
     assert_eq!(thoughts.first().expect("first")["content"], TOP_SENTINEL);
     assert_eq!(thoughts.last().expect("last")["content"], BOTTOM_SENTINEL);

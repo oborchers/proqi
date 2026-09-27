@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-09-12
+Last updated: 2026-09-25
 
 ## Vision
 
@@ -45,14 +45,14 @@ There is no save command. Content is saved automatically.
 
 ### Structure must earn its place
 
-A thought has content, position, timestamps, revision history, and session
-membership. It does not require a title, status, priority, category, or due
-date.
+A thought has content, position, timestamps, revision history, session
+membership, and an optional short name. It does not require a name, status,
+priority, category, or due date.
 
-Titles would force the user to describe a thought before using it. They add an
-interaction without helping the primary workflow. A collapsed thought uses its
-first visible lines as its preview. The data model may support optional titles
-later, but the default interface does not show or request them.
+Names are organizational metadata, never thought content. Creation remains
+immediate and never asks for a name. A user may name a focused thought later
+through one direct action. Unnamed thoughts keep the ordinary titleless layout
+without reserved chrome, while a name uses existing whitespace above the body.
 
 ### Order is spatial organization
 
@@ -113,6 +113,14 @@ never uploads the bundle and never overwrites an existing output file.
 Update diagnostics add only reviewed schema stages, aggregate selected and
 prepared counts, restart request and acceptance counts, replacement ready and
 missing counts, stable failure stage and code pairs, and final convergence.
+Input recovery diagnostics add only a stable lifecycle stage, stable reason,
+per-session attempt count, and outcome. Admission records distinguish fresh
+startup, retirement of an obsolete record, disabled recovery, and automatic
+probation. Reader-stall and supervisor-gap events add the observed poll, read,
+or delivery stage, last completed stage, and elapsed stage, completion, lease,
+and observer gaps. These observations do not identify an upstream cause.
+They do not record session identity,
+process identity, paths, terminal bytes, pane topology, or thought content.
 
 ## Core concepts
 
@@ -128,7 +136,7 @@ owns one session. A session records:
 - Creation, most recent opening, and last activity timestamps.
 - Whether it is currently open.
 - Optional last-known terminal integration and verified adjacent-agent context.
-- Its thoughts and persistent operation history.
+- Its thoughts, visual separators, and persistent operation history.
 
 Directory metadata helps rank, recognize, and resume sessions. It does not make
 all instances in the same directory share one session. Terminal pane IDs are
@@ -139,12 +147,26 @@ diagnostic context only because they are not durable across terminal restarts.
 A thought is one independently editable body of plain text. It can contain one
 line, many paragraphs, code, logs, or arbitrary pasted context.
 
-A thought has no required title. Its content is the object.
+A thought has no required name. Its optional short name is separate
+organizational metadata. Copy and agent submission use the body and its
+annotations without adding the name.
+
+### Separator
+
+A separator is one durable, payload-free Board item. It has a stable identity
+and position, but no text, editor, title, color setting, or ownership of nearby
+thoughts. It is visual organization only. Moving or deleting it never moves or
+deletes an adjacent thought.
+
+The Commands action `Insert separator` creates one separator below the focused
+item. On an empty Board it creates the first item without creating a blank
+Thought. Consecutive separators remain
+distinct selectable items.
 
 ### Board
 
-The board is the vertically ordered set of thoughts in a session. It is the
-default screen and normally uses the entire terminal pane.
+The board is the vertically ordered set of thoughts and separators in a
+session. It is the default screen and normally uses the entire terminal pane.
 
 The reference layout is intentionally closer to a quiet editor than to a task
 manager:
@@ -171,9 +193,11 @@ manager:
  n new   y copy   x cut   space select   c collapse   s submit
 ```
 
-The green focus gutter is the strongest routine visual element. Notes have no
-heading row or decorative card chrome. Whole-thought controls can appear for
-the focused or hovered thought without permanently consuming a row.
+The green focus gutter is the strongest routine visual element. Unnamed notes
+have no heading row or decorative card chrome. An optional name appears in a
+restrained accent above the body and uses no body-selection space. Whole-thought
+controls can appear for the focused or hovered thought without permanently
+consuming a row.
 
 The board spends no permanent row on a repeated product header. The footer can
 allocate up to five responsive bands: transient status, session name, thought
@@ -182,6 +206,17 @@ targets that currently exist. Empty optional bands consume no row. The session
 name remains a visible rename target at every supported height and truncates
 without covering status or board state. Narrow panes shorten secondary labels
 before any two regions can collide.
+
+`footer_hidden = true` is a launch-time global configuration that removes the
+optional persistent footer chrome and every optional gap so thoughts receive the
+reclaimed rows. It hides the session identity, board summary, shortcut and
+agent hints, and the ordinary session-browser shortcut footer. In Board, the
+unmodified `h` key default for `footer.toggle` temporarily reverses that
+visibility for the current Proqi process. It never changes configuration or persistence, and
+restart restores the configured initial state. It never
+hides transient operational status, Screenshot Inbox listening or pause state,
+durability failure explanation, retry or export recovery controls, or a
+browser rename confirmation. Keyboard actions and Commands remain available.
 
 ### Revision and operation history
 
@@ -344,7 +379,10 @@ Bracketed paste is treated as one semantic input event.
   undo and redo step. Whitespace-only cleanup does not create a thought or
   replace a selection. A failed transformation pastes the original payload
   exactly and reports the fallback.
-- `Clean up spacing` applies the same classifier to one existing thought. Plain
+- `Clean up spacing` applies the same classifier to eligible selected thoughts
+  in Board, or to one focused thought without a selection. Separators remain
+  untouched. Effective selected cleanup is one durable Board history unit;
+  an unchanged selection creates no history. Plain
   `f` targets the focused durable thought in Board; `Control+Shift+F` targets
   the complete active thought in Edit, including content outside the selection
   and collapsed large-paste envelopes. Plain `f` remains editor text. Both
@@ -566,11 +604,15 @@ submit-and-remove that leaves the board empty enters Compose when it preserves
 the active focus workflow. Accepted submission does so only after the matching
 receipt is durably journaled and source deletion is acknowledged, then shows
 the passive `+ Start typing` prompt rather than a replacement empty thought or
-engaged editor. Background
-capture, owner-control mutation, recovery, discovery, and unrelated asynchronous
-completion never force Compose or steal an active editor. An external addition
-while Compose is active remains ordered beside the untouched transient editor,
-and subsequent typing materializes normally.
+engaged editor. Background capture, recovery, discovery, and unrelated
+asynchronous completion never force Compose or steal an active editor. When an
+active empty Board in untouched Compose receives its first durable item through
+the public API or owner control, it enters Board mode and focuses that item.
+Board focus has a visible gutter but no editor caret; Edit remains explicit. A
+failed, rejected, or replayed request does not trigger this handoff. Accepted
+Compose input or a pending Compose clipboard result keeps its owner until that
+work resolves; a later external addition never steals established Board or Edit
+focus.
 
 ### Copy, cut, and delete
 
@@ -641,23 +683,29 @@ offer stronger ownership.
 
 ### Multi-selection
 
-`Space` toggles the focused thought in a visible board selection. Selected
-thoughts retain their board positions and receive the same non-color focus cue
-as the active thought. Copy, cut, delete, duplicate, collapse, and adjacent-agent
-submission address the selected set in board order. Each structural action is
-one persistent board operation and therefore one undo step. Reordering remains
-a single-thought action.
+`Space` toggles the focused Board item in a visible selection. Selected items
+retain their board positions and receive the same non-color focus cue as the
+active item. Delete and duplicate address thoughts and separators in Board
+order. Copy, cut, collapse, transformations, and agent submission operate only
+on eligible thoughts. Separators are omitted from copied and submitted text and
+remain in place when accepted submission removes thoughts. A separator-only
+copy, cut, or submission is a visible no-op that neither overwrites the
+clipboard nor sends an empty delivery. Each structural action is one persistent
+Board operation and therefore one undo step. Reordering moves the selected
+Board items in their existing relative order. Clean up spacing and
+cross-session delivery address only selected thoughts; separators remain
+structural and do not become text or destination copies.
 
-The configurable `a` board command selects every live thought in board order.
+The configurable `a` board command selects every live item in board order.
 Forwarded `Primary+A` has the same board meaning. Repeating either spelling is
 idempotent, and `Escape` clears the complete board selection. In edit mode,
 `Primary+A` continues to select only the current thought's text.
 
 `Shift+Up` and `Shift+Down`, or equivalently `K` and `J`, start or update one
-contiguous selection from a stable thought anchor to the focused endpoint.
+contiguous selection from a stable item anchor to the focused endpoint.
 Reversing direction shrinks the range and then extends it past the anchor
 without changing that anchor. Range movement stops at the first and last live
-thoughts, never wraps, and never includes the insertion row. Starting a range
+items, never wraps, and never includes the insertion row. Starting a range
 replaces any arbitrary `Space` selection. Pressing `Space` explicitly returns
 to discontiguous toggle behavior; the two selection models are never merged
 implicitly.
@@ -668,10 +716,11 @@ thought bindings extend or shrink the range, and clicking a thought extends to
 it. `Escape` clears the range and latch. Opening a modal releases the latch,
 and entering thought edit mode clears every board selection.
 
-`Primary+D` or the terminal-safe Board alias `Shift+D` duplicates the focused thought
-or complete selection. Exact content, annotations, and presentation preferences
-are copied in board order directly below the source range. Duplicates receive
-fresh identities and timestamps,
+`Primary+D` or the terminal-safe Board alias `Shift+D` duplicates the focused item
+or complete selection. Thought content, annotations, and presentation
+preferences are copied exactly, while separators remain payload-free. Copies
+are inserted in Board order directly below the source range. Duplicates receive
+fresh typed identities and timestamps,
 become the new selection, and are created as one persistent undo step. Entering
 edit mode or pressing `Escape` clears the complete board selection.
 
@@ -689,7 +738,7 @@ the matching durable receipt. Every source thought is locked
 against TUI and CLI mutation from submission intent until the attempt reaches a
 terminal journaled state.
 
-The command palette also exposes `Select all thoughts`, `Submit all`, and
+The command palette also exposes `Select all items`, `Submit all`, and
 `Submit all and keep`. The two submit-all actions address the complete live
 board directly, without changing the visible selection or requiring a
 confirmation. `Submit all` removes unchanged sources only after matching
@@ -715,7 +764,8 @@ focus in edit mode with its cursor at the end. An empty or stale selection is
 rejected without mutation.
 
 `Merge selected thoughts` requires at least two thoughts that are contiguous in
-board order. It keeps the first identity, concatenates exact content with
+the mixed Board order. An intervening separator breaks contiguity and remains
+unchanged. It keeps the first identity, concatenates exact content with
 `merge_separator` from `config.toml`, default `"\n\n"`, and recoverably deletes
 the remaining sources. The survivor receives board focus and the selection is
 cleared. A locked, stale, or discontiguous source set produces actionable
@@ -859,9 +909,13 @@ Thoughts can be moved up and down with `Primary+Shift+Up` and
 The macOS factory map additionally provides `Option+Shift+Up` and
 `Option+Shift+Down`, which stock Ghostty can deliver when it consumes the
 Command-based aliases.
-Reordering is immediate, autosaved, and undoable.
+Reordering is immediate, autosaved, and undoable. When multiple Board items
+are selected, each contiguous selected run exchanges with its adjacent
+unselected neighbor in the requested direction. An edge run stays put,
+and an effective move is one durable undo step. Selection and focus retain
+the same item identities.
 
-Keyboard reordering wraps across the board boundaries. Moving the last thought
+Single-item keyboard reordering wraps across the board boundaries. Moving the last thought
 down places it first, and moving the first thought up places it last. Mouse drag
 remains positional and does not wrap.
 
@@ -903,7 +957,7 @@ bindings are:
 | Delete thought | `d` or `Del` (`Entf` on German keyboards) | Click delete control |
 | Duplicate thought or selection | `Primary+D` or `Shift+D` | Command palette |
 | Select or deselect thought | `Space` | Click the thought, then use the selection control |
-| Select all thoughts | `a` or `Primary+A` | Command palette |
+| Select all items | `a` or `Primary+A` | Command palette |
 | Select contiguous range | `Shift+↑` / `Shift+↓`, `K` / `J`, or `v` then arrows or `j` / `k` | Shift-click a thought, or use `v` then click it |
 | Focus first or last live thought | `Ctrl+↑` / `↓` or `Ctrl+k` / `j`; the range latch extends to that boundary | Choose `Go to first thought` or `Go to last thought` in Commands |
 | Extend range to a Board boundary | macOS `Ctrl+Shift+↑` / `↓` or `Ctrl+Shift+K` / `J` | Use the range latch and choose the boundary thought elsewhere |
@@ -930,7 +984,8 @@ printable input, including Option/Alt and Control+Alt layout text. Browser
 management uses F2 and F8 while its query is empty; R and D enter search text.
 
 The default Board map has one spelling-independent modifier ladder: plain
-moves focus, Shift extends a range, and Primary+Shift reorders one thought.
+moves focus, Shift extends a range, and Primary+Shift reorders the selected
+items or the focused item.
 Exact Control moves to the first or last live thought. On macOS, Control+Shift
 extends the existing anchored range to that boundary. Portable Control+Shift
 retains its established Primary+Shift reorder meaning, so the shifted boundary
@@ -1140,19 +1195,31 @@ complete. A row-bounded provider snapshot retains valid references and reports
 the exact incomplete source. Outside Herdr, the existing invocation behavior
 is unchanged.
 
-A small data-driven built-in table sits beside filesystem results: `/plan` and
-`/goal` are offered as shared Commands only at byte zero when a verified
-adjacent Codex or Claude Code target exists. Exact discovered invocations and
-these shared starters use the annotation color and bold non-color cue already
-used for folded image and large-paste placeholders. For shared starters, leading
-whitespace, another line, partial tokens, and in-body starter prose remain
-ordinary text.
+A small data-driven built-in table sits beside filesystem results. It contains
+the 19 commands documented by both Codex and Claude Code: `/btw`, `/clear`,
+`/compact`, `/diff`, `/fast`, `/goal`, `/hooks`, `/mcp`, `/model`, `/new`,
+`/permissions`, `/plan`, `/rename`, `/resume`, `/review`, `/skills`, `/status`,
+`/theme`, and `/usage`. These shared Commands are offered only at byte zero when
+a verified adjacent Codex or Claude Code target exists. Exact discovered
+invocations and these shared commands use the annotation color and bold
+non-color cue already used for folded image and large-paste placeholders.
+At byte zero, a valid prefix may open completion. Highlighting requires a
+complete token boundary. Leading whitespace, another line, in-body command
+prose, and extended names remain ordinary text and never offer a built-in.
 
-The byte-zero restriction belongs only to those two shared starters. An exact
-compatible discovered slash form may receive the same render-only treatment at
-a token boundary after whitespace or on a later logical line. Partial names,
-embedded paths, URLs, fenced code, unsupported forms, and non-boundary matches
-remain plain. Discovery, picker entries, and canonical text are unchanged.
+The byte-zero restriction belongs only to the checked-in shared commands. A
+non-colliding exact compatible discovered slash form may receive the same
+render-only treatment at a token boundary after whitespace or on a later
+logical line.
+Partial names, embedded paths, URLs, fenced code, unsupported forms, and
+non-boundary matches remain plain. Discovery, picker entries, and canonical text
+are unchanged. Only `/plan` and `/goal` retain the special outbound policy that
+omits a complete starter from later thoughts in a multi-thought submission. All
+other shared commands and their arguments remain exact in every source position.
+A compatible discovered form with the same token inherits the established
+document-start-only collision rule. When the shared built-in is available, its
+row deduplicates the discovered row. Otherwise the compatible discovered form
+remains available at byte zero under its ordinary target fallback.
 
 Durable shortcut emphasis is a separate closed presentation kind for exact
 application-authored instructional ranges. It uses the global annotation role
@@ -1237,18 +1304,113 @@ inconsistently. All mouse actions have keyboard equivalents.
 
 ### Cross-session thought delivery
 
-The command palette can copy the selected thought into another resumable Proqi
+The command palette can copy the selected thoughts into another resumable Proqi
 session. A searchable destination picker matches exact names, paths, and
 derived excerpts. Duplicate names remain valid, but a typed session identifier
 is required when a name is ambiguous.
 
-Send preserves the source. Send and remove commits the exact content and its
-presentation annotations in the destination first, then performs an ordinary
-undoable source deletion only after the destination returns a durable receipt.
-Failure, ambiguity, or an unsupported active owner leaves the source unchanged.
-Undo restores only the source deletion and never retracts the destination copy.
+Send preserves the sources. A selected transfer copies every eligible thought
+in Board order as one destination operation, preserving names, canonical text,
+and presentation annotations while allocating new attachment occurrences.
+Separators are never copied. Success requires a durable receipt for the complete
+cohort. Send and remove commits one ordinary undoable source deletion only
+after that receipt. A durable source intent and stable operation identities
+let retry and restart resolve an ambiguous delivery without duplicating copies
+or losing a partial subset. Failure or an unsupported active owner leaves all
+sources unchanged. Undo restores only the source deletion and never retracts
+the destination copies.
 The scriptable CLI exposes the same behavior with `thoughts send` and separate
 idempotency identifiers for destination creation and optional source removal.
+
+### Export thoughts to a file
+
+Selected thoughts, or the focused thought, can be saved as one plain-text file
+the way a text editor saves a file. Commands offers three actions, each
+unbound by default and bindable through versioned configuration as
+`thought.export`, `thought.export_remove`, and `thought.export_replace`:
+
+- **Export to file...** writes the file and leaves the Board unchanged.
+- **Export to file and remove...** writes the file, then recoverably deletes the
+  exported thoughts.
+- **Export to file and replace with reference...** writes the file, then
+  replaces the exported thoughts with one thought whose canonical content is the
+  file's absolute path followed by one ASCII space. The attachment annotation
+  covers only the path and receives the next session File ordinal, so the
+  reference folds as `[File N]` exactly like a Screenshot Inbox capture. The new
+  thought takes the first exported thought's Board position and receives focus.
+
+The destination is a one-line path field owned by the shared single-line text
+editor. It is prefilled with the session directory, the session's most recent
+opening directory, joined with a default name. One selected thought with a name
+uses that name; otherwise the name is the session label plus a UTC timestamp
+`YYYY-MM-DD-HHMMSS`. Separators, controls, and `:*?"<>|` become `-`, leading
+dots are removed, and `.txt` is appended. The field is fully editable. `~/`
+resolves from the home directory and every other relative path from the
+session directory. `.` and `..` resolve as text, so the saved path and a
+reference thought name the same clean absolute path. When the session directory
+is not valid UTF-8, the field starts empty with a message asking for an absolute
+destination. `Tab` completes the final path component from one bounded listing
+of the entries in its folder that start with the typed name. Matching and the
+longest shared prefix always consider every listed match, and at most 64
+choices are offered, with a message when more matched. When a folder is too
+large to list completely, completion never claims a single match or no match and
+asks for more of the name instead. Completion extends to the longest shared
+prefix and then cycles through the remaining choices; `Shift+Tab` cycles back,
+and Down and Up and the wheel move through them the same way. PageDown and PageUp
+jump five choices and stop at the first and last. Printable letters, including
+`j` and `k`, always stay text in the field. The list scrolls so the
+highlighted choice stays visible, with overflow markers. Hidden entries appear
+only after a typed leading dot. Every completion is one undo step of the field.
+Completion rows and the save row are pointer targets. A missing parent folder is
+an error and is never created. A Git working tree gets no special treatment, so
+the default path writes into the working tree by design.
+
+The file content is exactly the copy text of the same selection: canonical
+bodies in Board order joined by one blank line, without names, headings, or
+other formatting. The configurable `merge_separator` applies to merging only
+and never to export. Any typed file name is accepted, and the extension never
+changes the content. Attachment paths appear exactly as in the copy text;
+attached files are never copied.
+
+An existing regular file is never replaced silently. Proqi asks with **Cancel**
+preselected; Cancel, `Escape`, and the close control all return to the path
+field with the typed path kept. It replaces only a file whose content-free identity (device, inode,
+length, and modification time) still matches the one it observed; a file changed
+or removed during the confirmation is reported and nothing is replaced. A
+same-length rewrite within the file system's timestamp granularity is
+indistinguishable from the observed file. An
+existing symbolic link, folder, or other non-regular entry is refused, so a
+link is never replaced by a regular file.
+
+The write goes through a temporary file in the destination folder. The file is
+synchronized, atomically moved into place without replacing an entry that
+appeared meanwhile unless replacement was confirmed, and the folder is
+synchronized. A new file's permissions follow the user's umask. A replacement
+takes the replaced file's read, write, and execute bits before it is moved into
+place, as text editors do; set-user-ID and set-group-ID bits, owner, group,
+access control lists, and extended attributes are not carried over. If Proqi
+stops between replacing a file and removing the replaced copy, a hidden
+`.proqi-export-*.tmp` file in the same folder holds the previous contents. The
+set and order of exported thoughts are fixed when the path field opens; their
+text is read from the Board when the user saves, so edits made while the path
+field was open are included, and a selected thought that disappeared meanwhile
+cancels the export without writing. Only
+after this durable success does the Board change: removal and replacement are
+each one Board operation and one undo step, admitted like other asynchronous
+sequence producers. Undo restores the thoughts and removes the reference; the
+file stays, like a saved file. If the Board step is rejected after the file was
+written, for example because the thoughts changed, a lock is held, or saving is
+failing, the file stays, the Board is left unchanged, and the message names that
+cause. Remove and replace do not open while saving is failing, so no file is
+written for a Board change that cannot be stored.
+Permission, read-only, full-disk, and other write failures leave the Board
+unchanged with a truthful message. A reference whose file is later moved or
+deleted shows the ordinary inaccessible state, and submission refuses it.
+
+The scriptable CLI exposes the same behavior with `thoughts export`, including
+`--remove`, `--replace-with-reference`, `--replace-existing`, and an operation
+identity for exact replay of the Board step. A relative `--output` resolves from
+the CLI process's current directory, the usual convention for command-line tools.
 
 ### Interaction economy
 
@@ -1292,6 +1454,65 @@ startup checks again. Other sessions continue normally. The command palette
 offers an explicit `Check for updates` action. JSON commands, the Proqi skill,
 and noninteractive commands never check unless the user explicitly runs
 `proqi update check --json`.
+
+### Confirmed input stall continuity
+
+The existing input watchdog distinguishes a reader-only stall from a whole
+process scheduling gap. A scheduling or sleep gap followed by reader progress
+renews the input lease and does not start recovery. EOF, terminal revocation,
+ordinary terminal I/O errors, and sessionless Browser launches retain their
+existing fail-closed behavior.
+
+On macOS and Linux, a confirmed reader-only stall in an active Board, Compose,
+or Edit session starts one automatic recovery attempt for that incident. Proqi
+stops admitting new mutation, drains accepted persistence and every owned
+asynchronous producer through the ordinary bounded shutdown boundary, restores
+terminal modes, releases the exact session and runtime resources, and then
+replaces itself with the verified current executable. Unix `exec` preserves the
+PID, working directory, standard streams, inherited PTY, exact SessionId, and
+explicit or default state root. The replacement restores content-free focus,
+mode, cursor, selection, scroll, insertion, and fold presentation state after
+the durable board is reopened.
+
+If accepted work has reached a persistence failure, exact replacement is not
+safe. Proqi automatically runs the existing private recovery export through its
+owned external lane, drains that export, and exits without `exec`. The terminal
+failure names both the exact durable-session resume command and the recovery
+file that contains the optimistic board state. Recovery format 2 contains both
+thoughts and payload-free separators with their exact identities, shared order,
+timestamps, and recoverable deletion state. A retained failed write remains
+eligible for the ordinary retry path before any later independent stall. If the
+primary recovery directory is unavailable, the same exporter makes one bounded
+attempt under the already-private runtime root.
+
+Startup alone is not recovery. The replacement remains on probation until the
+canonical input owner completes three bounded Crossterm polls or delivers an
+event. A stall during probation exits after terminal restoration with the
+existing terminal I/O failure and an exact resume command. It never performs a
+second automatic replacement for that incident.
+
+Each exact session has an independent rolling circuit. At most two automatic
+recoveries may begin in any ten-minute window. A third confirmed stall in that
+window fails closed. Older incidents expire naturally, so a healthy session
+remains eligible for a later independent recovery. The recovery record is
+content-free, bounded, private to the current user, and scoped to the exact
+session, PID, executable identity, and replacement lineage. It is runtime
+coordination state, not durable user history, and makes no storage schema or
+protocol change.
+
+A fresh startup that has passed installation and schema admission and acquired
+the exclusive exact-session lease retires that session's valid abandoned
+recovery record, including one from an older executable. It starts a new
+recovery lineage without restoring the abandoned checkpoint. This also applies
+to an admitted update replacement, which is distinct from an input-recovery
+replacement. Automatic input recovery still requires the exact original
+executable and complete replacement proof and retains its probation and rolling
+attempt budget. Unsupported, malformed, foreign, public, or symlinked records
+remain untrusted. Failed retirement disables automatic recovery for that launch.
+
+This bounded continuity fallback complements the upstream input-worker work in
+issue 52. It does not replace the detached Crossterm reader, recover a revoked
+PTY, or claim that issue is solved.
 
 ### Verified installation update and restart
 
@@ -1353,8 +1574,15 @@ session in the inherited pane and state root. A failed replacement never rolls
 back successful peers and never makes an old quiesced process writable again.
 Replacement readiness additionally requires the retained operating-system
 process, matching update attempt and prior process proof, and a live verified
-owner-control endpoint. A manual exact-session resume in another pane and stale
-runtime metadata remain explicit incomplete replacements.
+owner-control endpoint. A manual exact-session resume in another pane is not
+automatic replacement evidence. If an accepted `exec` fails and the old owner
+is no longer live, an explicit resume of that exact pending SessionId may enter
+under exclusive convergence. Proqi removes only that expectation after the new
+process owns the exact session lease, retaining every unfinished peer. Stale
+runtime metadata never proves either readiness or ownership. While peers remain
+unfinished, the bounded pending record also retains exact manually acknowledged
+membership. A retry after an atomic cache rename can therefore recognize the
+committed result, and that exact session can reenter without erasing its peers.
 
 Existing shared schema leases remain the compatibility barrier. A new process
 does not migrate while an old process still holds a conflicting lease. It waits
@@ -1362,6 +1590,59 @@ for bounded restart convergence or reports that restart remains pending. When
 one replacement completes the migration, followers that lost the exclusive
 lease race revalidate the current schema under a shared lease and resume. A
 genuinely old writer still prevents migration for the existing bounded wait.
+
+An executable installed by an external package-manager action is admitted by
+the same convergence boundary. The canonical active installation and the
+running executable's version are authoritative. A cached installed-version
+observation is evidence that can lag behind the package manager. Equal
+versions follow ordinary startup. A running version older than the cached
+observation is rejected as obsolete. A running version newer than the cached
+observation must first own exclusive convergence and rescan the exact live
+runtime registry. Incompatible older owners block admission with their exact
+SessionIds and canonical versions plus instructions to close or update those
+sessions. Proqi never instructs the user to start the removed old executable.
+Homebrew and verified standalone owners can use automatic exact replacement.
+Cargo, Debian, source, and unknown installations instead remain live and block
+before preparation because Proqi cannot safely restart them in place. Their
+exact SessionIds and versions identify what the user must close before retrying.
+Automatic cohorts are bounded at 32 exact replacements. Larger cohorts fail
+before preparation with the exact observed count, supported limit, and bounded
+content-free blocker details.
+
+When no registered owner remains, Proqi keeps exclusive convergence ownership
+and must acquire the exclusive schema lease before opening the real store. This
+proves quiescence even for a same-schema writer whose runtime metadata is
+missing. Only after store readiness and another active-installation
+verification does Proqi atomically replace the exact stale observation and
+clear stale restart state, without requiring an update check. Compatible
+owners advertising external convergence protocol 3 reuse the existing prepare,
+irreversible quiescence, restart, and exact replacement proof. Published
+v0.10.0 owners advertise protocol 2 and remain exact blockers because they
+cannot preserve the durable replacement cohort. After compatible owners'
+acknowledgements,
+the coordinator obtains the same exclusive schema proof and revalidates the
+active installation immediately before cache adoption. Their pending cache
+state retains a bounded exact cohort,
+including operation, target, SessionId, prior InstanceId, retained PID, and
+prior version, until every replacement is verified. Missing replacement proof
+retains `restart_needed`. A later externally installed version cannot overwrite
+that unfinished cohort. It reports the exact pending sessions and requires the
+recorded target cohort to finish first. Release refresh updates release metadata
+but can only initialize a missing installation observation or confirm an equal
+one, so an older process and a concurrent refresh cannot downgrade or bypass
+startup authority. While an external cohort is pending, release discovery may
+refresh its metadata but suppresses another actionable update, and the in-app
+coordinator refuses before invoking the installer. An exact automatic
+replacement waits boundedly for a transient convergence owner so an unrelated
+fresh starter cannot turn successful same-process replacement into manual
+recovery. Missing or malformed cache state remains a cache miss,
+while an active-executable mismatch, schema conflict, cache conflict, failed
+cache write, or lost convergence owner fails without adopting the stale cache.
+Verified standalone startup captures the active executable's byte length and
+SHA-256 identity during initial installation verification. External adoption
+also establishes that identity before preparing a live owner. Replacing a
+standalone executable at the same canonical path before preparation, during
+quiescence, or immediately before cache adoption therefore fails closed.
 
 ### Release highlights after an in-app upgrade
 
@@ -1545,7 +1826,7 @@ silently altered.
 
 The product remains usable in terminals without true color. The fallback uses
 default foreground and background, one supported green accent, bold, dim, and
-reverse video sparingly.
+reverse video sparingly. Pointer hover never changes the content's type style.
 
 ## Accessibility and input correctness
 
@@ -1631,6 +1912,32 @@ unrecognized shells.
 Other multiplexers may implement the same interface later. Unsupported
 terminals expose no submission capability and retain the complete clipboard-first
 workflow.
+
+### Herdr plugin
+
+Proqi also ships as a Herdr plugin, installed with
+`herdr plugin install oborchers/proqi`. It adds one bindable action that keeps
+at most one Proqi pane per tab: it opens Proqi to the right of the focused
+pane, focuses an open Proqi, and closes the Proqi it opened once that Proqi
+confirms its edits are durable. A Proqi started by the user or another tool is
+recognized and focused, never closed; toggling from it returns focus to the
+tab's only agent.
+
+Each tab keeps one recorded session, reopened from any pane in the tab. A
+tab's first session uses the `sessions ensure` rule. Its name is the name of
+the tab's only named Herdr agent, else the tab label, else the stable tab
+identity when Herdr shows a numeric position label. Its origin is the Herdr
+worktree checkout or the Git repository root containing the focused directory.
+The plugin never adopts sessions by other
+naming rules. It refuses to start a second Proqi for a session already open
+elsewhere.
+
+Herdr does not restore plugin panes after a cold restart. The next toggle
+reopens the same session and closes the leftover shell only while it is still
+idle. The plugin never installs over, replaces, or shadows an existing Proqi
+installation; without one, its install step runs the checksum-matched
+standalone installer, whose trust model equals the documented installer
+command. This is Proqi packaged for a host, not a Proqi plugin system.
 
 ### Dedicated Proqi skill
 
@@ -1803,7 +2110,8 @@ These remain compatible with the vision but are not initial requirements:
 
 - A previewed bulk split-by-blank-lines transformation.
 - External editor handoff through `$VISUAL` or `$EDITOR`.
-- Import and export as plain text, Markdown, or JSON.
+- Import from files, and export as Markdown or JSON. Plain-text export is part
+  of the current product; see Export thoughts to a file.
 - Configurable retention and recoverable pruning.
 - Session handoff between machines without making cloud sync mandatory.
 - Additional multiplexer and harness adapters that remain separate from the

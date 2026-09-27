@@ -41,6 +41,7 @@ pub(super) fn render(
             selection: app.overlay_query_selection(),
             entries: &rows,
             selected: picker.selected,
+            hovered: app.hovered(),
         },
         app.picker_overflow(overlay.items.len()),
         theme,

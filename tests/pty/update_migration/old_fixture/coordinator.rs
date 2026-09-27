@@ -1,5 +1,7 @@
 pub(super) const SOURCE: &str = r#"use std::{ffi::OsString, os::unix::fs::symlink, path::PathBuf, str::FromStr, thread, time::{Duration, Instant}};
 
+mod gateway_trace;
+
 use proqi::{
     adapters::{
         control::LocalUpdateControlClient,
@@ -79,7 +81,7 @@ fn main() {
         None,
     );
     let update_state = FileUpdateStateStore::new(&state.join("cache")).expect("update state");
-    let mut gateway = LocalUpdateControlClient::new(SystemIdGenerator);
+    let mut gateway = gateway_trace::TracedGateway::new(LocalUpdateControlClient::new(SystemIdGenerator), &state.join("gateway-trace.jsonl"));
     let mut process = InstallerProcess {
         active: active.clone(),
         target: target_binary,
@@ -92,6 +94,8 @@ fn main() {
     let execution = UpdateRestartCoordinator::new(&update_state, &registry, &mut gateway, &mut installer, &SystemClock)
         .execute(ids.request_id(), initiating, installation.identity, &target, deadline, &())
         .expect("coordinate update");
-    println!("{}", serde_json::to_string(&execution).expect("serialize execution"));
+    let execution = serde_json::to_string(&execution).expect("serialize execution");
+    std::fs::write(state.join("coordinator-execution.json"), &execution).expect("retain execution before assertion");
+    println!("{execution}");
 }
 "#;

@@ -16,7 +16,7 @@ pub(super) fn build(app: &BoardApp, popup: &InvocationPopup) -> Vec<Choice> {
         .chain(&app.invocation_global)
         .flat_map(|entry| entry.forms.iter().map(move |form| (entry, form)))
         .filter(|(_, form)| compatibility::supports_form(app, form))
-        .filter(|(_, form)| !builtins::is_shared_starter(&form.token) || starts_prompt)
+        .filter(|(_, form)| !builtins::is_shared_command(&form.token) || starts_prompt)
         .filter(|(_, form)| {
             !built_ins
                 .iter()

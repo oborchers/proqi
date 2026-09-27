@@ -116,7 +116,7 @@ fn materialized_clipboard_image_is_accessible_before_its_immediate_recheck() {
     let payload = read_clipboard(&mut clipboard, &mut attachments, request_id)
         .expect("materialized image payload");
     let effects = app.complete_clipboard_read_payload(request_id, Ok(payload), &mut ids, &clock);
-    let thought_id = app.state.focused_thought.expect("created thought");
+    let thought_id = app.state.focused_thought_id().expect("created thought");
     assert!(!app.state.attachments.inaccessible(thought_id, 0));
     assert!(
         effects

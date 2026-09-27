@@ -12,6 +12,8 @@ use crate::{
         text_layout::wrap_rows,
     },
 };
+#[path = "tests/separators.rs"]
+mod separators;
 
 fn uuid_v7(seed: u8) -> uuid::Uuid {
     let mut bytes = [0; 16];
@@ -54,7 +56,7 @@ fn long_state(presentation: ThoughtPresentation) -> (AppState, ThoughtId, String
     );
     thought.presentation = presentation;
     let mut state = AppState::new(SessionBoard::new(session, vec![thought]).expect("board"));
-    state.focused_thought = Some(thought_id);
+    state.focused_item = Some(thought_id.into());
     (state, thought_id, content)
 }
 

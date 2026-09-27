@@ -3,7 +3,7 @@
 use crate::{
     application::{DurabilityState, Effect, InteractionMode},
     ports::environment::{Clock, IdGenerator},
-    ui::{PastePayload, ShortcutContext, ShortcutContextStack},
+    ui::{HitTarget, PastePayload, ShortcutContext, ShortcutContextStack},
 };
 
 use super::{BoardApp, UiInput};
@@ -18,7 +18,10 @@ pub(super) enum ActiveInputOwner {
     Direction,
     Search,
     Rename,
+    ThoughtRename,
     Transfer,
+    ExportPath,
+    ExportReplace,
     Invocation,
     InvocationQuery,
     GlobalDeliveryQuery,
@@ -40,8 +43,10 @@ impl ActiveInputOwner {
             Self::Recovery => ShortcutContext::Recovery,
             Self::Direction => ShortcutContext::Direction,
             Self::Search => ShortcutContext::Search,
-            Self::Rename => ShortcutContext::Rename,
+            Self::Rename | Self::ThoughtRename => ShortcutContext::Rename,
             Self::Transfer => ShortcutContext::Transfer,
+            Self::ExportPath => ShortcutContext::ExportPath,
+            Self::ExportReplace => ShortcutContext::ExportReplace,
             Self::Invocation => ShortcutContext::Invocation,
             Self::InvocationQuery => ShortcutContext::InvocationQuery,
             Self::GlobalDeliveryQuery => ShortcutContext::GlobalDeliveryQuery,
@@ -61,6 +66,8 @@ impl ActiveInputOwner {
                 | Self::Search
                 | Self::Rename
                 | Self::Transfer
+                | Self::ExportPath
+                | Self::ExportReplace
                 | Self::Invocation
                 | Self::InvocationQuery
                 | Self::GlobalDeliveryQuery
@@ -79,6 +86,40 @@ impl ActiveInputOwner {
             Self::Board | Self::Compose | Self::Edit | Self::InsertionBoundary
         )
     }
+
+    pub(super) const fn admits_pointer_target(self, target: HitTarget) -> bool {
+        match self {
+            Self::Direction => matches!(target, HitTarget::Deliver(_, _)),
+            Self::Recovery => matches!(
+                target,
+                HitTarget::Retry | HitTarget::ExportRecovery | HitTarget::Help
+            ),
+            Self::ThoughtRename => matches!(
+                target,
+                HitTarget::ThoughtName(_)
+                    | HitTarget::CommitThoughtName
+                    | HitTarget::CancelThoughtName
+            ),
+            Self::Board
+            | Self::Compose
+            | Self::Edit
+            | Self::InsertionBoundary
+            | Self::Search
+            | Self::Rename
+            | Self::Transfer
+            | Self::ExportPath
+            | Self::ExportReplace
+            | Self::Invocation
+            | Self::InvocationQuery
+            | Self::GlobalDeliveryQuery
+            | Self::GlobalDeliveryDisposition
+            | Self::Commands
+            | Self::ReleaseHighlights
+            | Self::Update
+            | Self::Screenshot
+            | Self::Help => true,
+        }
+    }
 }
 
 impl BoardApp {
@@ -96,6 +137,14 @@ impl BoardApp {
             UiInput::Key(key) => Some(UiInput::Key(key)),
             input => Some(input),
         }
+    }
+
+    /// Whether the export overlay is the topmost, visible input owner.
+    pub(super) fn topmost_owner_is_export(&self) -> bool {
+        matches!(
+            self.active_input_owners().last(),
+            Some(ActiveInputOwner::ExportPath | ActiveInputOwner::ExportReplace)
+        )
     }
 
     pub(super) fn active_input_route(&self) -> (ShortcutContextStack, ActiveInputOwner) {
@@ -127,8 +176,14 @@ impl BoardApp {
         if self.rename.is_some() {
             owners.push(ActiveInputOwner::Rename);
         }
+        if self.thought_rename.is_some() {
+            owners.push(ActiveInputOwner::ThoughtRename);
+        }
         if self.transfer.is_some() {
             owners.push(ActiveInputOwner::Transfer);
+        }
+        if let Some(owner) = self.export_input_owner() {
+            owners.push(owner);
         }
         if self.invocation_popup.is_some() {
             owners.push(if self.manual_invocation_query_active() {

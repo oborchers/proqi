@@ -9,14 +9,34 @@ use std::{
 use proqi::{adapters::runtime::SystemIdGenerator, ports::environment::IdGenerator};
 use serde_json::Value;
 
+#[path = "cli_workflow/bounded_lists.rs"]
+mod bounded_lists;
+#[path = "cli_workflow/capabilities.rs"]
+mod capabilities;
 #[path = "cli_workflow/diagnostics.rs"]
 mod diagnostics;
 #[path = "cli_workflow/doctor.rs"]
 mod doctor;
+#[path = "cli_workflow/export.rs"]
+mod export;
 #[path = "support/herdr.rs"]
 mod herdr_fixture;
+#[path = "cli_workflow/identity_namespace.rs"]
+mod identity_namespace;
+#[path = "cli_workflow/named_sessions.rs"]
+mod named_sessions;
+#[path = "cli_workflow/named_thoughts.rs"]
+mod named_thoughts;
+#[path = "cli_workflow/separators.rs"]
+mod separators;
 #[path = "cli_workflow/session_contract.rs"]
 mod session_contract;
+#[path = "cli_workflow/session_operations.rs"]
+mod session_operations;
+#[path = "cli_workflow/thought_names.rs"]
+mod thought_names;
+#[path = "cli_workflow/transformations.rs"]
+mod transformations;
 
 fn run(root: &Path, arguments: &[&str], input: Option<&str>) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_proqi"));
@@ -152,6 +172,8 @@ fn thought_mutations_round_trip_unicode_and_idempotency_across_processes() {
 
     let inspected = success(root, &["thoughts", "inspect", &session, &thought], None);
     assert_eq!(inspected["thought"]["content"], body);
+    assert!(inspected["thought"]["name"].is_null());
+
     let second = success(root, &["thoughts", "add", &session], Some("second"));
     let second_id = second["thought_id"].as_str().expect("second thought");
     let moved = success(
@@ -169,8 +191,8 @@ fn thought_mutations_round_trip_unicode_and_idempotency_across_processes() {
     );
     assert_eq!(moved["thought_id"], thought);
     let reordered = success(root, &["thoughts", "list", &session], None);
-    assert_eq!(reordered["thoughts"][0]["id"], second_id);
-    assert_eq!(reordered["thoughts"][1]["id"], thought);
+    assert_eq!(reordered["items"][0]["id"], second_id);
+    assert_eq!(reordered["items"][1]["id"], thought);
     let delete = operation_id();
     success(
         root,
@@ -185,11 +207,8 @@ fn thought_mutations_round_trip_unicode_and_idempotency_across_processes() {
         None,
     );
     let after_delete = success(root, &["thoughts", "list", &session], None);
-    assert_eq!(
-        after_delete["thoughts"].as_array().expect("thoughts").len(),
-        1
-    );
-    assert_eq!(after_delete["thoughts"][0]["id"], second_id);
+    assert_eq!(after_delete["items"].as_array().expect("thoughts").len(), 1);
+    assert_eq!(after_delete["items"][0]["id"], second_id);
     let undo = operation_id();
     let undone = success(
         root,
@@ -204,15 +223,12 @@ fn thought_mutations_round_trip_unicode_and_idempotency_across_processes() {
     );
     assert_eq!(replayed_undo["receipt"]["idempotent_replay"], true);
     let restored = success(root, &["thoughts", "list", &session], None);
-    assert_eq!(restored["thoughts"][0]["id"], second_id);
-    assert_eq!(restored["thoughts"][1]["content"], body);
+    assert_eq!(restored["items"][0]["id"], second_id);
+    assert_eq!(restored["items"][1]["content"], body);
     success(root, &["thoughts", "redo", &session], None);
     let after_redo = success(root, &["thoughts", "list", &session], None);
-    assert_eq!(
-        after_redo["thoughts"].as_array().expect("thoughts").len(),
-        1
-    );
-    assert_eq!(after_redo["thoughts"][0]["id"], second_id);
+    assert_eq!(after_redo["items"].as_array().expect("thoughts").len(), 1);
+    assert_eq!(after_redo["items"][0]["id"], second_id);
 }
 
 #[test]
@@ -310,6 +326,7 @@ fn thoughts_copy_between_named_sessions_and_remove_only_after_delivery() {
     rename(root, &destination, "destination");
     let added = success(root, &["thoughts", "add", "source"], Some("exact\n内容"));
     let thought = added["thought_id"].as_str().expect("thought ID");
+    set_thought_name(root, thought, "Transfer label");
     let operation = operation_id();
     let copied = success(
         root,
@@ -335,6 +352,7 @@ fn thoughts_copy_between_named_sessions_and_remove_only_after_delivery() {
         None,
     );
     assert_eq!(inspected["thought"]["content"], "exact\n内容");
+    assert_eq!(inspected["thought"]["name"], "Transfer label");
     let replay = success(
         root,
         &[
@@ -356,14 +374,14 @@ fn thoughts_copy_between_named_sessions_and_remove_only_after_delivery() {
     assert_eq!(removed["source_removed"], true);
     let source_after = success(root, &["thoughts", "list", "source"], None);
     assert!(
-        source_after["thoughts"]
+        source_after["items"]
             .as_array()
             .expect("thoughts")
             .is_empty()
     );
     let destination_after = success(root, &["thoughts", "list", "destination"], None);
     assert_eq!(
-        destination_after["thoughts"]
+        destination_after["items"]
             .as_array()
             .expect("thoughts")
             .len(),
@@ -378,6 +396,10 @@ fn thoughts_copy_between_named_sessions_and_remove_only_after_delivery() {
         removal_replay["source_removal_receipt"]["idempotent_replay"],
         true
     );
+}
+
+fn set_thought_name(root: &Path, thought: &str, name: &str) {
+    success(root, &["thoughts", "rename", "source", thought, name], None);
 }
 
 fn send_and_remove(
@@ -402,64 +424,6 @@ fn send_and_remove(
         ],
         None,
     )
-}
-
-#[test]
-fn launch_modes_and_capability_discovery_have_stable_output() {
-    let temporary = tempfile::tempdir().expect("temporary directory");
-    let root = temporary.path();
-    let created = success(root, &[], None);
-    let session = created["session_id"].as_str().expect("session ID");
-    assert_eq!(created["resume_command"], format!("proqi -r {session}"));
-
-    let continued = success(root, &["-c"], None);
-    assert_eq!(continued["session_id"], session);
-    let resumed = success(root, &["-r", session], None);
-    assert_eq!(resumed["session_id"], session);
-    let capabilities = success(root, &["capabilities"], None);
-    assert_eq!(capabilities["cli_schema_version"], 1);
-    assert_eq!(capabilities["active_session_control"], cfg!(unix));
-    assert_eq!(capabilities["control_protocol"], 9);
-    assert_eq!(capabilities["active_session_read_sync"], true);
-    assert_eq!(capabilities["cross_session_transfer"], true);
-    assert_eq!(capabilities["exact_thought_replacement"], true);
-    assert_eq!(capabilities["replacement_sha256_precondition"], true);
-    assert_eq!(capabilities["durable_thought_collapse"], true);
-    assert_eq!(capabilities["durable_browser_history"], true);
-    assert_eq!(capabilities["max_thought_stdin_bytes"], 131_072);
-    assert_eq!(capabilities["herdr_submission"], true);
-    assert_eq!(capabilities["herdr_managed_pane_required"], true);
-    assert_eq!(capabilities["explicit_update_check"], true);
-
-    let human_capabilities = Command::new(env!("CARGO_BIN_EXE_proqi"))
-        .arg("capabilities")
-        .output()
-        .expect("human capability discovery");
-    assert!(human_capabilities.status.success());
-    let human = String::from_utf8(human_capabilities.stdout).expect("UTF-8 capabilities");
-    let expected = if cfg!(unix) {
-        "Active control: available"
-    } else {
-        "Active control: unavailable on this platform"
-    };
-    assert!(human.contains(expected));
-
-    let non_terminal = Command::new(env!("CARGO_BIN_EXE_proqi"))
-        .arg("--state-dir")
-        .arg(root)
-        .output()
-        .expect("non-terminal launch");
-    assert!(!non_terminal.status.success());
-    let text = String::from_utf8(non_terminal.stderr).expect("UTF-8 output");
-    assert!(text.contains("interactive launch requires a terminal"));
-    let after_failure = success(root, &["sessions", "list"], None);
-    assert_eq!(
-        after_failure["sessions"]
-            .as_array()
-            .expect("sessions")
-            .len(),
-        1
-    );
 }
 
 #[test]

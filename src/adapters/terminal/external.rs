@@ -71,6 +71,7 @@ enum ExternalRequest {
         request_id: RequestId,
         document: Box<RecoveryDocument>,
     },
+    ThoughtExport(ThoughtExportRequest),
 }
 
 pub(super) enum ExternalResult {
@@ -101,6 +102,7 @@ pub(super) enum ExternalResult {
         request_id: RequestId,
         result: Result<PathBuf, RecoveryError>,
     },
+    ThoughtExport(ThoughtExportResult),
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -122,18 +124,25 @@ pub(super) struct ExternalLane {
 
 struct ExternalDirectories {
     recovery: PathBuf,
+    recovery_fallback: PathBuf,
     attachment: PathBuf,
     cache: PathBuf,
 }
 
 impl ExternalLane {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the composition root passes each external adapter input explicitly"
+    )]
     pub(super) fn spawn_with_invocation_roots(
         recovery_directory: PathBuf,
+        recovery_fallback_directory: PathBuf,
         attachment_directory: PathBuf,
         cache_directory: PathBuf,
         presentation_source: String,
         cancellation: CancellationFlag,
         invocation_roots: Vec<AdditionalInvocationRoot>,
+        export: crate::adapters::export::FileExport,
     ) -> Self {
         let (request_sender, request_receiver) = sync_channel(32);
         let (result_sender, result_receiver) = sync_channel(32);
@@ -141,6 +150,7 @@ impl ExternalLane {
         let worker_lifecycle = lifecycle.clone();
         let directories = ExternalDirectories {
             recovery: recovery_directory,
+            recovery_fallback: recovery_fallback_directory,
             attachment: attachment_directory,
             cache: cache_directory,
         };
@@ -153,6 +163,7 @@ impl ExternalLane {
                     presentation_source,
                     cancellation,
                     invocation_roots,
+                    export,
                 );
             });
         });
@@ -199,6 +210,22 @@ impl ExternalLane {
                 request_id: *request_id,
                 document: document.clone(),
             },
+            Effect::WriteExport {
+                request_id,
+                request,
+            } => ExternalRequest::ThoughtExport(ThoughtExportRequest::Write {
+                request_id: *request_id,
+                request: Box::new(request.clone()),
+            }),
+            Effect::ListExportDirectory {
+                generation,
+                directory,
+                prefix,
+            } => ExternalRequest::ThoughtExport(ThoughtExportRequest::List {
+                generation: *generation,
+                directory: directory.clone(),
+                prefix: prefix.clone(),
+            }),
             _ => return Ok(false),
         };
         self.sender
@@ -295,15 +322,17 @@ fn external_loop(
     presentation_source: String,
     cancellation: CancellationFlag,
     invocation_roots: Vec<AdditionalInvocationRoot>,
+    mut export: crate::adapters::export::FileExport,
 ) {
     let ExternalDirectories {
         recovery,
+        recovery_fallback,
         attachment,
         cache,
     } = directories;
     let runner = SystemProcessRunner::cancellable(cancellation.clone());
     let mut clipboard = PlatformClipboard::new(&cache, Box::new(runner.clone()));
-    let mut recovery = FileRecoveryExporter::new(recovery);
+    let mut recovery = FileRecoveryExporter::with_fallback(recovery, recovery_fallback);
     let mut attachments = FileAttachmentStore::new(attachment);
     let mut notifications = HerdrPauseNotifier::from_environment_with_runner(runner.clone());
     let mut agents = HerdrGateway::from_environment_with_runner(presentation_source, runner);
@@ -369,6 +398,7 @@ fn external_loop(
                 request_id,
                 result: recovery.export(request_id, &document),
             },
+            ExternalRequest::ThoughtExport(request) => run_thought_export(&mut export, request),
         };
         if results.send(outcome).is_err() {
             return;
@@ -451,6 +481,10 @@ fn read_clipboard(
             .map_err(|_| ExternalReadError::NonUnicodePath),
     }
 }
+
+mod export;
+pub(super) use export::ThoughtExportResult;
+use export::{ThoughtExportRequest, run_thought_export};
 
 #[cfg(test)]
 mod tests;

@@ -23,7 +23,7 @@ fn only_session(binary: &str, state: &std::path::Path) -> String {
 }
 
 fn contents(binary: &str, state: &std::path::Path, session: &str) -> Vec<String> {
-    json_command(binary, state, &["thoughts", "list", session])["data"]["thoughts"]
+    json_command(binary, state, &["thoughts", "list", session])["data"]["items"]
         .as_array()
         .expect("thoughts")
         .iter()
@@ -226,7 +226,7 @@ fn tutorial_shortcut_annotations_survive_cli_cross_session_transfer() {
     );
     let source = only_session(binary, state.path());
     let listed = json_command(binary, state.path(), &["thoughts", "list", &source]);
-    let source_thought = &listed["data"]["thoughts"][1];
+    let source_thought = &listed["data"]["items"][1];
     let source_thought_id = source_thought["id"].as_str().expect("thought ID");
     let destination = json_command(binary, state.path(), &[])["data"]["session_id"]
         .as_str()

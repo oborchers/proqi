@@ -79,6 +79,7 @@ pub(super) const DIRECT_ACTIONS: &[Action] = &[
     Action::PickerNext,
     Action::New,
     Action::Edit,
+    Action::RenameThought,
     Action::Delete,
     Action::Collapse,
     Action::Select,
@@ -87,6 +88,7 @@ pub(super) const DIRECT_ACTIONS: &[Action] = &[
     Action::OpenSearch,
     Action::OpenCommands,
     Action::Help,
+    Action::ToggleFooter,
     Action::ScreenshotInbox,
     Action::RenameSession,
     Action::BrowserTrash,
@@ -115,6 +117,8 @@ pub(super) const ESCAPE_CONTEXTS: &[Context] = &[
     Context::BrowserQuery,
     Context::Rename,
     Context::BrowserRename,
+    Context::ExportPath,
+    Context::ExportReplace,
     Context::Update,
     Context::Screenshot,
     Context::Direction,
@@ -130,8 +134,8 @@ pub(super) fn descriptors(keys: &KeyBindings) -> Vec<ShortcutDescriptor> {
         .collect::<BTreeMap<_, _>>();
     let mut actions = DIRECT_ACTIONS.iter().copied().collect::<BTreeSet<_>>();
     actions.extend(commands.keys().copied());
-    let macos_defaults = default_claims(true);
-    let portable_defaults = default_claims(false);
+    let macos_defaults = default_claims(keys, true);
+    let portable_defaults = default_claims(keys, false);
     let macos_aliases = alias_claims(keys, true);
     let portable_aliases = alias_claims(keys, false);
     actions
@@ -168,7 +172,10 @@ fn descriptor(
     contexts.extend(metadata::help_contexts(&help));
     if let Some(metadata) = command {
         contexts.insert(Context::Commands);
-        if metadata.applicability == CommandApplicability::BoardThought {
+        if matches!(
+            metadata.applicability,
+            CommandApplicability::BoardItem | CommandApplicability::BoardThought
+        ) {
             contexts.extend([Context::Board, Context::InsertionBoundary]);
         } else {
             contexts.extend([

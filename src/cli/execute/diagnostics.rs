@@ -1,5 +1,6 @@
 //! Explicit local diagnostics collection.
 
+use crate::cli::error_code::ErrorCode;
 use std::path::PathBuf;
 
 use serde_json::{Value, json};
@@ -25,7 +26,7 @@ pub(super) fn early_outcome(cli: &Cli) -> Result<Option<Outcome>, CliError> {
         Some(Command::Diagnostics(arguments)) => {
             let cwd = SystemEnvironment
                 .current_directory()
-                .map_err(|error| CliError::new("environment_failed", error.to_string(), 1))?;
+                .map_err(|error| CliError::new(ErrorCode::EnvironmentFailed, error.to_string()))?;
             execute(&paths, &cwd, &arguments.command).map(Some)
         }
         Some(Command::Doctor) => super::doctor::execute(&paths).map(Some),
@@ -60,18 +61,16 @@ fn inspect_keypress(
         .map(|name| {
             ShortcutContext::parse_configuration_id(name).ok_or_else(|| {
                 CliError::new(
-                    "invalid_shortcut_context",
+                    ErrorCode::InvalidShortcutContext,
                     "unknown context; use a documented keymap context identifier".to_owned(),
-                    2,
                 )
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
     if contexts.is_empty() || contexts.len() > 21 {
         return Err(CliError::new(
-            "invalid_shortcut_context",
+            ErrorCode::InvalidShortcutContext,
             "provide between 1 and 21 contexts, bottom to top".to_owned(),
-            2,
         ));
     }
     let contexts = ShortcutContextStack::new(contexts);
@@ -169,7 +168,7 @@ fn collect(paths: &AppPaths, cwd: &Path, output: Option<PathBuf>) -> Result<Outc
         },
     );
     let bundle = crate::adapters::diagnostics::collect_bundle(&paths.data_dir, &output)
-        .map_err(|error| CliError::new("diagnostics_failed", error.to_string(), 1))?;
+        .map_err(|error| CliError::new(ErrorCode::DiagnosticsFailed, error.to_string()))?;
     Ok(Outcome {
         data: json!({
             "path": output,

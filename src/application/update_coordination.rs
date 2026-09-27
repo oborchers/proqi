@@ -4,13 +4,21 @@ use std::time::Duration;
 
 use serde::Serialize;
 
+mod external;
 mod preflight;
 mod quiescence;
 mod restart;
 
+pub use external::{
+    ExternalUpgradeAdmission, ExternalUpgradeBlocker, ExternalUpgradeBlockerReason,
+    ExternalUpgradeCacheStatus, ExternalUpgradeCoordinator, ExternalUpgradeFailure,
+    admit_pending_external_resume,
+};
+
 use crate::{
     domain::{InstallationIdentity, InstanceId, RequestId, SessionId, StableVersion, Timestamp},
     ports::{
+        control::{UPDATE_MUTATION_MINIMUM_PROTOCOL, control_protocol_supports},
         environment::Clock,
         runtime::InstanceInfo,
         store::STORAGE_PROTOCOL_VERSION,
@@ -41,7 +49,10 @@ pub(crate) fn is_compatible_update_participant(
     installation: InstallationIdentity,
 ) -> bool {
     participant.storage_protocol == STORAGE_PROTOCOL_VERSION
-        && participant.control_protocol == Some(crate::ports::control::CONTROL_PROTOCOL_VERSION)
+        && control_protocol_supports(
+            participant.control_protocol,
+            UPDATE_MUTATION_MINIMUM_PROTOCOL,
+        )
         && participant.control_endpoint.is_some()
         && participant.update.as_ref().is_some_and(|context| {
             context.installation_identity == installation
@@ -185,6 +196,15 @@ where
                 UpdateExecutionStatus::AlreadyInProgress,
             ));
         };
+        if self.state.load(installation)?.external_restart.is_some() {
+            return Ok(execution(
+                operation_id,
+                UpdateExecutionStatus::Aborted {
+                    blocker: None,
+                    code: "external_restart_pending".to_owned(),
+                },
+            ));
+        }
         let preparation_window_millis = deadline
             .as_millis()
             .saturating_sub(self.clock.now().as_millis())

@@ -25,7 +25,7 @@ impl BoardApp {
             .flat_map(|entry| &entry.forms)
             .filter(|form| compatibility::supports_form(self, form))
         {
-            if builtins::is_shared_starter(&form.token) {
+            if builtins::is_shared_command(&form.token) {
                 document_start.insert(form.token.clone());
             } else {
                 anywhere.insert(form.token.clone());

@@ -138,6 +138,8 @@ fn version_one_database_migrates_annotations_forward_without_reinterpretation() 
              DROP TABLE submission_attempts;
              ALTER TABLE thoughts DROP COLUMN presentation;
              ALTER TABLE thoughts DROP COLUMN annotations_json;
+             DROP TABLE IF EXISTS transfer_source_claims;
+             DROP TABLE IF EXISTS transfer_attempts;
              DELETE FROM migration_history WHERE version >= 2;
              UPDATE schema_meta SET schema_version = 1, storage_protocol = 1;",
         )
@@ -319,6 +321,8 @@ fn downgrade_collapsed_fixture(fixture: &DatabaseFixture) {
              DROP TABLE screenshot_capture_receipts;
              UPDATE thoughts SET collapsed = 1 WHERE id IS NOT NULL;
              ALTER TABLE thoughts DROP COLUMN presentation;
+             DROP TABLE IF EXISTS transfer_source_claims;
+             DROP TABLE IF EXISTS transfer_attempts;
              DELETE FROM migration_history WHERE version >= 6;
              UPDATE schema_meta SET schema_version = 5, storage_protocol = 5;",
         )

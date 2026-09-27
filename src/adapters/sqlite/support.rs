@@ -8,7 +8,7 @@ use std::{
 use rusqlite::{Connection, ErrorCode};
 
 use crate::{
-    domain::{OperationId, OperationSequence, RevisionId, SessionId, ThoughtId},
+    domain::{OperationId, OperationSequence, RevisionId, SeparatorId, SessionId, ThoughtId},
     ports::store::StoreError,
 };
 
@@ -105,6 +105,7 @@ macro_rules! id_from_blob {
 
 id_from_blob!(session_id_from_blob, SessionId);
 id_from_blob!(thought_id_from_blob, ThoughtId);
+id_from_blob!(separator_id_from_blob, SeparatorId);
 id_from_blob!(operation_id_from_blob, OperationId);
 id_from_blob!(revision_id_from_blob, RevisionId);
 

@@ -43,6 +43,7 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
     violations.extend(crate::shortcut_architecture::required_owner_findings(root));
     violations.extend(crate::instructions::check(root)?);
     violations.extend(crate::herdr_compatibility::policy_findings(root)?);
+    violations.extend(crate::herdr_plugin::findings(root)?);
     violations.extend(crate::release_policy::check(root)?);
     if layer_counts.contains(&0) {
         return Err(format!(

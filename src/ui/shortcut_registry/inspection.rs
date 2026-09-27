@@ -175,7 +175,14 @@ fn known_no_op(context: Option<ShortcutContext>, action: ShortcutActionId) -> bo
         | Action::FastExtendPrevious
         | Action::FastExtendNext => matches!(
             context,
-            Some(Context::Rename | Context::BrowserRename | Context::Recovery | Context::Direction)
+            Some(
+                Context::Rename
+                    | Context::BrowserRename
+                    | Context::ExportPath
+                    | Context::ExportReplace
+                    | Context::Recovery
+                    | Context::Direction
+            )
         ),
         _ => false,
     }

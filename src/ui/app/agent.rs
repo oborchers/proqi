@@ -263,7 +263,6 @@ impl BoardApp {
                 self.compose_presentation = super::ComposePresentation::Prompt;
             }
             self.sync_editor_from_state();
-            self.clear_board_selection();
         }
         let multiple = pending.sources.len() > 1;
         let outcome = match (pending.disposition, removed, multiple) {

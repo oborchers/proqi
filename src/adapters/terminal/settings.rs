@@ -66,6 +66,7 @@ struct SettingsDocument {
     theme_overrides: ThemeOverrides,
     keyboard_enhancement: KeyboardEnhancement,
     mouse_capture: bool,
+    footer_hidden: bool,
     keybindings: Option<KeyBindings>,
     keymap: Option<crate::ui::KeymapDocument>,
     density: BoardDensity,
@@ -85,6 +86,7 @@ impl Default for SettingsDocument {
             theme_overrides: ThemeOverrides::default(),
             keyboard_enhancement: KeyboardEnhancement::default(),
             mouse_capture: true,
+            footer_hidden: false,
             keybindings: None,
             keymap: None,
             density: BoardDensity::default(),
@@ -168,6 +170,7 @@ fn parse_settings(config_dir: &Path, content: &str) -> Result<LoadedSettings, Te
         merge_separator: document.merge_separator,
         keyboard_enhancement: document.keyboard_enhancement,
         mouse_capture: document.mouse_capture,
+        footer_hidden: document.footer_hidden,
         shortcuts: shortcut_registry,
         density: document.density,
     };

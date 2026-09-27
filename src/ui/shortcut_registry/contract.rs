@@ -25,6 +25,8 @@ pub(super) const CONTEXT_NAMES: &[(ShortcutContext, &str)] = &[
     (ShortcutContext::BrowserQuery, "browser_query"),
     (ShortcutContext::Rename, "rename"),
     (ShortcutContext::BrowserRename, "browser_rename"),
+    (ShortcutContext::ExportPath, "export_path"),
+    (ShortcutContext::ExportReplace, "export_replace"),
     (ShortcutContext::Update, "update"),
     (ShortcutContext::Screenshot, "screenshot"),
     (ShortcutContext::Recovery, "recovery"),

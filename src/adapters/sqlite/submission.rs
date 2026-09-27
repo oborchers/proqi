@@ -126,22 +126,24 @@ pub(super) fn finish_with_removal(
         ));
     }
     match finish(transaction, id, outcome) {
-        Ok(()) => {
-            super::board_commit::commit_batch(transaction, &OperationBatch::Board(removal.clone()))?
-                .ok_or_else(|| {
-                    StoreError::Integrity("submission removal has no durable receipt".to_owned())
-                })
-        }
+        Ok(()) => super::board_commit::commit_batch(
+            transaction,
+            &OperationBatch::Board {
+                operation: removal.clone(),
+                semantic_fingerprint: None,
+            },
+        )?
+        .ok_or_else(|| {
+            StoreError::Integrity("submission removal has no durable receipt".to_owned())
+        }),
         Err(conflict @ StoreError::Conflict(_)) => {
             if !outcome_matches(transaction, id, outcome)? {
                 return Err(conflict);
             }
             match super::operation_lookup::operation_request(transaction, removal.id)? {
-                Some(StoredOperationRequest::Board { operation, receipt })
-                    if operation.as_ref() == removal =>
-                {
-                    Ok(receipt)
-                }
+                Some(StoredOperationRequest::Board {
+                    operation, receipt, ..
+                }) if operation.as_ref() == removal => Ok(receipt),
                 _ => Err(conflict),
             }
         }

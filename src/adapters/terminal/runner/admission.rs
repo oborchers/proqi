@@ -288,7 +288,7 @@ mod tests {
         let thought_id = add.thought_id().expect("added thought");
         app.acknowledge_persistence_result(add_operation.sequence, Ok(()));
         app.state.mode = InteractionMode::Edit { thought_id };
-        app.state.focused_thought = Some(thought_id);
+        app.state.focused_item = Some(crate::domain::BoardItemId::Thought(thought_id));
         app.sync_editor_from_state();
         app.handle(UiInput::Key(UiKey::Character('!')), &mut ids, &clock);
 

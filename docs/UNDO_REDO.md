@@ -29,10 +29,11 @@ exhaustive against this contract.
 ### Local text owner
 
 Search, Commands query, manual Invocation query, Transfer query, Global Delivery
-query, Rename, Browser query, and Browser Rename each own an in-memory text
-history. Each snapshot contains text, cursor head, optional selection anchor,
-and the coalescing class. Closing the field destroys that history. Reopening the
-field creates a new history, even when its initial text is the same.
+query, Thought Name, Rename, Browser query, and Browser Rename each own an
+in-memory text history. Each snapshot contains text, cursor head, optional
+selection anchor, and the coalescing class. Closing the field destroys that
+history. Reopening the field creates a new history, even when its initial text
+is the same.
 
 Contiguous typing coalesces. Contiguous backward deletion and contiguous forward
 deletion coalesce separately. Movement, selection changes, paste, replacement,
@@ -118,6 +119,7 @@ as unavailable while one is active. They never mutate the hidden owner.
 | Cut one or many thoughts | Board | Board | One deletion batch after clipboard success | Clipboard write stays |
 | Duplicate thoughts | Board, Commands, pointer, owner control | Board | One atomic create batch | Local only |
 | Reorder thoughts | Board keyboard, pointer, owner control | Board | One exact positional operation | Local only |
+| Set or clear a thought name | Board, Edit, Commands, pointer, CLI, owner control | Board | One Rename with exact old and new optional names | Local only |
 | Collapse or expand durably | Board keyboard, pointer, owner control | Board | One presentation operation | Local only |
 | Split thought | Edit or Commands | Board plus affected thought resources | One atomic multi-thought operation | Local only |
 | Extract selection | Edit or Commands | Board plus affected thought resources | One atomic multi-thought operation | Local only |

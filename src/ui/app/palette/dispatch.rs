@@ -31,7 +31,7 @@ impl BoardApp {
                 if self.pending_edit.is_some() {
                     return effects;
                 }
-                self.select_all_thoughts();
+                self.select_all_items();
                 effects
             }
             SelectionCommand::Select => {

@@ -1,0 +1,15 @@
+---
+source: src/ui/app/export/tests/rendering.rs
+assertion_line: 89
+expression: "snapshot(&mut confirm_stage(), 34, 10)"
+---
+00│┌ replace existing file? ──────[x]│
+01││                                ││
+02││› Cancel                        ││
+03││  Replace Grüße.txt             ││
+04│└────────────────────────────────┘│
+05││
+06││
+07│  project│
+08│  2 thoughts · board · saved│
+09│  n New   : Commands│

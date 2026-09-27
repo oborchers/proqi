@@ -3,7 +3,7 @@
 use super::{BoardApp, invocation::InvocationChoiceView, palette, search, transfer};
 use crate::{
     application::InteractionMode,
-    domain::ThoughtId,
+    domain::{BoardItemId, ThoughtId},
     ports::{
         agent::AgentTarget,
         editor::{EditCommand, EditorSnapshot},
@@ -79,6 +79,13 @@ impl BoardApp {
             .and_then(|presentation| presentation.thought(thought_id))
             .filter(|thought| {
                 thought.canonical_content == content
+                    && thought.name.as_deref()
+                        == self
+                            .state
+                            .board
+                            .thought(thought_id)
+                            .and_then(|thought| thought.name.as_ref())
+                            .map(crate::domain::ThoughtName::as_str)
                     && thought
                         .presentation
                         .substitutions
@@ -126,6 +133,11 @@ impl BoardApp {
                     canonical_content: content,
                     presentation: projection,
                     preference: thought.presentation,
+                    name: self
+                        .thought_name_editor(thought.id)
+                        .map(|editor| editor.text().to_owned())
+                        .or_else(|| thought.name.as_ref().map(|name| name.as_str().to_owned())),
+                    name_editing: self.thought_name_editor(thought.id).is_some(),
                 }
             })
             .collect();
@@ -183,34 +195,64 @@ impl BoardApp {
         if self.insertion_focused() || matches!(self.state.mode, InteractionMode::Compose) {
             return None;
         }
-        self.state.focused_thought
+        self.state.focused_thought_id()
     }
 
     /// Whether a thought belongs to the explicit board multi-selection.
     #[must_use]
     pub fn thought_selected(&self, thought_id: ThoughtId) -> bool {
-        self.selection.contains(thought_id)
+        self.selection.contains(BoardItemId::Thought(thought_id))
+    }
+
+    /// Whether a structural Board item belongs to the explicit multi-selection.
+    #[must_use]
+    pub fn item_selected(&self, item_id: BoardItemId) -> bool {
+        self.selection.contains(item_id)
     }
 
     /// Ordered thoughts addressed by the next board action.
     pub(super) fn action_thought_ids(&self) -> Vec<ThoughtId> {
-        let order = self
-            .state
-            .board
-            .live_thoughts()
+        let order = self.live_item_ids();
+        let selected_items = self.selection.selected_in(&order);
+        if selected_items.is_empty() {
+            return self.state.focused_thought_id().into_iter().collect();
+        }
+        selected_items
             .into_iter()
-            .map(|thought| thought.id)
-            .collect::<Vec<_>>();
+            .filter_map(BoardItemId::thought)
+            .collect()
+    }
+
+    /// Ordered mixed items addressed by the next structural Board action.
+    pub(super) fn action_item_ids(&self) -> Vec<BoardItemId> {
+        let order = self.live_item_ids();
         let selected = self.selection.selected_in(&order);
         if selected.is_empty() {
-            self.state.focused_thought.into_iter().collect()
+            self.state.focused_item.into_iter().collect()
         } else {
             selected
         }
     }
 
+    pub(super) fn action_has_separator(&self) -> bool {
+        self.action_item_ids()
+            .iter()
+            .any(|item| matches!(item, BoardItemId::Separator(_)))
+    }
+
     pub(super) fn submission_locked(&self, thought_id: ThoughtId) -> bool {
         self.state.thought_locked(thought_id)
+            || self.pending_transfer_batches.values().any(|request| {
+                request.remove_source
+                    && request
+                        .items
+                        .iter()
+                        .any(|item| item.source_thought_id == thought_id)
+            })
+    }
+
+    pub(super) fn thought_mutable(&self, thought_id: ThoughtId) -> bool {
+        !self.submission_locked(thought_id)
     }
 
     pub(super) fn edit_content_mutation_blocked(&self, thought_id: ThoughtId) -> bool {
@@ -249,7 +291,7 @@ impl BoardApp {
     pub fn insertion_focused(&self) -> bool {
         matches!(self.state.mode, InteractionMode::Board)
             && (matches!(self.insertion_focus, super::InsertionFocus::Active)
-                || self.state.board.live_thoughts().is_empty())
+                || self.state.board.live_items().is_empty())
     }
 
     /// Whether the transient insertion editor owns input and cursor focus.
@@ -293,17 +335,13 @@ impl BoardApp {
     /// Current hover target resolved from the latest rendered layout.
     #[must_use]
     pub fn hovered(&self) -> Option<HitTarget> {
-        if self.selection_is_empty() {
-            self.hovered
-        } else {
-            None
-        }
+        self.hovered
     }
 
-    /// Thought currently being dragged, when pointer reordering is active.
+    /// Board item currently being dragged, when pointer reordering is active.
     #[must_use]
-    pub const fn dragged_thought(&self) -> Option<ThoughtId> {
-        self.dragged_thought
+    pub const fn dragged_item(&self) -> Option<BoardItemId> {
+        self.dragged_item
     }
 
     /// Board position currently previewed as the drag destination.
@@ -355,6 +393,11 @@ impl BoardApp {
     /// UTF-8 byte cursor for the active searchable overlay query.
     #[must_use]
     pub fn overlay_query_cursor(&self) -> Option<usize> {
+        self.export_field_cursor()
+            .or_else(|| self.overlay_picker_query_cursor())
+    }
+
+    fn overlay_picker_query_cursor(&self) -> Option<usize> {
         self.search
             .as_ref()
             .map(search::SearchState::query_cursor)
@@ -375,6 +418,9 @@ impl BoardApp {
     /// Directional selection for the active searchable overlay query.
     #[must_use]
     pub(in crate::ui) fn overlay_query_selection(&self) -> Option<super::query::QuerySelection> {
+        if self.export.active.is_some() {
+            return self.export_field_selection();
+        }
         self.search
             .as_ref()
             .and_then(search::SearchState::query_selection)
@@ -393,6 +439,9 @@ impl BoardApp {
     }
 
     pub(in crate::ui) fn picker_overflow(&self, visible: usize) -> (bool, bool) {
+        if self.export.active.is_some() {
+            return self.export_overflow(visible);
+        }
         if self.search.is_some() {
             return self.search_overflow(visible);
         }

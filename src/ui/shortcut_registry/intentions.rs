@@ -40,7 +40,7 @@ pub(super) fn action_intention(action: Action, context: Context, stroke: KeyStro
         Context::Compose | Context::Edit | Context::Invocation
     ) && matches!(
         action,
-        Action::MoveUp | Action::MoveDown | Action::Duplicate
+        Action::MoveUp | Action::MoveDown | Action::Duplicate | Action::RenameThought
     ) {
         return UiKey::Shortcut(action);
     }
@@ -102,6 +102,7 @@ const fn is_board_typed_action(action: Action) -> bool {
         action,
         Action::New
             | Action::Edit
+            | Action::RenameThought
             | Action::Delete
             | Action::FocusPrevious
             | Action::FocusNext

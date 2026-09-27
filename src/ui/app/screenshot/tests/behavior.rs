@@ -39,7 +39,7 @@ fn durable_capture_preserves_an_active_editor_and_exact_path_annotation() {
     let editor_during = app.editor_snapshot().expect("live editor during commit");
     assert_eq!(editor_during, editor_before);
     let effects = app.complete_screenshot_capture(Ok(created(&commit)), &mut ids, &clock);
-    assert_eq!(app.state.focused_thought, Some(original_id));
+    assert_eq!(app.state.focused_thought_id(), Some(original_id));
     assert_eq!(
         app.editor_snapshot().expect("replayed editor").content,
         "active!"
@@ -97,7 +97,7 @@ fn newest_capture_in_one_detection_burst_is_left_ready_for_annotation() {
     let second = next_commit(&mut app, &mut ids, &clock);
     let newest_id = capture_thought_id(&second);
     app.complete_screenshot_capture(Ok(created(&second)), &mut ids, &clock);
-    assert_eq!(app.state.focused_thought, Some(newest_id));
+    assert_eq!(app.state.focused_thought_id(), Some(newest_id));
     assert_eq!(
         app.state.mode,
         InteractionMode::Edit {
@@ -280,7 +280,7 @@ fn explicit_editor_interaction_prevents_burst_auto_advance() {
     let second = next_commit(&mut app, &mut ids, &clock);
 
     app.complete_screenshot_capture(Ok(created(&second)), &mut ids, &clock);
-    assert_eq!(app.state.focused_thought, Some(first_id));
+    assert_eq!(app.state.focused_thought_id(), Some(first_id));
     assert_eq!(
         app.state.mode,
         InteractionMode::Edit {

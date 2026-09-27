@@ -8,14 +8,14 @@ fn arrows_and_jk_share_focus_and_shift_range_intentions() {
         durable_thought(&mut arrows, content);
     }
     arrows.input(visual(CursorMovement::VisualUp, false));
-    let arrow_focus = arrows.app.state.focused_thought;
+    let arrow_focus = arrows.app.state.focused_thought_id();
 
     let mut letters = Fixture::new();
     for content in ["first", "second", "third"] {
         durable_thought(&mut letters, content);
     }
     letters.input(crate::key_input(UiKey::Character('k')));
-    assert_eq!(letters.app.state.focused_thought, arrow_focus);
+    assert_eq!(letters.app.state.focused_thought_id(), arrow_focus);
 
     arrows.input(visual(CursorMovement::VisualUp, true));
     letters.input(crate::key_input(UiKey::Character('K')));

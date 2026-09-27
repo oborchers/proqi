@@ -13,6 +13,9 @@ impl BoardMutation {
             Self::AddThought { thought } | Self::AddThoughtFromCompose { thought, .. } => {
                 thought.id == thought_id
             }
+            Self::AddSeparator { .. }
+            | Self::SetSeparatorDeletion { .. }
+            | Self::MoveSeparator { .. } => false,
             Self::SetDeletion {
                 thought_id: affected,
                 ..
@@ -33,6 +36,10 @@ impl BoardMutation {
                 thought_id: affected,
                 ..
             }
+            | Self::SetName {
+                thought_id: affected,
+                ..
+            }
             | Self::LegacySetCollapsed {
                 thought_id: affected,
                 ..
@@ -50,11 +57,15 @@ impl BoardMutation {
             Self::AddThought { thought } | Self::AddThoughtFromCompose { thought, .. } => {
                 push_distinct(thought_ids, thought.id);
             }
+            Self::AddSeparator { .. }
+            | Self::SetSeparatorDeletion { .. }
+            | Self::MoveSeparator { .. } => {}
             Self::SetDeletion { thought_id, .. }
             | Self::SetDeletionExact { thought_id, .. }
             | Self::MoveThought { thought_id, .. }
             | Self::ReplaceContent { thought_id, .. }
             | Self::SetPresentation { thought_id, .. }
+            | Self::SetName { thought_id, .. }
             | Self::LegacySetCollapsed { thought_id, .. } => {
                 push_distinct(thought_ids, *thought_id);
             }

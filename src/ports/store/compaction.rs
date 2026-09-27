@@ -1,8 +1,9 @@
 //! Content-redacted request identity retained after history compaction.
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest as _, Sha256};
 
-use crate::domain::{ContentAnnotation, SessionId, ThoughtId, UndoScope};
+use crate::domain::{ContentAnnotation, SessionId, ThoughtId, ThoughtName, UndoScope};
 
 use super::StoreError;
 
@@ -37,6 +38,15 @@ pub enum CompactedOperationRequest {
         /// Durable destination position.
         position: usize,
     },
+    /// Optional thought-name replacement.
+    Rename {
+        /// Owning session.
+        session_id: SessionId,
+        /// Renamed thought.
+        thought_id: ThoughtId,
+        /// Replacement name, or `None` when cleared.
+        name: Option<ThoughtName>,
+    },
     /// Persistent board or editor undo and redo.
     History {
         /// Owning session.
@@ -59,8 +69,6 @@ pub fn thought_payload_digest(
     content: &str,
     annotations: &[ContentAnnotation],
 ) -> Result<[u8; 32], StoreError> {
-    use sha2::{Digest as _, Sha256};
-
     let mut input_annotations = annotations.to_vec();
     crate::domain::renew_attachment_occurrences(&mut input_annotations);
     let annotations = serde_json::to_vec(&input_annotations)
@@ -73,5 +81,28 @@ pub fn thought_payload_digest(
     );
     digest.update(content.as_bytes());
     digest.update(annotations);
+    Ok(digest.finalize().into())
+}
+
+/// Hash exact content, annotations, and separately encoded optional name.
+///
+/// # Errors
+///
+/// Returns a serialization error when annotations cannot be encoded canonically.
+pub fn thought_payload_digest_with_name(
+    content: &str,
+    annotations: &[ContentAnnotation],
+    name: Option<&ThoughtName>,
+) -> Result<[u8; 32], StoreError> {
+    if name.is_none() {
+        return thought_payload_digest(content, annotations);
+    }
+    let payload = thought_payload_digest(content, annotations)?;
+    let mut digest = Sha256::new();
+    digest.update(payload);
+    digest.update([1]);
+    if let Some(name) = name {
+        digest.update(name.as_str().as_bytes());
+    }
     Ok(digest.finalize().into())
 }

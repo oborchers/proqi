@@ -226,7 +226,14 @@ fn merge_failure_does_not_apply_an_earlier_mutation_or_advance_sequence() {
         },
         created_at: Timestamp::from_millis(3),
     };
-    assert!(store.commit(&OperationBatch::Board(operation)).is_err());
+    assert!(
+        store
+            .commit(&OperationBatch::Board {
+                operation,
+                semantic_fingerprint: None,
+            })
+            .is_err()
+    );
     let snapshot = store.load_session(session_id).expect("unchanged snapshot");
     assert_eq!(
         snapshot.board.thought(source).expect("source").content,

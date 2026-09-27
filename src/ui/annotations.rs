@@ -11,9 +11,6 @@ mod reflow;
 pub(super) use rebase::{rebase, rebase_preserved};
 pub(in crate::ui) use reflow::{PasteReflow, ReflowProjection};
 
-const LARGE_PASTE_LINES: usize = 12;
-const LARGE_PASTE_GRAPHEMES: usize = 1_200;
-
 /// Exact inserted text with optional durable presentation provenance.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PastePayload {

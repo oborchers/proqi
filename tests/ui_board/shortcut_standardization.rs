@@ -36,7 +36,7 @@ fn two_raw_arrows_keep_editor_ownership_until_neighbor_navigation_completes() {
         fixture.app.interaction_mode(),
         proqi::application::InteractionMode::Board
     );
-    assert_eq!(fixture.app.state.focused_thought, Some(first));
+    assert_eq!(fixture.app.state.focused_thought_id(), Some(first));
 }
 
 #[test]
@@ -262,7 +262,7 @@ fn shifted_reserved_character_chords_are_conservative_in_board_and_edit() {
     let shifted = ['A', 'C', 'D', 'Q', 'X', 'Y'];
     let mut board = Fixture::new();
     super::agent::prepare_thought(&mut board);
-    let focused = board.app.state.focused_thought;
+    let focused = board.app.state.focused_thought_id();
     for character in shifted {
         assert!(
             board
@@ -271,7 +271,7 @@ fn shifted_reserved_character_chords_are_conservative_in_board_and_edit() {
             "board chord {character:?}"
         );
     }
-    assert_eq!(board.app.state.focused_thought, focused);
+    assert_eq!(board.app.state.focused_thought_id(), focused);
     assert!(!board.app.quit);
 
     board.input(crate::key_input(UiKey::Enter));

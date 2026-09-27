@@ -6,6 +6,7 @@ use ratatui_core::{
 };
 
 use super::{Theme, cell_width, ellipsize};
+use crate::ui::HitTarget;
 
 #[derive(Clone, Copy)]
 pub(in crate::ui::render) struct PickerView<'a> {
@@ -16,6 +17,7 @@ pub(in crate::ui::render) struct PickerView<'a> {
     pub(in crate::ui::render) selection: Option<crate::ui::app::query::QuerySelection>,
     pub(in crate::ui::render) entries: &'a [PickerRow<'a>],
     pub(in crate::ui::render) selected: usize,
+    pub(in crate::ui::render) hovered: Option<HitTarget>,
 }
 
 #[derive(Clone, Copy)]
@@ -133,18 +135,28 @@ pub(super) fn picker_line(
     entry: PickerRow<'_>,
     width: u16,
     selected: bool,
+    hovered: bool,
     theme: &Theme,
 ) -> Line<'static> {
+    let enabled_hovered = hovered && entry.enabled;
     if entry.secondary.is_none() {
-        let base = if selected {
+        let base = if enabled_hovered && selected {
+            theme.focused_control_hovered_style()
+        } else if enabled_hovered {
+            theme.control_hovered_style()
+        } else if selected {
             theme.focused_style()
         } else {
             theme.base_style()
         };
-        let style = if !entry.enabled {
+        let style = if enabled_hovered && selected {
+            base
+        } else if !entry.enabled {
             base.fg(theme.muted)
         } else if selected {
             base.fg(theme.accent).add_modifier(Modifier::BOLD)
+        } else if enabled_hovered {
+            base.fg(theme.accent)
         } else {
             base
         };
@@ -154,15 +166,23 @@ pub(super) fn picker_line(
     }
     let width = usize::from(width);
     let (primary, secondary) = picker_content(entry, width);
-    let base = if selected {
+    let base = if enabled_hovered && selected {
+        theme.focused_control_hovered_style()
+    } else if enabled_hovered {
+        theme.control_hovered_style()
+    } else if selected {
         theme.focused_style()
     } else {
         theme.base_style()
     };
-    let primary_style = if !entry.enabled {
+    let primary_style = if enabled_hovered && selected {
+        base
+    } else if !entry.enabled {
         base.fg(theme.muted)
     } else if selected {
         base.fg(theme.accent).add_modifier(Modifier::BOLD)
+    } else if enabled_hovered {
+        base.fg(theme.accent)
     } else {
         base.fg(theme.foreground)
     };
@@ -177,7 +197,14 @@ pub(super) fn picker_line(
     Line::from(vec![
         Span::styled(primary, primary_style),
         Span::styled(" ".repeat(gap), base),
-        Span::styled(secondary, base.fg(theme.muted)),
+        Span::styled(
+            secondary,
+            if enabled_hovered && selected {
+                base
+            } else {
+                base.fg(theme.muted)
+            },
+        ),
     ])
 }
 

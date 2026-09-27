@@ -6,14 +6,22 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::{
-    Installation, InstallationIdentity, InstallationKind, InstanceId, ReleaseHighlightAnnouncement,
-    RequestId, SessionId, StableVersion, Timestamp, UpdateCacheState,
+    ExternalRestartPending, Installation, InstallationIdentity, InstallationKind, InstanceId,
+    ReleaseHighlightAnnouncement, RequestId, SessionId, StableVersion, Timestamp, UpdateCacheState,
 };
 
 use super::runtime::InstanceInfo;
 
-/// Current ephemeral all-session update protocol.
-pub const UPDATE_CONTROL_PROTOCOL_VERSION: u32 = 2;
+mod convergence;
+mod external;
+
+pub use convergence::{ExternalCacheTransition, UpdateLease, UpdateLockKind};
+pub use external::{
+    ExternalUpgradeAdoptionAuthority, ExternalUpgradeAuthorityError, ProcessReplacer,
+};
+
+/// Current all-session protocol; v3 requires durable external-restart compatibility.
+pub const UPDATE_CONTROL_PROTOCOL_VERSION: u32 = 3;
 
 /// One bounded response from the canonical stable-release source.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -28,22 +36,6 @@ pub enum ReleaseObservation {
     /// Cached release metadata remains current.
     NotModified,
 }
-
-/// Installation-wide lock purpose.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum UpdateLockKind {
-    /// Own the one permitted background network refresh.
-    Refresh,
-    /// Own the one actionable update prompt.
-    Prompt,
-    /// Own the one approved installer invocation.
-    Installer,
-    /// Exclude schema entrants while one installed cohort becomes quiescent.
-    Convergence,
-}
-
-/// RAII installation lock released on drop or process exit.
-pub trait UpdateLease: Send {}
 
 /// Stable-release source such as the GitHub Releases API.
 pub trait ReleaseSource {
@@ -107,6 +99,22 @@ pub trait UpdateStateStore {
         self.try_lock(installation, UpdateLockKind::Convergence)
     }
 
+    /// Wait a bounded interval to enter shared schema-startup admission.
+    ///
+    /// Production implementations use this for bounded lock handoff and concurrent startup
+    /// revalidation while an active convergence owner finishes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a filesystem or lock failure.
+    fn wait_for_startup_lock(
+        &self,
+        installation: InstallationIdentity,
+        _timeout: Duration,
+    ) -> Result<Option<Box<dyn UpdateLease>>, UpdateError> {
+        self.try_startup_lock(installation)
+    }
+
     /// Atomically begin a refresh when the caller still represents the observed generation.
     ///
     /// Passing `None` forces an explicitly requested refresh. Passing a generation coalesces
@@ -168,6 +176,48 @@ pub trait UpdateStateStore {
         installed: StableVersion,
         restart_needed: bool,
     ) -> Result<UpdateCacheState, UpdateError>;
+
+    /// Adopt a verified newer external installation only when the cached observation still
+    /// matches the value inspected under convergence ownership.
+    ///
+    /// # Errors
+    ///
+    /// Returns a private atomic cache-write failure.
+    fn reconcile_external_upgrade(
+        &self,
+        installation: InstallationIdentity,
+        expected_observed: &StableVersion,
+        installed: &StableVersion,
+        pending: Option<&ExternalRestartPending>,
+    ) -> Result<ExternalCacheTransition, UpdateError>;
+
+    /// Clear external restart state only after exact replacement readiness was verified.
+    ///
+    /// # Errors
+    ///
+    /// Returns a private atomic cache-write failure.
+    fn complete_external_restart(
+        &self,
+        installation: InstallationIdentity,
+        installed: &StableVersion,
+        pending: &ExternalRestartPending,
+    ) -> Result<ExternalCacheTransition, UpdateError>;
+
+    /// Acknowledge one exact pending session only after an explicit manual resume owns its lease.
+    ///
+    /// The transition retains every other unfinished expectation and clears restart state only
+    /// when this session was the final member of the exact cohort.
+    ///
+    /// # Errors
+    ///
+    /// Returns a private atomic cache-write failure.
+    fn acknowledge_external_resume(
+        &self,
+        installation: InstallationIdentity,
+        installed: &StableVersion,
+        pending: &ExternalRestartPending,
+        session_id: SessionId,
+    ) -> Result<ExternalCacheTransition, UpdateError>;
 
     /// Atomically complete one exact pending restart transition.
     ///
@@ -339,8 +389,8 @@ pub trait UpdateInstanceRegistry {
     /// Wait a bounded interval for every peer session to reappear through its accepted same-process
     /// replacement under the exact target and a live owner-control endpoint.
     ///
-    /// Returns the previous instance identities that did not converge. Expectations are
-    /// ephemeral coordinator memory and are never persisted.
+    /// Returns the previous instance identities that did not converge. External coordination can
+    /// persist the same bounded typed expectations until exact completion is revalidated.
     ///
     /// # Errors
     ///
@@ -421,24 +471,6 @@ pub trait StandaloneInstallerSource {
     ///
     /// Returns bounded transport, response, checksum, or size failures.
     fn verified_installer(&mut self, expected: &StableVersion) -> Result<Vec<u8>, UpdateError>;
-}
-
-/// Replaces the current Unix process after all terminal-owned resources are released.
-pub trait ProcessReplacer {
-    /// Replace this process with the verified executable resuming one session.
-    ///
-    /// # Errors
-    ///
-    /// Returns only when process replacement is unsupported or `exec` fails.
-    fn replace(
-        &self,
-        executable: &std::path::Path,
-        session_id: SessionId,
-        state_root: Option<&std::path::Path>,
-        operation_id: RequestId,
-        previous_instance_id: InstanceId,
-        target_version: &StableVersion,
-    ) -> Result<(), UpdateError>;
 }
 
 /// Update boundary failure without user content.

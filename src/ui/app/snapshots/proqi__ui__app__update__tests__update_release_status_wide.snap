@@ -1,0 +1,17 @@
+---
+source: src/ui/app/update/tests.rs
+assertion_line: 126
+expression: rendered_board(&mut app)
+---
+00││
+01│                                 + Start typing│
+02││
+03││
+04││
+05││
+06││
+07││
+08│  Session is ready.│
+09│  fixture│
+10│  0 thoughts · saved│
+11│  Esc Board│

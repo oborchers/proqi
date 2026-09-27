@@ -12,7 +12,11 @@ fn populated() -> Fixture {
 }
 
 fn focus_content(fixture: &Fixture) -> &str {
-    let focused = fixture.app.state.focused_thought.expect("focused thought");
+    let focused = fixture
+        .app
+        .state
+        .focused_thought_id()
+        .expect("focused thought");
     &fixture
         .app
         .state

@@ -17,10 +17,10 @@ fn physical_macos_redo_encoding_restores_the_durable_deletion() {
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    let thought = thoughts["data"]["thoughts"][0]["id"]
+    let thought = thoughts["data"]["items"][0]["id"]
         .as_str()
         .expect("thought ID");
-    assert_eq!(thoughts["data"]["thoughts"][0]["content"], ORIGINAL);
+    assert_eq!(thoughts["data"]["items"][0]["content"], ORIGINAL);
 
     apply_edit_input(
         binary,
@@ -148,11 +148,8 @@ fn bracketed_paste_autosaves_and_resumes_in_a_real_pty() {
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
-        "Grüße 界\nsecond"
-    );
-    let thought = thoughts["data"]["thoughts"][0]["id"]
+    assert_eq!(thoughts["data"]["items"][0]["content"], "Grüße 界\nsecond");
+    let thought = thoughts["data"]["items"][0]["id"]
         .as_str()
         .expect("thought ID");
 

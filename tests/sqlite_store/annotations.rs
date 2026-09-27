@@ -124,6 +124,8 @@ fn invocation_reference_projection_survives_protocol_nine_migration() {
         .expect("version eight database")
         .execute_batch(
             "DROP TABLE onboarding_state;
+             DROP TABLE IF EXISTS transfer_source_claims;
+             DROP TABLE IF EXISTS transfer_attempts;
              DELETE FROM migration_history WHERE version >= 9;
              UPDATE schema_meta SET schema_version = 8, storage_protocol = 8;",
         )
@@ -179,6 +181,8 @@ fn protocol_ten_loads_structurally_valid_direct_shortcut_bytes_and_rejects_corru
     connection
         .execute_batch(
             "DROP TABLE onboarding_state;
+             DROP TABLE IF EXISTS transfer_source_claims;
+             DROP TABLE IF EXISTS transfer_attempts;
              DELETE FROM migration_history WHERE version >= 10;
              UPDATE schema_meta SET schema_version = 9, storage_protocol = 9;",
         )

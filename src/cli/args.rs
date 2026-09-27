@@ -52,8 +52,71 @@ pub(super) enum Command {
     Doctor,
     /// List and manage resumable sessions.
     Sessions(SessionArgs),
+    /// Mutate typed thoughts and separators in shared Board order.
+    Items(ItemArgs),
     /// Inspect and mutate thoughts in one explicit session.
     Thoughts(ThoughtArgs),
+    /// Run Proqi's Herdr plugin actions.
+    Herdr(HerdrArgs),
+}
+
+#[derive(Debug, Args)]
+pub(super) struct HerdrArgs {
+    #[command(subcommand)]
+    pub(super) command: HerdrCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub(super) enum HerdrCommand {
+    /// Open, focus, or close this tab's Proqi pane. Runs as the Herdr plugin action.
+    Toggle,
+}
+
+#[derive(Debug, Args)]
+pub(super) struct ItemArgs {
+    #[command(subcommand)]
+    pub(super) command: ItemCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub(super) enum ItemCommand {
+    /// Insert one payload-free durable separator.
+    InsertSeparator {
+        session: String,
+        /// Zero-based position in the shared Board item order. Defaults to the end.
+        #[arg(long)]
+        position: Option<usize>,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Move one typed thought or separator in shared Board order.
+    Move {
+        session: String,
+        item: String,
+        position: usize,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Soft-delete Board-ordered typed items as one Board operation.
+    Delete {
+        session: String,
+        #[arg(required = true, num_args = 1..)]
+        items: Vec<String>,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Duplicate Board-ordered typed items as one Board operation.
+    Duplicate {
+        session: String,
+        #[arg(required = true, num_args = 1..)]
+        items: Vec<String>,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -129,6 +192,29 @@ pub(super) enum SessionCommand {
         /// Include recoverably trashed sessions.
         #[arg(long)]
         all: bool,
+        #[command(flatten)]
+        page: PageArgs,
+    },
+    /// Return the one live session with this name and directory, creating it when absent.
+    Ensure {
+        /// Exact session name.
+        #[arg(long)]
+        name: String,
+        /// Existing origin directory that identifies the session with its name.
+        #[arg(long, value_name = "PATH")]
+        cwd: PathBuf,
+    },
+    /// Create one additional named session without opening it.
+    Create {
+        /// Exact session name. Existing sessions may already use it.
+        #[arg(long)]
+        name: String,
+        /// Existing origin directory. Defaults to the current directory.
+        #[arg(long, value_name = "PATH")]
+        cwd: Option<PathBuf>,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
     },
     /// Set or clear an optional session name.
     Rename {
@@ -139,22 +225,57 @@ pub(super) enum SessionCommand {
         /// Clear the optional name.
         #[arg(long, conflicts_with = "name")]
         clear: bool,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
     },
-    /// Move a session to recoverable trash.
-    Trash { session: String },
+    /// Move a session to recoverable trash. An already trashed session is unchanged.
+    Trash {
+        session: String,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
     /// Restore a session from recoverable trash.
-    Restore { session: String },
+    Restore {
+        session: String,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
     /// Undo the latest session rename, trash, or restore from Browser history.
-    Undo,
+    Undo {
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
     /// Redo the next session rename, trash, or restore from Browser history.
-    Redo,
+    Redo {
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
     /// Permanently delete an already trashed session.
     Prune {
         session: String,
         /// Confirm permanent deletion.
         #[arg(long)]
         yes: bool,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
     },
+}
+
+/// Bounded list pagination shared by list commands.
+#[derive(Clone, Debug, Default, Args)]
+pub(super) struct PageArgs {
+    /// Return at most this many entries.
+    #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(1..))]
+    pub(super) limit: Option<u32>,
+    /// Continue after this entry identifier from a previous `next_after`.
+    #[arg(long, value_name = "ID")]
+    pub(super) after: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -165,13 +286,20 @@ pub(super) struct ThoughtArgs {
 
 #[derive(Debug, Subcommand)]
 pub(super) enum ThoughtCommand {
-    /// List thoughts in board order.
-    List { session: String },
+    /// List thoughts and separators in Board order.
+    List {
+        session: String,
+        #[command(flatten)]
+        page: PageArgs,
+    },
     /// Print one exact thought body and metadata.
     Inspect { session: String, thought: String },
     /// Add standard input as one thought.
     Add {
         session: String,
+        /// Optional organizational name created in the same Board operation.
+        #[arg(long)]
+        name: Option<String>,
         /// Zero-based insertion position. Defaults to the end.
         #[arg(long)]
         position: Option<usize>,
@@ -183,6 +311,20 @@ pub(super) enum ThoughtCommand {
     Delete {
         session: String,
         thought: String,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Set or clear one thought's optional organizational name.
+    Rename {
+        session: String,
+        thought: String,
+        /// Replacement name. An empty value clears it.
+        #[arg(required_unless_present = "clear", conflicts_with = "clear")]
+        name: Option<String>,
+        /// Clear the optional name.
+        #[arg(long)]
+        clear: bool,
         /// Durable idempotency identity.
         #[arg(long, value_name = "OP_ID")]
         operation_id: Option<String>,
@@ -217,6 +359,76 @@ pub(super) enum ThoughtCommand {
         session: String,
         thought: String,
         position: usize,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Split one thought at an exact UTF-8 byte boundary.
+    Split {
+        session: String,
+        thought: String,
+        at_byte: usize,
+        /// Required SHA-256 of current content.
+        #[arg(long, value_name = "HEX")]
+        expected_sha256: String,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Extract one exact nonempty UTF-8 byte range into a new thought.
+    Extract {
+        session: String,
+        thought: String,
+        start_byte: usize,
+        end_byte: usize,
+        /// Required SHA-256 of current content.
+        #[arg(long, value_name = "HEX")]
+        expected_sha256: String,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Merge exact Board-contiguous thoughts in the supplied order.
+    Merge {
+        session: String,
+        #[arg(required = true, num_args = 2..)]
+        thoughts: Vec<String>,
+        /// SHA-256 preconditions paired with the thoughts in the same order.
+        #[arg(long = "expected-sha256", required = true, num_args = 1)]
+        expected_sha256: Vec<String>,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Clean one thought with Proqi's canonical spacing policy.
+    Reflow {
+        session: String,
+        thought: String,
+        /// Required SHA-256 of current content.
+        #[arg(long, value_name = "HEX")]
+        expected_sha256: String,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Write thoughts to a plain-text file, optionally removing or replacing them.
+    Export {
+        session: String,
+        /// Thoughts to export; the file follows their Board order.
+        #[arg(required = true, num_args = 1..)]
+        thoughts: Vec<String>,
+        /// Destination file; relative paths resolve from the current directory.
+        #[arg(long, value_name = "PATH")]
+        output: String,
+        /// Remove the thoughts after the file is durable.
+        #[arg(long, conflicts_with = "replace_with_reference")]
+        remove: bool,
+        /// Replace the thoughts with one reference to the file after it is durable.
+        #[arg(long)]
+        replace_with_reference: bool,
+        /// Replace an existing regular file at the destination.
+        #[arg(long)]
+        replace_existing: bool,
         /// Durable idempotency identity.
         #[arg(long, value_name = "OP_ID")]
         operation_id: Option<String>,

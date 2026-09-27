@@ -45,7 +45,7 @@ fn page_then_delete(sequence: &str) -> Vec<String> {
     let session = sessions["data"]["sessions"][0]["id"]
         .as_str()
         .expect("session ID");
-    json_command(binary, state.path(), &["thoughts", "list", session])["data"]["thoughts"]
+    json_command(binary, state.path(), &["thoughts", "list", session])["data"]["items"]
         .as_array()
         .expect("thoughts")
         .iter()
@@ -108,7 +108,7 @@ fn both_shifted_d_terminal_spellings_duplicate_in_a_real_pty() {
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        thoughts["data"]["thoughts"]
+        thoughts["data"]["items"]
             .as_array()
             .expect("thoughts")
             .iter()
@@ -165,10 +165,7 @@ fn board_key_and_forwarded_primary_a_select_every_thought_in_a_real_pty() {
             .as_str()
             .expect("session ID");
         let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-        assert_eq!(
-            thoughts["data"]["thoughts"].as_array().map(Vec::len),
-            Some(0)
-        );
+        assert_eq!(thoughts["data"]["items"].as_array().map(Vec::len), Some(0));
     }
 }
 
@@ -219,8 +216,5 @@ fn shifted_arrow_range_selection_deletes_one_real_pty_block() {
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    assert_eq!(
-        thoughts["data"]["thoughts"].as_array().map(Vec::len),
-        Some(0)
-    );
+    assert_eq!(thoughts["data"]["items"].as_array().map(Vec::len), Some(0));
 }

@@ -295,34 +295,28 @@ pub(super) fn downgrade_to_legacy(fixture: &DatabaseFixture) {
     }
     connection
         .execute_batch(
-            "DROP TABLE browser_history_receipts;
+            "ALTER TABLE commit_receipts DROP COLUMN semantic_fingerprint;
+             ALTER TABLE thoughts DROP COLUMN name;
+             DROP INDEX separators_session;
+             DROP INDEX separators_live_position;
+             DROP TABLE separators;
+             DROP TABLE browser_history_receipts;
              DROP TABLE browser_operation_receipts;
              DROP TABLE browser_operations;
              DROP TABLE browser_history_state;
              ALTER TABLE sessions DROP COLUMN attachment_image_high;
              ALTER TABLE sessions DROP COLUMN attachment_file_high;
+             DROP TABLE IF EXISTS transfer_source_claims;
+             DROP TABLE IF EXISTS transfer_attempts;
              DELETE FROM migration_history WHERE version >= 14;
              UPDATE schema_meta SET schema_version = 13, storage_protocol = 12;",
         )
         .expect("legacy schema");
 }
 
-fn strip_ordinals(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(object) => {
-            object.remove("ordinal");
-            for child in object.values_mut() {
-                strip_ordinals(child);
-            }
-        }
-        serde_json::Value::Array(values) => {
-            for child in values {
-                strip_ordinals(child);
-            }
-        }
-        _ => {}
-    }
-}
+#[path = "../support/legacy_ordinals.rs"]
+mod legacy_ordinals;
+use legacy_ordinals::strip_ordinals;
 
 #[path = "attachment_numbering/capture.rs"]
 mod capture;

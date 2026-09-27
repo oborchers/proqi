@@ -308,7 +308,7 @@ fn collapsed_gutter_click_expands_without_starting_a_stale_drag() {
         fixture.app.state.board.live_thoughts()[0].presentation,
         proqi::domain::ThoughtPresentation::Expanded
     );
-    assert!(fixture.app.dragged_thought().is_none());
+    assert!(fixture.app.dragged_item().is_none());
     assert!(
         fixture.app.prepare_frame(area).thoughts[0]
             .overflow
@@ -323,7 +323,7 @@ fn viewport_matrix_keeps_focus_visible_and_hit_geometry_current() {
         fixture.paste(&format!("thought {index} 界"));
         fixture.input(crate::key_input(UiKey::Escape));
     }
-    let focused = fixture.app.state.focused_thought.expect("focus");
+    let focused = fixture.app.state.focused_thought_id().expect("focus");
     for (width, height) in [(6, 3), (120, 4), (18, 30), (9, 5), (80, 24)] {
         let layout = fixture.app.prepare_frame(Rect::new(0, 0, width, height));
         let thought = layout.thought(focused).expect("focused thought visible");

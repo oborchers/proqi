@@ -9,7 +9,7 @@ use std::process::Command;
 
 const MAX_SOURCE_LINES: usize = 500;
 const SOURCE_EXTENSIONS: &[&str] = &[
-    "astro", "cjs", "css", "cts", "html", "js", "jsx", "less", "mjs", "mts", "rs", "scss",
+    "astro", "cjs", "css", "cts", "html", "js", "jsx", "less", "mjs", "mts", "rs", "scss", "sh",
     "svelte", "ts", "tsx", "vue",
 ];
 

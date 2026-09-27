@@ -9,6 +9,7 @@ use std::{
     os::unix::fs::symlink,
     path::{Path, PathBuf},
     process::{Child, Command, Output, Stdio},
+    sync::OnceLock,
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -20,11 +21,12 @@ use proqi::{
     ports::update::InstallDetector as _,
 };
 
-const OLD_VERSION: &str = "0.8.99";
+pub(super) const OLD_VERSION: &str = "0.8.99";
+const PREVIOUS_RELEASE_COMMIT: &str = "9ddc01f1cb2b55dc4f82c587124844a7209aceba";
 const COMMAND_OUTPUT_LIMIT: u64 = 4 * 1024 * 1024;
-const COORDINATOR_TIMEOUT: Duration = Duration::from_secs(90);
-const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
-const BUILD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+pub(super) const COORDINATOR_TIMEOUT: Duration = Duration::from_secs(90);
+pub(super) const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+pub(super) const BUILD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 struct CapturedChild {
     child: Option<Child>,
@@ -55,9 +57,19 @@ impl CapturedChild {
         }
     }
 
-    fn finish(mut self, timeout: Duration, label: &str) -> Output {
+    fn finish(self, timeout: Duration, label: &str) -> Output {
+        self.finish_observed(timeout, label, || {})
+    }
+
+    fn finish_observed(
+        mut self,
+        timeout: Duration,
+        label: &str,
+        mut observe: impl FnMut(),
+    ) -> Output {
         let deadline = Instant::now() + timeout;
         let status = loop {
+            observe();
             let status = self
                 .child
                 .as_mut()
@@ -127,7 +139,7 @@ fn join_output(
     output
 }
 
-fn run_bounded(command: &mut Command, timeout: Duration, label: &str) -> Output {
+pub(super) fn run_bounded(command: &mut Command, timeout: Duration, label: &str) -> Output {
     CapturedChild::spawn(command, label).finish(timeout, label)
 }
 
@@ -144,14 +156,28 @@ pub(super) struct InstallationFixture {
     pub(super) identity: InstallationIdentity,
 }
 
+impl InstallationFixture {
+    pub(super) fn replace_externally(&self) {
+        fs::remove_file(&self.active_binary).expect("remove old active link");
+        symlink(&self.new_binary, &self.active_binary).expect("activate new external binary");
+        fs::remove_file(&self.old_binary).expect("remove old Cellar executable");
+        assert!(!self.old_binary.exists());
+    }
+}
+
 impl OldFixture {
-    pub(super) fn build() -> Self {
+    pub(super) fn build() -> &'static Self {
+        static FIXTURE: OnceLock<OldFixture> = OnceLock::new();
+        FIXTURE.get_or_init(Self::build_uncached)
+    }
+
+    fn build_uncached() -> Self {
         let root = tempfile::Builder::new()
             .prefix("proqi-old-schema-source")
             .tempdir_in("/private/tmp")
             .expect("old source root");
         let source = prepare_old_source(root.path());
-        let (old_binary, coordinator) = build_old_binaries(&source, root.path());
+        let (old_binary, coordinator) = build_old_binaries(&source);
         Self {
             _root: root,
             old_binary,
@@ -211,6 +237,7 @@ impl OldFixture {
         installation: &InstallationFixture,
         initiating: InstanceId,
         initiating_session: proqi::domain::SessionId,
+        owners: &mut super::cohort::Owners,
     ) -> serde_json::Value {
         let initiating = initiating.to_string();
         let initiating_session = initiating_session.to_string();
@@ -227,7 +254,7 @@ impl OldFixture {
             .arg(&installer_active)
             .arg(&late_start_observed);
         let child = CapturedChild::spawn(&mut command, "old coordinator");
-        wait_for_path(&installer_active);
+        wait_for_path(&installer_active, owners);
         let mut late_command = Command::new(&installation.old_binary);
         late_command
             .args([
@@ -237,20 +264,25 @@ impl OldFixture {
                 "-r",
             ])
             .arg(&initiating_session);
-        let late = run_bounded(&mut late_command, PROBE_TIMEOUT, "obsolete start probe");
+        let late = CapturedChild::spawn(&mut late_command, "inactive keg start probe")
+            .finish_observed(PROBE_TIMEOUT, "inactive keg start probe", || {
+                owners.assert_running();
+            });
         let late_output = format!(
             "{}{}",
             String::from_utf8_lossy(&late.stdout),
             String::from_utf8_lossy(&late.stderr)
         );
-        assert!(!late.status.success(), "obsolete start entered the schema");
+        assert!(!late.status.success(), "inactive keg entered the schema");
+        assert!(late_output.contains("installation_failed"), "{late_output}");
         assert!(
-            late_output.contains("update_convergence_active"),
+            late_output.contains("does not match the active Homebrew installation"),
             "{late_output}"
         );
-        assert!(late_output.contains(&initiating_session), "{late_output}");
         fs::write(&late_start_observed, b"continue").expect("release installer fixture");
-        let output = child.finish(COORDINATOR_TIMEOUT, "old coordinator");
+        let output = child.finish_observed(COORDINATOR_TIMEOUT, "old coordinator", || {
+            owners.assert_running();
+        });
         assert!(
             output.status.success(),
             "old coordinator failed: {}",
@@ -260,9 +292,10 @@ impl OldFixture {
     }
 }
 
-fn wait_for_path(path: &Path) {
+fn wait_for_path(path: &Path, owners: &mut super::cohort::Owners) {
     let deadline = Instant::now() + Duration::from_secs(10);
     while !path.exists() {
+        owners.assert_running();
         assert!(
             Instant::now() < deadline,
             "path did not appear: {}",
@@ -275,73 +308,74 @@ fn wait_for_path(path: &Path) {
 fn prepare_old_source(root: &Path) -> PathBuf {
     let source = root.join("source");
     fs::create_dir(&source).expect("source directory");
-    copy_tree(&repo().join("src"), &source.join("src"));
-    for file in [
-        "Cargo.toml",
-        "Cargo.lock",
-        "README.md",
-        "LICENSE",
-        "release-highlights.json",
-        "rust-toolchain.toml",
-    ] {
-        fs::copy(repo().join(file), source.join(file)).expect("copy source file");
-    }
+    let archive = root.join("previous-release.tar");
+    let mut export = Command::new("git");
+    export
+        .args(["archive", "--format=tar", "--output"])
+        .arg(&archive)
+        .arg(PREVIOUS_RELEASE_COMMIT)
+        .current_dir(repo());
+    let output = run_bounded(&mut export, PROBE_TIMEOUT, "previous release source export");
+    assert!(
+        output.status.success(),
+        "previous release source export failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let mut extract = Command::new("/usr/bin/tar");
+    extract.args(["-xf"]).arg(&archive).arg("-C").arg(&source);
+    let output = run_bounded(
+        &mut extract,
+        PROBE_TIMEOUT,
+        "previous release source extraction",
+    );
+    assert!(
+        output.status.success(),
+        "previous release source extraction failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    // This source is pinned independently of the current test binary. A new
+    // release version must not change which version the historical manifest owns.
+    let manifest: toml::Value = toml::from_str(
+        &fs::read_to_string(source.join("Cargo.toml")).expect("historical manifest"),
+    )
+    .expect("valid historical manifest");
+    let source_version = manifest["workspace"]["package"]["version"]
+        .as_str()
+        .expect("historical workspace version");
+    let source_version = format!("version = \"{source_version}\"");
+    let old_version = format!("version = \"{OLD_VERSION}\"");
     rewrite(
         &source.join("Cargo.toml"),
         &[
             ("members = [\".\", \"xtask\"]", "members = [\".\"]"),
-            ("version = \"0.9.0\"", "version = \"0.8.99\""),
-        ],
-    );
-    rewrite(
-        &source.join("src/ports/store.rs"),
-        &[
+            (&source_version, &old_version),
             (
-                "SUPPORTED_SCHEMA_VERSION: u32 = 16",
-                "SUPPORTED_SCHEMA_VERSION: u32 = 15",
-            ),
-            (
-                "STORAGE_PROTOCOL_VERSION: u32 = 15",
-                "STORAGE_PROTOCOL_VERSION: u32 = 14",
+                "[package]\nname = \"proqi\"",
+                "[package]\nname = \"proqi\"\nautobins = false",
             ),
         ],
     );
-    rewrite(
-        &source.join("src/adapters/sqlite/migration.rs"),
-        &[
-            (
-                "        MIGRATION_14, MIGRATION_15, MIGRATION_16,",
-                "        MIGRATION_14, MIGRATION_15,",
-            ),
-            (
-                "        MIGRATION_14,\n        MIGRATION_15,\n        MIGRATION_16,",
-                "        MIGRATION_14,\n        MIGRATION_15,",
-            ),
-        ],
-    );
-    rewrite(
-        &source.join("src/adapters/sqlite/schema.rs"),
-        &[(
-            "INSERT INTO migration_history(version, applied_at) VALUES (16, 0);\n\";",
-            "\";",
-        )],
-    );
-    remove_first_section(
-        &source.join("src/adapters/sqlite/schema.rs"),
-        "CREATE TABLE browser_history_state (",
-        "INSERT INTO browser_history_state(singleton, cursor) VALUES (1, 0);\n\n",
-    );
-    remove_browser_history_dependencies(&source);
     fs::write(
         source.join("src/bin/update_fixture.rs"),
         coordinator::SOURCE,
     )
     .expect("write coordinator fixture");
+    fs::write(
+        source.join("src/bin/gateway_trace.rs"),
+        include_str!("gateway_trace.rs"),
+    )
+    .expect("write shared gateway trace fixture");
+    let manifest = source.join("Cargo.toml");
+    let mut content = fs::read_to_string(&manifest).expect("fixture manifest");
+    content.push_str(
+        "\n[[bin]]\nname = \"proqi_old_fixture\"\npath = \"src/bin/proqi.rs\"\n\n[[bin]]\nname = \"update_fixture\"\npath = \"src/bin/update_fixture.rs\"\n",
+    );
+    fs::write(manifest, content).expect("write fixture manifest");
     source
 }
 
-fn build_old_binaries(source: &Path, fixture_root: &Path) -> (PathBuf, PathBuf) {
-    let target = fixture_root.join("target");
+fn build_old_binaries(source: &Path) -> (PathBuf, PathBuf) {
+    let target = shared_fixture_target();
     let mut command = Command::new("cargo");
     command
         .args([
@@ -350,7 +384,7 @@ fn build_old_binaries(source: &Path, fixture_root: &Path) -> (PathBuf, PathBuf) 
             "--package",
             "proqi",
             "--bin",
-            "proqi",
+            "proqi_old_fixture",
             "--bin",
             "update_fixture",
         ])
@@ -362,7 +396,7 @@ fn build_old_binaries(source: &Path, fixture_root: &Path) -> (PathBuf, PathBuf) 
         "old fixture build failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let old_binary = target.join("debug/proqi");
+    let old_binary = target.join("debug/proqi_old_fixture");
     let coordinator = target.join("debug/update_fixture");
     assert_ne!(
         fs::read(&old_binary).expect("old bytes"),
@@ -375,18 +409,12 @@ fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-fn copy_tree(source: &Path, target: &Path) {
-    fs::create_dir_all(target).expect("copy target");
-    for entry in fs::read_dir(source).expect("source directory") {
-        let entry = entry.expect("source entry");
-        let path = entry.path();
-        let destination = target.join(entry.file_name());
-        if path.is_dir() {
-            copy_tree(&path, &destination);
-        } else {
-            fs::copy(path, destination).expect("copy source entry");
-        }
-    }
+pub(super) fn shared_fixture_target() -> PathBuf {
+    Path::new(env!("CARGO_BIN_EXE_proqi"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("Cargo target directory")
+        .to_path_buf()
 }
 
 fn rewrite(path: &Path, replacements: &[(&str, &str)]) {
@@ -402,53 +430,25 @@ fn rewrite(path: &Path, replacements: &[(&str, &str)]) {
     fs::write(path, content).expect("write fixture source");
 }
 
-fn remove_first_section(path: &Path, start: &str, end: &str) {
-    let mut content = fs::read_to_string(path).expect("read section source");
-    let start_index = content.find(start).expect("fixture section start");
-    let end_index = content[start_index..]
-        .find(end)
-        .map(|offset| start_index + offset + end.len())
-        .expect("fixture section end");
-    content.replace_range(start_index..end_index, "");
-    fs::write(path, content).expect("write section source");
-}
-
-fn remove_browser_history_dependencies(source: &Path) {
-    rewrite(
-        &source.join("src/adapters/sqlite/board_commit.rs"),
-        &[
-            (
-                "    super::browser_history::ensure_not_used_by_browser_history(\n        transaction,\n        operation.id.database_bytes(),\n    )?;\n",
-                "",
-            ),
-            (
-                "    super::browser_history::invalidate_activity_conflicts(transaction, operation.session_id)?;\n",
-                "",
-            ),
-            (
-                "    super::browser_history::ensure_not_used_by_browser_history(\n        transaction,\n        revision.id.database_bytes(),\n    )?;\n",
-                "",
-            ),
-        ],
+#[test]
+fn historical_source_preparation_is_independent_of_current_package_version() {
+    let root = tempfile::tempdir().expect("isolated historical source");
+    let source = prepare_old_source(root.path());
+    let manifest: toml::Value =
+        toml::from_str(&fs::read_to_string(source.join("Cargo.toml")).expect("fixture manifest"))
+            .expect("valid fixture manifest");
+    assert_eq!(
+        manifest["workspace"]["package"]["version"].as_str(),
+        Some(OLD_VERSION)
     );
-    rewrite(
-        &source.join("src/adapters/sqlite/history_commit.rs"),
-        &[
-            (
-                "    super::browser_history::ensure_not_used_by_browser_history(\n        transaction,\n        operation_id.database_bytes(),\n    )?;\n",
-                "",
-            ),
-            (
-                "    super::browser_history::invalidate_activity_conflicts(transaction, session_id)?;\n",
-                "",
-            ),
-        ],
+    assert_eq!(
+        manifest["workspace"]["members"]
+            .as_array()
+            .expect("members")
+            .len(),
+        1
     );
-    rewrite(
-        &source.join("src/adapters/sqlite/session_admin.rs"),
-        &[(
-            "    super::browser_history::invalidate_activity_conflicts(transaction, id)?;\n",
-            "",
-        )],
-    );
+    assert_eq!(manifest["package"]["autobins"].as_bool(), Some(false));
+    assert!(source.join("src/bin/update_fixture.rs").is_file());
+    assert!(source.join("Cargo.lock").is_file());
 }

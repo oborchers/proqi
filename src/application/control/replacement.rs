@@ -69,6 +69,7 @@ mod tests {
         };
         let existing = StoredOperationRequest::Revision {
             revision: Box::new(revision),
+            semantic_fingerprint: None,
             receipt: CommitReceipt {
                 session_id,
                 sequence,

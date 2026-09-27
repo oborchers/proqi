@@ -5,7 +5,7 @@ Status: v0.1.0 architecture contract
 Project: Proqi
 
 Command: `proqi`
-Last updated: 2026-09-12
+Last updated: 2026-09-25
 
 ## Purpose
 
@@ -113,6 +113,98 @@ this bounded path. `SIGHUP` retains its operating-system default until a future
 design can guarantee restoration after terminal revocation without keeping a
 revoked input descriptor alive.
 
+### Exact-session input stall continuity
+
+The input supervisor retains the lease policy from PR 62. A normally scheduled
+supervisor confirms a reader-only stall after 500 milliseconds without reader
+progress. A supervisor gap at least that long grants one fresh reader lease, so
+host sleep or scheduler suspension followed by input progress does not enter
+recovery. EOF, terminal revocation, and other typed I/O failures bypass this
+path and fail closed.
+
+The exact-session recovery owner uses the typed lifecycle `Healthy`,
+`ConfirmedStall`, `RecoveryPrepared`, `Probation`, then `Healthy`. Confirmation
+admits one attempt for the current incident. Preparation occurs only after the
+main runner has stopped mutation admission, flushed or rejected pending edits,
+drained persistence, owner control, Screenshot Inbox, attachment, external,
+update, and notification work through the existing shutdown boundary, restored
+terminal modes, and stopped workers within the shared deadline while retaining
+the session and schema leases. Only after every owned worker has stopped does it
+validate the aggregate cleanup result, release those leases, and prepare the
+replacement record. A cleanup failure retains the leases until the terminal
+runner returns the aggregate failure. Any preparation or cleanup failure leaves
+the durable session exactly resumable and returns the terminal I/O failure with
+an exact resume command.
+
+A persistence failure makes the durable UI checkpoint ineligible for `exec`.
+During recovery shutdown, the runner admits exactly one existing
+`ExportRecovery` effect, drains it through the external lane, and reports its
+private path with the exact durable resume command. The failed retained batch
+can still follow the ordinary retry path if it succeeds before the stall. The
+exporter makes one bounded fallback attempt under the private runtime root when
+the primary recovery directory is unavailable. It never overwrites either
+destination.
+
+The Unix replacement reuses the update convergence process owner. It resolves
+and hashes the current executable at startup, verifies the same byte length and
+SHA-256 digest immediately before `exec`, applies the ordinary exact-session
+resume arguments, restores the launch working directory, and inherits the
+existing standard streams and PTY. Input and update replacement proofs are
+mutually removed at their process boundary, and ordinary child processes inherit
+neither proof. This prevents one lifecycle from being mistaken for the other.
+
+The replacement proof and record bind the exact SessionId, retained PID,
+lineage request, attempt request, previous InstanceId, and executable identity.
+The record is strict JSON below the existing runtime root, limited to 16 KiB,
+written through a private create-new temporary file and atomic rename, owned by
+the current user, and mode 0600 inside a mode 0700 directory. It contains only
+attempt timestamps, typed lifecycle identity, and a bounded content-free UI
+checkpoint. Only after canonical installation/schema admission and exact-session
+lease acquisition, an ordinary launch removes a valid current-schema abandoned
+record for that session. Retained executable identity is not an admission rule
+for this retirement: a legitimate upgrade or same-binary manual resume starts
+a fresh lineage without importing stale UI state or attempts. Prepared,
+probation, and healthy phases follow the same rule. An update replacement also
+uses this fresh input-recovery admission, while the independent update proof
+remains owned by convergence. Downgrade and inactive-installation refusal stay
+at canonical startup admission, before retirement. An input-recovery proof
+never enters ordinary retirement and still requires exact executable, PID,
+session, lineage, attempt, and prior instance matches. Failed record removal
+disables recovery for the fresh launch. Malformed,
+oversized, public, symlinked, foreign-session, unsupported-schema, or incomplete state disables automatic
+recovery for that launch. Failure to read the current executable identity or
+prepare the private record directory also disables only automatic recovery on
+an ordinary healthy launch. A replacement launch treats either failure as an
+exact-lineage violation and fails closed.
+
+The probation policy is named `PROBATION_PROGRESS_POLLS` and requires three
+completed bounded polls through the canonical input source. Process startup,
+board restoration, control publication, and elapsed time are not health
+evidence. A confirmed stall during probation fails closed without another
+`exec`. After probation succeeds, the incident is cleared for lifecycle
+purposes while its timestamp remains in the rolling circuit. Each SessionId has
+its own record and may start at most two automatic recoveries in a rolling ten
+minutes. A third incident fails closed, while timestamps older than the window
+expire before the next decision.
+
+Recovery admission emits one typed, content-free outcome with an optional
+retired phase and executable-change flag. The input reader records only its
+current stage and last completed stage with monotonic timestamps in one small
+in-memory snapshot. The supervisor reads that snapshot without waiting and logs
+only confirmed stalls or supervisor-gap lease resets, with elapsed stage,
+completion, lease, and observer gaps. A contended or poisoned snapshot reports
+unknown stage evidence; a lease reset never invents reader completion. These
+fields do not log input, terminal bytes, identities, or paths, and do not change
+watchdog thresholds, health proof, delivery, or worker teardown policy.
+
+Only non-modal Board, Compose, and Edit owners can produce a checkpoint. The
+checkpoint contains logical cursor and selection positions, editor wrap affinity
+and scroll row, Board selection and insertion focus, expanded annotation indexes,
+and semantic viewport anchors. Durable content, annotations, operations,
+submissions, transfers, captures, updates, and Browser history remain owned by
+SQLite and their existing idempotent protocols. Browser has no active SessionId
+owner, so it retains fail-closed behavior instead of inventing one.
+
 Application subprocesses start in dedicated Unix process groups. Deadline or
 I/O failure sends `SIGTERM` to the group, waits 250 milliseconds, then sends
 `SIGKILL`, reaps the direct child, closes its pipes, and joins bounded I/O
@@ -163,7 +255,7 @@ limited palette instead of an inaccurate custom approximation.
   typed resource prefix plus 26 characters of canonical lowercase, unpadded
   base32hex. The encoding preserves all 128 UUID bits, is URL safe, and retains
   byte ordering in lexical form. SQLite stores the same UUID as a 16-byte BLOB.
-  Prefixes are `ses` for sessions, `tht` for thoughts, `rev` for revisions,
+  Prefixes are `ses` for sessions, `tht` for thoughts, `sep` for separators, `rev` for revisions,
   `op` for durable operations, `ins` for running instances, `req` for
   idempotent control requests, and `sub` for Proqi submission receipts.
 - A cross-platform advisory file-lock library for session and schema locks.
@@ -252,7 +344,7 @@ Responsibilities:
 
 - Start, continue, resume, search, rename, trash, and restore sessions.
 - Acquire a session lease before returning an editable session.
-- Create, update, move, copy, cut, delete, restore, and search thoughts.
+- Create, update, name, move, copy, cut, delete, restore, and search thoughts.
 - Coordinate persistent Editor, Board, and installation-wide Browser undo.
 - Enforce command preconditions and return structured application errors.
 - Produce read models suited to the board and session browser.
@@ -323,7 +415,10 @@ cursor model from leaking into the application.
 ### `LayoutEngine`
 
 Layout is a pure function of board state, typed editor-owner state, terminal
-capabilities, and viewport dimensions. It returns a `LayoutSnapshot` containing
+capabilities, and viewport dimensions. One prepared `BoardFlow` measures the
+ordered `BoardItemRef` projection and owns thought rows, explicit separator
+rows, automatic thought divider suppression, scroll anchors, clipping, hit
+targets, and drag insertion indices. It returns a `LayoutSnapshot` containing
 rectangles, wrapped visual lines, scroll bounds, focus geometry, and mouse hit
 targets. Engaged Compose uses the same editor measurement and rendering path at
 the insertion row without synthesizing a durable thought. Passive Compose omits
@@ -378,6 +473,98 @@ absolute files. It supports local file URLs, quoted paths, escaped whitespace,
 POSIX shell-escaped punctuation, multiple paths, and Unicode names. Ordinary
 prompt text remains exact. Dropped files remain external references and are
 never read or copied automatically.
+
+### `ExportWriter` and `DirectoryLister`
+
+Plain-text thought export crosses a narrow filesystem port. `ExportWriter`
+accepts an absolute destination, exact bytes, and a closed replacement policy:
+refuse, refuse unless the existing regular file already holds exactly these
+bytes, replace only the confirmed content-free identity (device, inode, length,
+and modification time), or replace any regular file for an explicit CLI flag.
+Replacement is an atomic exchange (`renameat` with `RENAME_EXCHANGE` or
+`RENAME_SWAP`). The displaced entry is then verified as the confirmed regular
+file and is exchanged back when it is not, so an entry that appeared after the
+last check is never overwritten. The temporary guard is disarmed at the
+exchange, so no failure path deletes the displaced entry; if it cannot be
+exchanged back, it is kept at the temporary name and reported. After an
+exchange back, the temporary name is removed only when it provably holds this
+export's own file (same device and inode as the open handle); any other entry
+is kept and reported. Every removal of a temporary name is checked: when the
+old file or this export's own file cannot be removed, the leftover is reported
+as `displaced` with its path instead of being ignored. A crash between the
+exchange and that removal leaves a `.proqi-export-*.tmp` file in the
+destination folder holding the replaced file's previous contents. A replacement
+is created with mode `0600` and receives the inspected file's `0777` permission
+bits before the exchange, so it is never published with wider access than the
+file it replaces and never stays private; set-user-ID and set-group-ID bits,
+owner, group, access control lists, and extended attributes are not copied. If
+the displaced file's bits changed concurrently, they are copied again after
+verification. Failures after the file is in place, including a failed folder
+synchronization on the identical-bytes retry path, are reported as
+`written_unconfirmed` rather than as an ordinary write failure. File systems
+without an atomic exchange refuse replacement (`replace_unsupported`) instead of
+racing a check against a rename. Under an explicit replace-any policy, a target
+that disappeared before the exchange is created as a new file from a fresh
+temporary that follows the umask, never with the vanished file's bits. When
+`persist_noclobber` reports a denial or unsupported operation after the
+temporary file was created in the same folder, the cause is the file system's
+missing no-replace rename (tempfile falls back to a hard link), reported as
+`install_unsupported` rather than `permission_denied`. The identical-bytes check
+opens the target with `O_NONBLOCK | O_NOFOLLOW` and reads only when the open
+handle is still the inspected regular file (same device and inode), so a FIFO,
+device, or link swapped in after inspection is never read or waited on; that
+verified handle is then synchronized, and the path is not opened again. The
+identity is content-free, so a same-length rewrite within the file system's
+timestamp granularity is not detected. The terminal composition root decides a
+deterministic qualification fault once and passes it to `FileExport`; the
+adapter reads no environment.
+The adapter requires an existing parent folder and never creates one, refuses
+symbolic links, folders, and other non-regular targets, writes a `tempfile`
+temporary in the destination folder with mode `0666` before the umask, flushes
+and `fsync`s it, then installs it with `persist_noclobber` or, only when
+replacement is authorized, the verified exchange described above. The folder is
+synchronized afterwards.
+Failures are typed as missing folder, invalid or unsafe target, existing file,
+changed after confirmation, permission, read-only, storage full, or I/O, and no
+partial destination file remains.
+
+`DirectoryLister` returns at most 4,096 UTF-8 entries of one absolute folder
+whose names start with the typed name, inspecting at most 262,144 entries,
+sorted by name, with folder status following links, for destination completion.
+A listing that stopped at either bound is marked truncated, and completion then
+claims neither a unique match nor no match. Matching and the shared prefix use
+every listed match; only the 64 offered rows are capped.
+Both ports run on the existing bounded external lane. The UI owns the field,
+generation-tagged listings, and the pure completion policy; the reducer and
+render path perform no filesystem work. The pure path policy in
+`domain::export` resolves `~/` and relative destinations against an injected
+base and home directory, resolves `.` and `..` lexically so the written path,
+the reference thought, and the receipt agree, names default files, and
+sanitizes stems. The CLI resolves the home directory once when it opens its
+runtime context, beside the working directory.
+
+Export content comes from `application::prompt::copy_text`, the same owner as
+Board copy, so a file is byte-identical to the copy text of its selection. The
+Board step is `Action::CompleteExport`, which requires every source to be live,
+in Board order, and unchanged. Removal uses the ordinary batch deletion with the
+`ExportAndRemove` kind. Replacement is one batch of exact source deletions plus
+one `AddThought` whose body is built by the same attachment-reference
+constructor as Screenshot Inbox captures, with a fresh File ordinal from the
+canonical counters, under the `ExportAndReplace` kind. Both are one undo unit.
+A pending removal or replacement counts as an asynchronous sequence producer
+for mutation admission until its write completes.
+
+The CLI writes the file in its own process and then commits the Board step,
+either under the inactive session lease through `SessionService::complete_export`
+or through owner control. The forwarded request carries the ordered thoughts,
+their SHA-256 content digests as execution preconditions, the disposition, the
+absolute output path, and for replacement a reference `ThoughtId` derived from
+the operation identity. Its content-redacted semantic fingerprint covers the
+caller's inputs (thoughts, disposition, reference identity, and a digest of the
+path) but not the derived content digests, so an exact retry still matches after
+later edits, while reusing an identity for another destination conflicts. An
+exact retry is matched against the retained receipt before any write, so a
+replay never rewrites the file.
 
 ### `AttachmentAccessibility`
 
@@ -581,7 +768,10 @@ One named `InvocationWorkBudgetPolicy` owns the filesystem root, retained-entry,
 visited-path, and recursive-depth safeguards. Each exhausted dimension returns
 the deterministically retained entries plus an exact typed incomplete reason.
 Project ancestor discovery has no fixed count. It stops at the first repository
-root, or at the filesystem root when no repository exists. The adapter follows
+root or at the filesystem root when no repository exists. At the canonical
+home, a compatibility path that also has a global declaration is observed only
+through that global declaration; project-only home paths remain eligible. The
+adapter follows
 only explicitly encountered symlink definitions, canonicalizes physical paths
 for deduplication, and never crawls arbitrary home-directory children.
 Compatibility roots are checked in; extra roots enter through validated
@@ -668,14 +858,24 @@ to that range, and performs one semantic paste.
 The resulting `TextChangeSet` continues through annotation rebasing and editor
 undo without a parallel text-mutation contract.
 
-The UI composes a small data-driven shared-command table beside catalog results:
-`/plan` and `/goal` are available only at byte zero when verified adjacent Codex
-or Claude Code targets exist. They remain ordinary Command choices rather than
-fabricated filesystem evidence. Outbound multi-thought assembly for either
-harness keeps the complete leading shared starter only on the first thought and
-removes a `/plan` or `/goal` token plus one separator from later thought starts.
-It never rewrites stored sources, partial names, leading whitespace, or in-body
-text.
+The UI composes one typed, data-driven shared-command table beside catalog
+results. It contains `/btw`, `/clear`, `/compact`, `/diff`, `/fast`, `/goal`,
+`/hooks`, `/mcp`, `/model`, `/new`, `/permissions`, `/plan`, `/rename`,
+`/resume`, `/review`, `/skills`, `/status`, `/theme`, and `/usage`. Each is
+available only at byte zero when verified adjacent Codex or Claude Code targets
+exist. They remain ordinary Command choices rather than fabricated filesystem
+evidence. Each descriptor also owns its explicit later-thought normalization
+policy. Outbound multi-thought assembly for either harness keeps every command
+exact except that it removes a complete `/plan` or `/goal` token plus one
+separator from later thought starts. It never rewrites stored sources, partial
+names, leading whitespace, in-body text, or any other shared command and its
+arguments.
+
+Token identity also owns the existing collision rule. A compatible discovered
+form whose token appears in the shared table is restricted to document start.
+When an adjacent Codex or Claude Code target makes the built-in available, the
+built-in row deduplicates that discovered form. Without such a target, normal
+form compatibility can still expose the discovered row at document start.
 
 Invocation forms carry their receiving harness independently from the source
 ecosystem. When verified adjacent targets map to known harnesses, completion and
@@ -709,18 +909,32 @@ event-sourced system.
 
 - `sessions`: identity, optional name, original and last-opened directories,
   timestamps, last durable operation sequence, and deletion state.
-- `thoughts`: session, exact current content, validated presentation annotations,
-  integer position, timestamps, durable automatic, expanded, or collapsed
-  presentation preference, and deletion state.
+- `thoughts`: session, exact current content, optional validated organizational
+  name, validated presentation annotations, integer position, timestamps,
+  durable automatic, expanded, or collapsed presentation preference, and
+  deletion state.
+- `separators`: session, typed `sep_` identity, shared Board position,
+  timestamps, and deletion state. A separator row contains no content or
+  annotation columns.
 - `thought_revisions`: coalesced text revisions with enough data to restore the
   previous and next content, annotations, and cursor state.
 - `operations`: ordered structural operations and their inverse payloads for
   persistent undo and redo.
+- `commit_receipts`: durable operation and revision acknowledgements. Public
+  mutations additionally retain a nullable, content-redacted SHA-256 semantic
+  request fingerprint so exact retries remain distinguishable after history
+  payload compaction. Legacy rows remain nullable and use their original
+  structural replay comparison.
 - `browser_operations`: installation-wide ordered rename, trash, and restore
   operations with exact forward and inverse metadata transitions.
-- `browser_operation_receipts`: idempotent Browser mutation receipts, including
-  same-name rename requests that intentionally create no history, retained
-  independently of the active Browser cursor.
+- `browser_operation_receipts`: idempotent session-administration receipts,
+  retained independently of the active Browser cursor. A row holds either one
+  reversible Browser operation or one versioned request receipt that
+  intentionally creates no history: a same-name rename, a trash request for an
+  already trashed session, a named session creation, or a permanent prune. Pruning
+  removes the session's rename, trash, and restore receipts but retains its
+  creation receipt and writes its own prune receipt, so exact creation and
+  prune retries replay without recreating the deleted session.
 - `browser_history_receipts`: idempotent, compare-and-set Browser undo and redo
   receipts tied to the exact operation that was presented to the caller.
 - `browser_history_state`: the single applied-prefix cursor for Browser
@@ -740,8 +954,9 @@ event-sourced system.
   protocol version.
 
 Full-text search indexes session names, paths, and current thought content.
-Search indexes are derived and rebuildable. User content remains canonical in
-ordinary tables.
+Thought names remain display metadata and do not alter content search. Search
+indexes are derived and rebuildable. User content remains canonical in ordinary
+tables.
 
 The application owns the exact first-run copy and its typed managed-Herdr or
 standalone variant. The copy refers users to the resolved footer and Help
@@ -759,9 +974,9 @@ ordinary session creation and neither seed nor advance the marker.
 
 ### Invariants
 
-- Every thought belongs to exactly one session.
-- Thought positions are unique within a live session and are normalized in one
-  transaction after reorder.
+- Every thought and separator belongs to exactly one session.
+- Board item positions are unique within a live session and are normalized in
+  one transaction after insert, delete, duplicate, reorder, undo, or redo.
 - Operation sequences increase monotonically within a session.
 - Undo and redo commit new current state and move the operation cursor
   atomically.
@@ -786,6 +1001,12 @@ ordinary session creation and neither seed nor advance the marker.
 - All timestamps are stored as UTC integers and rendered in local time.
 - Presentation annotations are sorted, non-overlapping UTF-8 byte ranges within
   canonical thought content. They never replace or truncate that content.
+- A thought name is optional, trimmed, single-line Unicode of at most 80 scalar
+  values. It is stored only on the thought payload, never in content,
+  annotations, ordering identity, or submission payloads.
+- Duplicate and cross-session transfer preserve a name. Split and extract keep
+  the source name and create an unnamed derived thought. Merge keeps the
+  surviving first thought's name.
 - Annotation validation, partition, extraction closure, concatenation shift,
   and editor-change rebasing share the domain annotation-range owner. Adjacent
   annotations are never coalesced merely because their provenance values match.
@@ -804,6 +1025,14 @@ then returns the stable `schema_busy` error instead of waiting indefinitely.
 The application refuses to open a database schema newer than it understands.
 It does not attempt a best-effort downgrade. Export and explicit recovery tools
 remain available without modifying the source database.
+
+Schema version 17 and storage protocol version 16 add the payload-free
+`separators` table and the typed insert, deletion, and movement mutations used
+by the existing Board operation log. Migration 17 is append-only and preserves
+all previous migration rows and timestamps. The protocol stamp prevents an
+older writer from opening a database that may contain separator history.
+Private recovery document format 2 likewise carries retained separators beside
+retained thoughts so optimistic mixed ordering and deletion state remain exact.
 
 Schema version 11 adds the versioned `onboarding_state` marker while retaining
 storage protocol 10 because the marker does not change ordinary stored board
@@ -828,6 +1057,59 @@ its required direction as route version 0 `adjacent_pane`. New route version 1
 rows store `adjacent_pane` with a direction or `herdr_agent` without one. Neither
 form stores workspace, tab, pane, session, labels, prompt content, or raw Herdr
 responses.
+
+Schema version 18 and storage protocol version 17 add the nullable thought name
+column and the durable `SetName` operation payload. The migration is additive,
+backup-protected, and leaves existing thoughts unnamed. Name-only changes do
+not rebuild full-text search.
+
+Schema version 22 and storage protocol version 21 register the
+`ExportAndRemove` and `ExportAndReplace` Board operation kinds. Migration 22 is
+a metadata-only, backup-protected protocol stamp, like migration 15 for Reflow.
+An older writer refuses the newer protocol instead of misreading export history.
+
+Schema version 19 and storage protocol version 18 add the nullable semantic
+request fingerprint to `commit_receipts`. The application hashes a versioned,
+canonical request envelope that includes the session, typed identities,
+preconditions, ordering, ranges, and digests instead of raw user content. The
+fingerprint survives receipt compaction and lets an exact operation or revision
+retry replay after restart while rejecting reuse for a different request whose
+resulting durable payload happens to be identical. Migration does not infer or
+backfill fingerprints for legacy receipts. Older binaries refuse the newer
+storage protocol before writing.
+
+Schema version 20 and storage protocol version 19 add the selected-transfer
+intent and source-claim tables. The intent retains the exact ordered cohort,
+stable destination and removal operation identities, and destination receipt.
+The source claims prevent overlapping unfinished cohorts. Destination acceptance
+is journaled before any source deletion; source deletion and journal completion
+commit in one transaction. A restart replays the same destination identity,
+and an older writer refuses the new storage protocol.
+
+Both focused and selected TUI transfers use this intent and receipt path, even
+for a one-thought cohort. When the destination has no live owner, the transfer
+worker creates a short-lived destination coordinator with its own instance
+identity. It acquires the destination session lease without publishing an
+interactive control endpoint and releases that lease after the durable
+destination mutation. The source coordinator retains its own metadata and
+control ownership throughout. When the destination is active, the worker sends
+the same stable cohort operation through owner control. A retry after an
+uncertain acknowledgement must use the journaled operation identity in either
+case.
+
+Schema version 21 and storage protocol version 20 register
+session-administration request receipts. The trash no-op, named-creation, and
+prune receipt kinds are versioned JSON payloads in the existing
+`browser_operation_receipts` table, which already held tagged same-name rename
+receipts, so migration 21 is a metadata-only protocol stamp. The stamp is still
+required. An older writer prunes by deleting every receipt of the session and
+would discard the creation receipt that stops an exact creation retry from
+recreating a permanently pruned session. It would also misreport an unknown
+receipt kind as corruption. Creation receipts retain only a SHA-256 digest of
+the requested name and origin directory, so no user content survives a prune.
+Creation and prune receipts can name a session that no longer exists. The
+receipt table has no foreign key, and nothing joins receipts back to
+`sessions`.
 
 ### Stable session attachment ordinals
 
@@ -1007,6 +1289,82 @@ schema entry. A startup that wins makes the update attempt stop before
 installation, so an unregistered shared schema holder cannot appear between
 the final scan and quiescence.
 
+Startup classifies the running stable version against the cached installed
+observation with a typed ordered relation. Equality uses normal shared
+admission. A lower running version is an obsolete executable and cannot enter
+the schema, independent of `restart_needed`. A higher running version is only
+a candidate external package-manager replacement. Homebrew detection first
+requires the canonical running executable to equal the canonical `opt` target,
+so an inactive keg or an active-link race fails closed. Before preparing any
+live owner, external adoption retains the exact executable byte length and
+SHA-256 identity. Verified standalone startup captures that identity during its
+initial installation check, before external convergence can establish a later
+baseline. Every later adoption proof re-reads the same identity, which makes an
+atomic same-path standalone replacement fail closed before preparation, during
+quiescence, or before cache adoption. Homebrew and source ordinary startup do
+not pay that hash cost.
+
+A candidate external replacement takes the existing exclusive convergence
+lock and reloads the cache before acting. It scans the authoritative live
+session-lock owners, which also removes metadata without a live owner lock.
+Protocol-incompatible or schema-incompatible owners become content-free typed
+blockers containing exact InstanceId, SessionId, canonical version when valid,
+and a closed reason. Absence from that registry is not sufficient authority for
+a pre-v0.10 process, because those binaries did not participate in convergence
+startup admission. With no registered participant, the candidate therefore
+retains exclusive convergence ownership and acquires the exclusive schema
+lease before the migration protocol opens the real store. This proves absence
+of a hidden same-schema writer as well as a pre-v0.10 migration blocker. Only
+after store readiness and another active-installation verification does the
+cache adapter compare and atomically replace the exact stale observation while
+clearing stale restart state. A schema conflict, installation race, write
+failure, or compare conflict leaves the old cache observation intact.
+Concurrent candidates wait a bounded interval for the exclusive owner and
+revalidate the cache under their acquired shared lease.
+Release refresh is independent evidence. It may initialize a missing installed
+observation or confirm equality, but it never replaces a different existing
+observation. Therefore an obsolete executable cannot downgrade startup
+authority, and a refresh racing external adoption cannot turn the candidate
+into an uncoordinated equal-version startup. A pending external cohort also
+suppresses another actionable release prompt, and the in-app coordinator reads
+that state under convergence ownership before invoking any installer. Exact
+automatic replacements wait boundedly for shared startup admission when an
+unrelated current process briefly owns convergence; user-launched ordinary
+starters retain the fail-fast retry diagnostic.
+
+An older live owner advertising the current external convergence protocol is
+not handled by a parallel coordinator. The same preflight, irreversible
+quiescence, restart request, process-lineage proof, exact SessionId, retained
+PID, installation identity, target version, and live owner-control checks apply.
+External convergence requires update-control protocol 3. Published v0.10.0
+processes advertise protocol 2, which predates the durable external-restart
+cohort and therefore remains an exact, safe blocker rather than being asked to
+interpret state it cannot preserve. A patched or later process advertising
+protocol 3 can participate in the existing replacement protocol.
+Only Homebrew and verified standalone installations can enter that automatic
+replacement path. Cargo, Debian, source, and otherwise unknown installations
+report their exact live owners as `restart_unsupported` blockers before any
+prepare or quiesce request. The exact durable replacement cohort is limited to
+32 owners. A larger compatible cohort fails before preparation with a typed
+capacity diagnostic, exact total and limit, and at most 33 exact blocker
+identities so the public diagnostic remains bounded.
+The external path obtains an exclusive schema lease and revalidates the active
+installation after every selected owner proves schema quiescence. While that
+proof remains held, it records the new observation with `restart_needed = true`
+and one bounded exact replacement cohort. A failed schema or installation proof
+leaves the old observation unchanged and requests reversible recovery of every
+already-quiesced exact owner. The durable cohort binds operation, target,
+SessionId, prior InstanceId, retained PID, and prior version. Only a matching
+replacement may enter while it is pending, and recovery clears the flag only
+after every exact replacement is live and ready and the active installation is
+revalidated again. A later external candidate with a newer target cannot
+replace or clear this pending cohort. It fails with the exact pending
+SessionIds until the recorded target finishes recovery. Owners from v0.9.0 use
+the preceding protocol and therefore block with exact recovery guidance until
+they exit cleanly. Once they are gone, the no-participant path admits one
+migration winner and ordinary follower revalidation, then commits the cache
+compare-and-set without an explicit update refresh.
+
 The coordinator then sends each exact prepared owner the installed target in
 an irreversible quiesce request. The owner first commits its update barrier,
 blocks every ordinary UI, screenshot, and owner-control mutation, releases its
@@ -1030,8 +1388,17 @@ the same operating-system PID, the same installation identity, the exact target
 version, and the matching operation and prior-instance proof carried across
 Unix `exec`. A live peer-credential-checked connection must also succeed against
 the published control endpoint. Metadata alone, an exact manual resume in
-another terminal, or an endpoint lost after publication is never replacement
-readiness. The endpoint is published only after board restoration. The
+another terminal, or an endpoint lost after publication is never automatic
+replacement readiness. After a failed `exec` has released the old session
+owner, however, startup may admit an explicitly requested pending SessionId
+under the convergence lock. It opens the store through normal schema admission,
+acquires that exact session lease, and then atomically removes only that
+expectation. If peers remain, the same bounded record retains the acknowledged
+expectation separately from the unfinished set. An error reported after the
+atomic rename is therefore exactly retryable by the same admission, and a fresh
+process can reenter only that acknowledged SessionId. A failure before commit
+retains the complete unfinished state. The endpoint is published only after
+board restoration. The
 coordinator writes the initiating session's content-free pending announcement
 only after every peer converges, then requests the initiating restart. Peer
 failure creates no announcement, but a quiesced initiating process still
@@ -1170,6 +1537,13 @@ context around it. The maximum board scroll position includes the insertion row
 as a terminal virtual item, so the final page always exposes `+ New thought`
 above the footer without permitting blank overscroll.
 
+`BoardFlow` owns the prepared row projection for an optional thought name and
+its body. A named thought uses the available whitespace above its body in
+comfortable density and one explicit row in compact density. An unnamed thought
+reserves no name row. Rendering, measurement, scrolling, clipping, pointer hit
+testing, and hover all consume that same projection. The name hit target stays
+outside body text geometry and therefore cannot enter body selection.
+
 One Board-density policy resolves the explicit preference against the final
 usable Board rectangle after footer reservation. Comfortable uses the standard
 two-row cadence at five or more Board rows. Four or fewer Board rows resolve to
@@ -1241,7 +1615,9 @@ remains the modifier-independent fallback.
 
 Vertical board input uses one semantic modifier ladder for both arrow and
 configured character spellings: plain input moves focus, Shift extends an
-anchored range, and Primary+Shift reorders one thought. The macOS default graph
+anchored range, and Primary+Shift reorders selected Board items or the focused
+item. Selected runs each exchange one unselected neighbor without wrapping;
+the focused single item retains wrapping. The macOS default graph
 also assigns exact Option+Shift to the same reorder actions so a
 terminal-consumed Command binding does not remove keyboard reordering. Other
 modifiers resolve to the base focus intention unless the resolved graph owns an
@@ -1349,8 +1725,8 @@ See [the complete versioned contract](SHORTCUTS.md).
 
 Undo and redo resolve from the same typed active-context stack as every other
 shortcut. The topmost editable owner receives the intention first. Search,
-Commands, manual Invocation, Transfer, Global Delivery, Rename, Browser query,
-and Browser Rename each own an in-memory text history for that field's lifetime.
+Commands, manual Invocation, Transfer, Global Delivery, Thought Name, Rename,
+Browser query, and Browser Rename each own an in-memory text history for that field's lifetime.
 Their snapshots retain Unicode text, cursor, directional selection, typing
 groups, paste units, and redo invalidation. Closing a field destroys that local
 history, and reopening creates a fresh owner. A blocking overlay without an
@@ -1517,10 +1893,15 @@ the same navigation state machine.
 
 Empty-board aftermath is reconciled by one typed policy owned beside
 `InteractionMode`. Deliberate local removals request Compose after the mutation;
-passive and external mutations request Preserve. Owner-control additions retain
-an active Compose editor and its insertion order. Owner-control deletion of the
+passive and external mutations request Preserve. The first accepted owner-control
+item on an active empty Board hands untouched Compose to focused Board only after
+durable acknowledgement. Failed persistence retains the candidate for exact
+retry; rejection, replay, or rollback cannot trigger the handoff. A pending
+Compose clipboard result retains its owner until completion, and accepted
+Compose typing during the save retains its own atomic materialization. Later
+external additions preserve established focus. Owner-control deletion of the
 last durable thought resolves invalid durable focus to Board but never invents
-Compose. Startup is the only automatic snapshot-derived entry, so discovery,
+Compose. Startup remains the only snapshot-derived Compose entry, so discovery,
 update checks, attachment scans, focus reports, and background completion cannot
 steal input state.
 
@@ -1533,13 +1914,17 @@ typing or paste may materialize directly from either presentation.
 
 Board multi-selection is transient UI state with two explicit, non-overlapping
 forms: an arbitrary identity set and an anchored contiguous range. A range
-stores stable thought identities for its anchor and focused endpoint and derives
+stores stable Board item identities for its anchor and focused endpoint and derives
 its selected identities from current live board order. Shifted vertical movement
 and the remappable range latch update the endpoint without wrapping or addressing
 the insertion row. Pointer extension resolves through the current layout
-snapshot before entering edit mode. Bulk application actions continue to receive
-only ordered thought identities and do not depend on terminal modifiers or this
-UI selection representation.
+snapshot before entering edit mode. Bulk application actions receive ordered
+typed Board item or eligible thought identities and do not depend on terminal modifiers or this
+UI selection representation. Mixed-item reorder receives ordered typed item
+identities and records one Batch operation with its reverse inverse. Selected
+spacing cleanup receives only eligible ordered thought snapshots and records
+one Reflow Batch; separators never enter text operations. Selected transfer
+captures the same eligible order for its durable destination cohort.
 
 The remappable `select_all` board command replaces the arbitrary set with every
 live thought identity in current board order. Forwarded `Primary+A` resolves to
@@ -1617,6 +2002,9 @@ queued, treated as steering, or rejected. The gateway reports that state and
 the resulting receipt without inventing its own queue semantics.
 
 Both visible actions invoke the same immediate semantic prompt command.
+Submission assembles only canonical thought bodies and their existing
+annotations. Optional names are neither prepended nor sent as a separate agent
+field.
 `SubmissionDisposition::Keep` preserves the thought.
 `SubmissionDisposition::RemoveAfterSuccess` commits deletion only after an
 accepted receipt whose submission identifier and target match the pending
@@ -1735,6 +2123,56 @@ Focus-gained events refresh target discovery immediately, while resize bursts
 trigger one debounced refresh after geometry settles. Metadata failure never
 weakens the standalone board or changes submission verification.
 
+### Herdr plugin companion
+
+The repository root carries `herdr-plugin.toml`, which makes Proqi installable
+with `herdr plugin install oborchers/proqi`. Its build step
+`herdr-plugin/install.sh` installs nothing when a Proqi exists on `PATH` or in
+the standalone directory; otherwise it runs the checksum-matched standalone
+installer from the latest release. Its one action and its pane entrypoint run
+`herdr-plugin/proqi.sh`, which only resolves the installed executable, checks
+the `herdr_companion_toggle` capability, and replaces itself with
+`proqi herdr toggle` or `proqi --resume <id>`. It contains no decision logic.
+
+`proqi herdr toggle` is the plugin action. The CLI composes three parts:
+
+- The terminal-independent `CompanionHost`, `CompanionRecords`, and
+  `CompanionSessions` ports in `ports::companion`. They speak in panes, tabs,
+  Proqi presence (`Present`, `Absent`, `Unknown`), classified foreground
+  processes (`Proqi`, `Launcher`, `IdleShell`, `Other`, `Unknown`), and Proqi
+  sessions.
+- The application policy `application::companion`, a pure planner plus one
+  orchestrating use case. It owns session naming (the tab's only named agent,
+  else a meaningful tab label, else the stable public tab identity; asked for
+  only when no reopenable recorded session exists, and a failed agent query
+  opens nothing so a transient failure cannot pin a different session), the
+  session origin (the adapter-supplied worktree checkout or repository root, since Herdr's `workspace_cwd` follows
+  the focused pane), and the
+  close rules. A pane closes only when it is the tab's recorded pane, its
+  foreground process is Proqi resuming exactly the recorded session or the
+  plugin's own launcher, and the session owner confirms a durable flush. A recorded idle shell labeled `Proqi`, with no Proqi signal,
+  is replaced after a restart, and it is rechecked immediately before it
+  closes. `Unknown`, foreign, and lease-carrying panes are only focused. An `Unknown`
+  pane in the tab, or one recorded by another tab for the same session, blocks
+  opening and is named in the error, because it might hide a Proqi.
+- The Herdr adapter `adapters::herdr::companion`. It reads the plugin
+  environment, runs direct bounded Herdr CLI calls without a shell, recognizes
+  Proqi by its display lease or foreground process, probes every unleased
+  non-agent pane within one twelve-second window (at most one second per probe)
+  and reports `Unknown` after the window or on failure, preserves the tab's zoom state when it must focus by zooming, and
+  keeps one record per tab in `HERDR_PLUGIN_STATE_DIR`. Records are strict,
+  bounded JSON written by atomic rename under an exclusive `fs4` lock that
+  serializes toggles; the lock wait exceeds the slowest complete toggle. A
+  record keeps the tab's session after its pane closes, so later toggles
+  reopen it from any pane. Unreadable state is treated as no record.
+
+The owner flush reuses owner control's `Sync` request through a strict variant
+that fails when no owner confirms. Herdr owns plugin-pane ownership only in
+memory and does not restore plugin panes after a cold restart; the recorded
+pane identity, which Herdr persists and never reuses, carries the companion
+across that boundary. The manifest, launcher tokens, and version are pinned to
+their Rust and Cargo owners by `cargo xtask quality` and `release-plan`.
+
 ## CLI and agent-facing contract
 
 The interactive TUI and scriptable CLI call the same `SessionService`. This
@@ -1762,6 +2200,68 @@ standard error. Thought bodies enter through standard input. A caller-supplied
 `op_` identity is resolved against its typed durable request before mutation,
 so matching retries return the original receipt and mismatched reuse fails.
 
+The `thoughts list` response returns one ordered typed `items` array. Thought
+entries carry their identity, position, exact content, optional name,
+presentation, update time, and content digest. Separator entries use
+`kind: "separator"`, a `sep_` identity, and a position, with no content or
+annotation payload. The former duplicate `thoughts` projection was removed
+before 1.0. Existing thought mutation commands continue to address thoughts,
+while their ordering operates within the shared Board item sequence.
+
+`thoughts list` and `sessions list` accept a positive limit and continue after a
+stable typed anchor identity. Both report the complete `total` and the next
+anchor. A missing anchor fails with `cursor_not_found` instead of restarting.
+
+`sessions ensure` and `sessions create` create named sessions without a lease,
+terminal, or Herdr access. `Session::with_name` sets the name in the first
+durable state. The store's named creation evaluates the collision policy and
+inserts the session in one immediate transaction. For get-or-create, it returns
+the live sessions that already use the exact name. The application then reuses
+the one with the requested canonical origin directory, reports ambiguity for
+several, and reports `session_name_conflict` when the name belongs only to
+other directories. Concurrent callers therefore create at most one session.
+Unconditional creation derives the session identity from its operation
+identity and retains a creation receipt in the same transaction.
+
+Session rename, trash, restore, prune, undo, and redo accept caller-supplied
+operation identities. The application compares one typed `SessionRequest`
+against the retained receipt before and after acquiring the session lease, so an
+exact retry returns the original result and divergent reuse, including reuse of
+a Board or editor history identity, fails with `idempotency_conflict`. The
+reverse direction uses the same matcher: the SQLite operation lookup reports a
+session-administration identity as a typed foreign request, so a Board, editor,
+or history mutation that reuses it is an idempotency conflict for inactive and
+active owners alike. A name reference with a recorded identity resolves to the
+recorded session only when the name no longer resolves or is ambiguous among
+sessions that include it. A name that resolves to another session is an
+idempotency conflict. The target identity of a retained undo or redo receipt
+stays reserved after its session is pruned. A trash
+request for an already trashed session reserves its identity and reports that
+nothing changed. `thoughts add --name` reuses the purpose-specific preserved
+creation request, which already carries an optional name through the owner
+control protocol, so content, name, and position remain one Board operation.
+
+Every JSON failure code is a variant of one closed CLI inventory that owns its
+exit status, retry guidance, and `details` shape. The public reference table is
+rendered from that inventory and checked verbatim, and `capabilities` publishes
+the codes. With `--json`, clap help and version displays are successful
+responses.
+
+The additive `items` family is the semantic mutation boundary for that mixed
+sequence. It inserts payload-free separators, moves one typed item, and deletes
+or duplicates an exact Board-ordered set through the same reducer and Board
+history as the TUI. `thoughts split`, `extract`, `merge`, and `reflow` likewise
+invoke the existing typed transformation owners. Merge loads the same validated
+`merge_separator` setting as the TUI. An active owner canonicalizes initial
+execution and replay matching with its launch-time setting. After an owner
+restart, a changed setting deliberately makes the merge a different semantic
+request. They require current-content SHA-256
+preconditions, preserve annotations and organizational names according
+to the domain transformation rules, and return typed affected `item_ids` only
+after durable acknowledgement. Capabilities publish exact operation arrays so
+an installed-version skill never infers these commands from a broad feature
+boolean.
+
 Read-only commands synchronize with a compatible active owner before inspecting
 the shared database through the storage facade. When a legacy owner predates
 the synchronization request, reads remain available from its last durable
@@ -1775,13 +2275,30 @@ never writes around the owner.
 The local transport is a Unix-domain socket on macOS and Linux. There is no
 insecure fallback. Endpoint metadata lives beside runtime lock metadata. Peer-user validation,
 bounded messages, protocol negotiation, idempotency keys, and timeouts are
-mandatory. If forwarding is unsupported or the owner cannot be verified, the
-CLI returns `session_busy`.
+mandatory. Before reporting success, the client verifies the receipt's exact
+session, durable identity, affected thought, and typed item identities against
+the request. If the owner cannot be verified or reached, the CLI returns `session_busy`. If
+the verified owner's control protocol cannot represent the request, the CLI
+returns `protocol_mismatch`, because a retry cannot succeed.
 
-Control protocol version 9 is current. Version 9 carries the durable operation
+Control protocol version 13 is current. Version 13 adds the export completion
+request, which removes or replaces exported thoughts after the caller's file is
+durable; older owners report `protocol_mismatch` for it. Version 12 adds one selected-thought
+preserve-add batch. The destination owner commits every copy under one operation
+identity and returns one durable cohort receipt; older owners reject the batch.
+Version 11 carries typed separator and
+mixed-item mutations plus split, extract, merge, and reflow requests. These
+requests use the canonical reducer, durability lane, and replay matcher; older
+owners reject them instead of accepting a partial semantic operation. Version
+10 carries thought-name replacement and preserves optional names during
+cross-session creation. Older
+owners reject those requests instead of dropping metadata. Version 9 carries the durable operation
 identity required for active-owner session rename, including idempotent replay
 and Browser history. A same-name rename commits a durable no-op receipt so its
-identity cannot later name different content. Attachment-bearing creation requires version 8 to retain
+identity cannot later name different content. The rename metadata receipt
+carries the store's `idempotent_replay` flag, so an overlapping duplicate that
+reaches the owner after the first rename is reported as a replay. The field is
+additive: an older owner omits it and the client reads a new application. Attachment-bearing creation requires version 8 to retain
 destination occurrence numbering. Version 2 introduced legacy durable
 presentation annotations. Version 4 added session rename, owner synchronization,
 exact editor replacement, and durable collapse state. An add mutation carrying
@@ -1793,8 +2310,17 @@ enters the ordinary editor revision history. The owner rejects every mutation of
 submission is in flight. Cross-session delivery inspects the source, commits an
 idempotent destination creation through the version 7 purpose-specific
 preservation request or an acquired
-inactive-session lease, and only then requests an ordinary source deletion. No
-direct database write bypasses an active destination owner.
+inactive-session lease, and only then requests an ordinary source deletion. The
+destination receives the optional name as separate metadata. No direct database
+write bypasses an active destination owner.
+Selected delivery first persists an exact source intent. Retry and startup
+recovery reuse its destination and source-removal identities. An active owner
+receives one version-12 batch request; an inactive destination commits the same
+reducer-owned Board batch under its lease. The source records the complete
+destination receipt before it can delete any selected source. Source removal
+and journal completion share one SQLite transaction, so a crash converges on
+either the complete retained source set or the complete removed set. A failed
+destination batch cannot produce a reported successful subset.
 
 The Proqi skill contains instructions and examples, not privileged executable
 logic. It begins with capability discovery, passes arbitrary thought content by
@@ -2015,7 +2541,8 @@ A preflight job uses the xtask-owned classifier on the complete pull-request or
 push diff before the matrix starts. When every changed path is ordinary
 Markdown, CI runs one lightweight documentation gate for whitespace and
 repository-owned public-asset contracts. Reviewed files under
-`.github/release-notes/` are product inputs even though they are Markdown;
+`.github/release-notes/` and the shipped `skills/` tree are product inputs
+even though they are Markdown, so a skill edit runs its Rust contract tests;
 the Rust test, coverage, audit, PTY, package, and platform jobs are explicitly
 skipped. Any non-Markdown path runs the distinct product boundaries. Coverage
 runs only for relevant code changes, and the full MSRV suite runs only for its
@@ -2209,6 +2736,8 @@ tests/
   pty/
 skills/
   proqi/SKILL.md
+.claude-plugin/
+  marketplace.json   Claude Code marketplace publishing skills/ as proqi@proqi
 xtask/             canonical development, CI, and packaging commands
 ```
 

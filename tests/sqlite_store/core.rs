@@ -294,7 +294,10 @@ fn commits_are_idempotent_but_identity_reuse_is_rejected() {
     };
     changed.created_at = Timestamp::from_millis(99);
     assert!(matches!(
-        store.commit(&OperationBatch::Board(changed)),
+        store.commit(&OperationBatch::Board {
+            operation: changed,
+            semantic_fingerprint: None,
+        }),
         Err(StoreError::Conflict(_))
     ));
     assert_eq!(

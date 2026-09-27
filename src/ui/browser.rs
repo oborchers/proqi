@@ -37,6 +37,10 @@ impl BrowserAvailability {
             Self::Trashed => "trashed",
         }
     }
+
+    pub(super) const fn is_openable(&self) -> bool {
+        matches!(self, Self::Resumable | Self::Recovered)
+    }
 }
 
 /// One search result paired with verified runtime availability.
@@ -230,6 +234,9 @@ pub struct SessionBrowser {
     now: Timestamp,
     layout: Option<BrowserLayout>,
     pub(super) footer_controls: Vec<BrowserFooterControl>,
+    footer_hidden: bool,
+    hovered: BrowserHit,
+    pointer_position: Option<(u16, u16)>,
     rename: Option<management::RenameState>,
     pub(super) shortcut_registry: crate::ui::ShortcutRegistry,
     history: crate::ports::store::BrowserHistoryStatus,
@@ -251,6 +258,9 @@ impl SessionBrowser {
             now,
             layout: None,
             footer_controls: Vec::new(),
+            footer_hidden: false,
+            hovered: BrowserHit::None,
+            pointer_position: None,
             rename: None,
             shortcut_registry: crate::ui::ShortcutRegistry::default(),
             history: crate::ports::store::BrowserHistoryStatus::default(),
@@ -263,10 +273,12 @@ impl SessionBrowser {
         now: Timestamp,
         shortcut_registry: crate::ui::ShortcutRegistry,
         history: crate::ports::store::BrowserHistoryStatus,
+        footer_hidden: bool,
     ) -> Self {
         let mut browser = Self::new(items, now);
         browser.shortcut_registry = shortcut_registry;
         browser.history = history.without_active_targets(&browser.items);
+        browser.footer_hidden = footer_hidden;
         browser
     }
 
@@ -404,12 +416,50 @@ impl SessionBrowser {
             layout = self.compute_layout(area);
         }
         self.layout = Some(layout.clone());
-        self.footer_controls = if self.status.is_none() {
-            browser_footer_controls(layout.footer, self)
-        } else {
-            Vec::new()
-        };
+        self.footer_controls =
+            if self.status.is_none() && (!self.footer_hidden || self.rename.is_some()) {
+                browser_footer_controls(layout.footer, self)
+            } else {
+                Vec::new()
+            };
+        self.reconcile_hover();
         layout
+    }
+
+    pub(super) const fn hovered(&self) -> BrowserHit {
+        self.hovered
+    }
+
+    fn reconcile_hover(&mut self) {
+        self.hovered = self
+            .pointer_position
+            .map_or(BrowserHit::None, |(column, row)| {
+                self.hover_target(column, row)
+            });
+    }
+
+    fn hover_target(&self, column: u16, row: u16) -> BrowserHit {
+        let Some(layout) = &self.layout else {
+            return BrowserHit::None;
+        };
+        let hit = layout.hit_test(column, row, &self.footer_controls);
+        match hit {
+            BrowserHit::Item(index)
+                if self
+                    .items
+                    .get(index)
+                    .is_some_and(|item| item.availability.is_openable()) =>
+            {
+                hit
+            }
+            BrowserHit::Rename
+            | BrowserHit::Trash
+            | BrowserHit::Undo
+            | BrowserHit::Redo
+            | BrowserHit::Confirm
+            | BrowserHit::Cancel => hit,
+            BrowserHit::Item(_) | BrowserHit::None => BrowserHit::None,
+        }
     }
 }
 

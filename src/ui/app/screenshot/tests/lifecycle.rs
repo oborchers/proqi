@@ -1,10 +1,17 @@
 use super::behavior::{app_with_thought, candidate, next_commit};
 use crate::{
-    application::{DurabilityState, Effect, FailureCode, ScreenshotIntent, ScreenshotPauseReason},
-    domain::OperationSequence,
+    application::{
+        DurabilityState, Effect, FailureCode, InteractionMode, ScreenshotIntent,
+        ScreenshotPauseReason,
+    },
+    domain::{BoardOperationKind, OperationSequence, Timestamp},
     ports::store::StoreError,
-    ui::{ScreenshotUpdateReadiness, UiInput, UiKey},
+    ui::{
+        PointerButton, PointerInput, PointerKind, ScreenshotUpdateReadiness, ShortcutActionId,
+        UiInput, UiKey,
+    },
 };
+use ratatui_core::layout::Rect;
 
 #[test]
 fn commands_relevance_tracks_inactive_active_paused_and_failed_capture_states() {
@@ -216,11 +223,168 @@ fn ready_quit_is_bounded_explicit_and_never_silently_discards() {
             .is_some_and(|status| status.contains("quit again to abandon"))
     );
     assert!(
+        app.handle(
+            UiInput::Pointer(PointerInput {
+                column: 0,
+                row: 0,
+                kind: PointerKind::Move,
+                extend_selection: false,
+            }),
+            &mut ids,
+            &clock,
+        )
+        .is_empty()
+    );
+    assert!(!app.quit);
+    assert!(app.screenshot_retry_ready());
+    assert!(
         app.handle(UiInput::Key(UiKey::Quit), &mut ids, &clock)
             .is_empty()
     );
     assert!(app.quit);
     assert!(!app.screenshot_retry_ready());
+}
+
+#[test]
+fn commands_quit_keeps_confirmation_open_for_a_second_enter() {
+    let (mut app, mut ids, clock, _) = app_with_thought();
+    app.screenshot_started(std::time::Duration::ZERO);
+    app.queue_screenshot_candidates([candidate(74)]);
+    next_commit(&mut app, &mut ids, &clock);
+    app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
+    app.open_palette();
+    for character in "quit proqi".chars() {
+        app.handle(UiInput::Key(UiKey::Character(character)), &mut ids, &clock);
+    }
+    app.prepare_frame(Rect::new(0, 0, 60, 12));
+
+    assert!(
+        app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock)
+            .is_empty()
+    );
+    assert!(!app.quit);
+    assert!(app.screenshot_retry_ready());
+    assert!(app.command_palette_view().is_some());
+    assert!(
+        app.status_text()
+            .is_some_and(|status| status.contains("quit again to abandon"))
+    );
+
+    app.prepare_frame(Rect::new(0, 0, 60, 12));
+    assert!(
+        app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock)
+            .is_empty()
+    );
+    assert!(app.quit);
+    assert!(!app.screenshot_retry_ready());
+    assert!(app.command_palette_view().is_none());
+}
+
+#[test]
+fn cancelling_commands_quit_preserves_the_original_editor_handoff() {
+    let (mut app, mut ids, clock, thought_id) = app_with_thought();
+    app.state.mode = InteractionMode::Edit { thought_id };
+    app.sync_editor_from_state();
+    app.handle(UiInput::Key(UiKey::SelectAll), &mut ids, &clock);
+    assert!(
+        app.editor_snapshot()
+            .expect("selected editor")
+            .selection
+            .is_some()
+    );
+    app.handle(UiInput::Key(UiKey::Escape), &mut ids, &clock);
+
+    app.screenshot_started(std::time::Duration::ZERO);
+    app.queue_screenshot_candidates([candidate(77)]);
+    next_commit(&mut app, &mut ids, &clock);
+    app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
+    app.handle(
+        UiInput::Key(UiKey::Shortcut(ShortcutActionId::OpenCommands)),
+        &mut ids,
+        &clock,
+    );
+    for character in "quit proqi".chars() {
+        app.handle(UiInput::Key(UiKey::Character(character)), &mut ids, &clock);
+    }
+    app.prepare_frame(Rect::new(0, 0, 60, 12));
+    app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
+    assert!(!app.quit);
+    assert!(app.command_palette_view().is_some());
+
+    app.handle(UiInput::Key(UiKey::SelectAll), &mut ids, &clock);
+    for character in "extract selection".chars() {
+        app.handle(UiInput::Key(UiKey::Character(character)), &mut ids, &clock);
+    }
+    let picker = app.command_palette_view().expect("retained Commands");
+    assert_eq!(picker.rows.len(), 1);
+    assert!(picker.rows[0].enabled);
+    app.prepare_frame(Rect::new(0, 0, 60, 12));
+    let effects = app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
+
+    let [Effect::CommitBoardOperation(operation)] = effects.as_slice() else {
+        panic!("expected extracted selection operation: {effects:?}");
+    };
+    assert_eq!(operation.kind, BoardOperationKind::Extract);
+    let live = app.state.board.live_thoughts();
+    assert_eq!(live.len(), 2);
+    assert_eq!(live[0].content, "");
+    assert_eq!(live[1].content, "active");
+    assert!(app.screenshot_retry_ready());
+
+    assert!(
+        app.handle(UiInput::Key(UiKey::Quit), &mut ids, &clock)
+            .is_empty()
+    );
+    assert!(
+        !app.quit,
+        "the executed non-Quit command must cancel the earlier confirmation"
+    );
+    assert!(app.screenshot_retry_ready());
+}
+
+#[test]
+fn commands_quit_pointer_uses_current_row_geometry_for_both_confirmations() {
+    let (mut app, mut ids, mut clock, _) = app_with_thought();
+    app.screenshot_started(std::time::Duration::ZERO);
+    app.queue_screenshot_candidates([candidate(75)]);
+    next_commit(&mut app, &mut ids, &clock);
+    app.complete_screenshot_capture(Err(StoreError::Busy), &mut ids, &clock);
+    app.open_palette();
+    for character in "quit proqi".chars() {
+        app.handle(UiInput::Key(UiKey::Character(character)), &mut ids, &clock);
+    }
+    let first = app
+        .prepare_frame(Rect::new(0, 0, 60, 12))
+        .overlay
+        .expect("Commands overlay")
+        .items[0];
+    let pointer_down = |area: ratatui_core::layout::Rect| {
+        UiInput::Pointer(PointerInput {
+            column: area.x,
+            row: area.y,
+            kind: PointerKind::Down(PointerButton::Left),
+            extend_selection: false,
+        })
+    };
+
+    assert!(app.handle(pointer_down(first), &mut ids, &clock).is_empty());
+    assert!(!app.quit);
+    assert!(app.screenshot_retry_ready());
+    assert!(app.command_palette_view().is_some());
+    clock.set(Timestamp::from_millis(1_000));
+
+    let second = app
+        .prepare_frame(Rect::new(0, 0, 60, 12))
+        .overlay
+        .expect("retained Commands overlay")
+        .items[0];
+    assert!(
+        app.handle(pointer_down(second), &mut ids, &clock)
+            .is_empty()
+    );
+    assert!(app.quit);
+    assert!(!app.screenshot_retry_ready());
+    assert!(app.command_palette_view().is_none());
 }
 
 #[test]

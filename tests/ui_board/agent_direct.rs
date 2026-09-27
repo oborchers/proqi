@@ -2,7 +2,12 @@
 
 use super::{Fixture, draw, text};
 use crate::submission_input::control_submit;
-use proqi::{application::Effect, domain::Timestamp, ports::environment::IdGenerator, ui::UiKey};
+use proqi::{
+    application::Effect,
+    domain::{ThoughtName, Timestamp},
+    ports::environment::IdGenerator,
+    ui::UiKey,
+};
 
 use proqi::{
     domain::Direction,
@@ -48,6 +53,13 @@ fn direct_edit_chords_submit_only_the_active_thought_and_preserve_mode_on_failur
     super::agent::prepare_thought(&mut fixture);
     fixture.input(crate::key_input(UiKey::Enter));
     let thought_id = fixture.app.active_thought_id().expect("active thought");
+    fixture
+        .app
+        .state
+        .board
+        .thought_mut(thought_id)
+        .expect("active thought")
+        .set_name(Some(ThoughtName::new("Private label").expect("name")));
     let target = super::agent::target(Direction::Right, "w1:p2");
     fixture
         .app
@@ -433,7 +445,7 @@ fn control_submission_flushes_pending_invocation_text_without_accepting_completi
     let sequence = fixture.paste("/pl");
     fixture.app.acknowledge_persistence(sequence, true);
     let screen = text(draw(&mut fixture, 80, 16).backend().buffer());
-    assert!(screen.contains("/plan"), "shared starter popup is active");
+    assert!(screen.contains("/plan"), "shared command popup is active");
     fixture.input(crate::key_input(UiKey::Character('a')));
     let effects = fixture.effects(control_submit(true));
     let [Effect::CommitRevision(revision)] = effects.as_slice() else {

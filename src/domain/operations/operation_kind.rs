@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 pub enum BoardOperationKind {
     /// Created a thought, including paste-to-create.
     Create,
+    /// Inserted a durable payload-free visual separator.
+    InsertSeparator,
     /// Deleted a thought without touching the clipboard.
     Delete,
     /// Deleted a thought after a successful clipboard write.
@@ -16,6 +18,8 @@ pub enum BoardOperationKind {
     Reorder,
     /// Changed the explicit collapse preference.
     Collapse,
+    /// Changed optional organizational metadata.
+    Rename,
     /// Duplicated one or more thoughts as one operation.
     Duplicate,
     /// Deleted after an accepted adjacent-agent submission.
@@ -30,6 +34,10 @@ pub enum BoardOperationKind {
     Reflow,
     /// Merge a contiguous board selection into its first thought.
     Merge,
+    /// Deleted after the exported text file became durable.
+    ExportAndRemove,
+    /// Replaced by one file-reference thought after the exported file became durable.
+    ExportAndReplace,
 }
 
 impl BoardOperationKind {
@@ -51,6 +59,8 @@ impl BoardOperationKind {
                 | Self::Extract
                 | Self::Reflow
                 | Self::Merge
+                | Self::ExportAndRemove
+                | Self::ExportAndReplace
         )
     }
 }

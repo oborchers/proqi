@@ -17,6 +17,11 @@ mod pty;
 #[path = "package_contract/sandbox.rs"]
 mod sandbox;
 
+#[path = "support/ordinal_migration.rs"]
+mod ordinal_fixture;
+#[path = "migration_ordinals/cli_contract.rs"]
+mod ordinal_migration;
+
 use sandbox::PackageSandbox;
 
 struct InstalledProduct {
@@ -86,6 +91,7 @@ fn installed_product_contract() {
     let (session, thought, content) = assert_json_workflow(&product);
     assert_reopen_and_resume(&product, &session, &thought, &content);
     assert_migration_and_newer_schema_contract(&product);
+    ordinal_migration::assert_cli_migrations(|| product.command(), &product.state);
     assert_archive_and_runtime_independence(&product);
     #[cfg(unix)]
     pty::assert_active_owner_and_terminal_restoration(&product, &session);
@@ -133,6 +139,33 @@ fn assert_json_workflow(product: &InstalledProduct) -> (String, String, String) 
     let inspected = product.json(&["thoughts", "inspect", &session, &thought]);
     assert_eq!(
         value_at(&inspected, &["data", "thought", "content"]),
+        &content
+    );
+    let separator = product.json(&["items", "insert-separator", &session, "--position", "0"]);
+    let separator_id = separator["data"]["item_ids"][0]["id"]
+        .as_str()
+        .expect("separator ID")
+        .to_owned();
+    assert!(separator_id.starts_with("sep_"));
+    let mixed = product.json(&["thoughts", "list", &session]);
+    assert_eq!(mixed["data"]["items"][0]["kind"], "separator");
+    assert!(mixed["data"]["items"][0].get("content").is_none());
+
+    let digest = json_string(&inspected, &["data", "thought", "content_sha256"]);
+    let split = product.json(&[
+        "thoughts",
+        "split",
+        &session,
+        &thought,
+        "1",
+        "--expected-sha256",
+        &digest,
+    ]);
+    assert_eq!(split["data"]["item_ids"][0]["id"], thought);
+    product.json(&["thoughts", "undo", &session]);
+    let restored = product.json(&["thoughts", "inspect", &session, &thought]);
+    assert_eq!(
+        value_at(&restored, &["data", "thought", "content"]),
         &content
     );
     (session, thought, content)
@@ -221,6 +254,10 @@ fn assert_archive_and_runtime_independence(product: &InstalledProduct) {
         value_at(&capabilities, &["data", "commands"])
             .as_array()
             .is_some_and(|commands| commands.iter().any(|command| command == "sessions"))
+    );
+    assert_eq!(
+        capabilities["data"]["operations"]["items"],
+        serde_json::json!(["insert-separator", "move", "delete", "duplicate"])
     );
 }
 

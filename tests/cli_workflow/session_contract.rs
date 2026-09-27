@@ -15,7 +15,7 @@ fn json_fresh_launch_is_empty_and_retains_interactive_onboarding_eligibility() {
     let root = temporary.path();
     let session = create_session(root);
     let thoughts = success(root, &["thoughts", "list", &session], None);
-    assert!(thoughts["thoughts"].as_array().is_some_and(Vec::is_empty));
+    assert!(thoughts["items"].as_array().is_some_and(Vec::is_empty));
     let connection =
         rusqlite::Connection::open(root.join("data/proqi.sqlite3")).expect("open database");
     let completed: i64 = connection
@@ -96,6 +96,19 @@ fn session_administration_has_restart_safe_cli_undo_and_redo() {
     assert_eq!(redo_rename["operation"], "session rename");
     let renamed = success(root, &["sessions", "list", "--query", "research"], None);
     assert_eq!(renamed["sessions"][0]["id"], session);
+
+    success(root, &["sessions", "rename", &session, "--clear"], None);
+    let cleared = success(root, &["sessions", "list"], None);
+    let cleared = cleared["sessions"]
+        .as_array()
+        .expect("sessions")
+        .iter()
+        .find(|entry| entry["id"] == session)
+        .expect("cleared session");
+    assert!(cleared["name"].is_null());
+    success(root, &["sessions", "undo"], None);
+    let restored_name = success(root, &["sessions", "list", "--query", "research"], None);
+    assert_eq!(restored_name["sessions"][0]["id"], session);
 
     success(root, &["sessions", "rename", &session, "divergent"], None);
     let unavailable = run(root, &["sessions", "redo"], None);

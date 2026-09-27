@@ -116,10 +116,7 @@ fn startup_typeahead_after_terminal_ownership_is_not_lost() {
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
-        "startup-typeahead"
-    );
+    assert_eq!(thoughts["data"]["items"][0]["content"], "startup-typeahead");
 }
 
 #[test]
@@ -162,5 +159,5 @@ fn keyboard_creation_survives_rapid_pty_resize() {
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
-    assert_eq!(thoughts["data"]["thoughts"][0]["content"], "mouse-created");
+    assert_eq!(thoughts["data"]["items"][0]["content"], "mouse-created");
 }

@@ -62,6 +62,19 @@ fn selected_thoughts_submit_once_in_board_order_and_remove_as_one_undo_step() {
     fixture.input(crate::key_input(UiKey::Character(' ')));
     fixture.input(crate::key_input(UiKey::Character('k')));
     fixture.input(crate::key_input(UiKey::Character(' ')));
+    let selected_ids = fixture
+        .app
+        .state
+        .board
+        .live_thoughts()
+        .into_iter()
+        .map(|thought| thought.id)
+        .collect::<Vec<_>>();
+    assert!(
+        selected_ids
+            .iter()
+            .all(|thought_id| fixture.app.thought_selected(*thought_id))
+    );
     let target = super::agent::target(Direction::Left, "w1:p2");
     fixture
         .app
@@ -87,10 +100,20 @@ fn selected_thoughts_submit_once_in_board_order_and_remove_as_one_undo_step() {
         [Effect::StoreIntegrationContext { .. }]
     ));
     assert!(fixture.app.state.board.live_thoughts().is_empty());
+    assert!(
+        selected_ids
+            .iter()
+            .all(|thought_id| !fixture.app.thought_selected(*thought_id))
+    );
 
     fixture.input(crate::key_input(UiKey::Escape));
     fixture.input(crate::key_input(UiKey::Undo));
     assert_eq!(fixture.app.state.board.live_thoughts().len(), 2);
+    assert!(
+        selected_ids
+            .iter()
+            .all(|thought_id| !fixture.app.thought_selected(*thought_id))
+    );
 }
 
 #[test]
@@ -151,4 +174,104 @@ fn merged_prompt_keeps_only_the_first_shared_starter() {
             );
         }
     }
+}
+
+#[test]
+fn every_added_shared_command_remains_exact_in_first_and_later_thoughts() {
+    const PRESERVED_COMMANDS: [&str; 17] = [
+        "/btw",
+        "/clear",
+        "/compact",
+        "/diff",
+        "/fast",
+        "/hooks",
+        "/mcp",
+        "/model",
+        "/new",
+        "/permissions",
+        "/rename",
+        "/resume",
+        "/review",
+        "/skills",
+        "/status",
+        "/theme",
+        "/usage",
+    ];
+
+    for harness in [CODEX_AGENT_KIND, CLAUDE_AGENT_KIND] {
+        for command in PRESERVED_COMMANDS {
+            assert_preserved_outbound_pair(harness, command, &format!("{command} argument"));
+            assert_preserved_outbound_pair(harness, &format!("{command} argument"), command);
+        }
+    }
+}
+
+#[test]
+fn preserved_and_stripped_commands_mix_without_cross_normalization() {
+    for harness in [CODEX_AGENT_KIND, CLAUDE_AGENT_KIND] {
+        let mut fixture = Fixture::new();
+        for content in ["/review first", "/plan later", "/status final argument"] {
+            fixture.paste(content);
+            fixture.input(crate::key_input(UiKey::Escape));
+        }
+        fixture.acknowledge_all_persistence();
+        fixture.input(crate::key_input(UiKey::Character('a')));
+        fixture
+            .app
+            .complete_agent_discovery(Ok(vec![super::agent::target_with_kind(
+                Direction::Left,
+                "w1:p2",
+                harness,
+            )]));
+
+        let effects = fixture.effects(crate::key_input(UiKey::Character('s')));
+        let request = super::agent::start_submission(&mut fixture, &effects);
+        assert_eq!(
+            request.content,
+            "/review first\n\nlater\n\n/status final argument"
+        );
+        assert_eq!(
+            fixture
+                .app
+                .state
+                .board
+                .live_thoughts()
+                .into_iter()
+                .map(|thought| thought.content.as_str())
+                .collect::<Vec<_>>(),
+            ["/review first", "/plan later", "/status final argument"]
+        );
+    }
+}
+
+fn assert_preserved_outbound_pair(harness: &str, first: &str, later: &str) {
+    let mut fixture = Fixture::new();
+    for content in [first, later] {
+        fixture.paste(content);
+        fixture.input(crate::key_input(UiKey::Escape));
+    }
+    fixture.acknowledge_all_persistence();
+    fixture.input(crate::key_input(UiKey::Character('a')));
+    fixture
+        .app
+        .complete_agent_discovery(Ok(vec![super::agent::target_with_kind(
+            Direction::Left,
+            "w1:p2",
+            harness,
+        )]));
+
+    let effects = fixture.effects(crate::key_input(UiKey::Character('s')));
+    let request = super::agent::start_submission(&mut fixture, &effects);
+    assert_eq!(request.content, format!("{first}\n\n{later}"));
+    assert_eq!(
+        fixture
+            .app
+            .state
+            .board
+            .live_thoughts()
+            .into_iter()
+            .map(|thought| thought.content.as_str())
+            .collect::<Vec<_>>(),
+        [first, later]
+    );
 }

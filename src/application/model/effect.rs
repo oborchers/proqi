@@ -11,7 +11,7 @@ use crate::{
         invocation::{InvocationDiscoveryRequest, InvocationReferenceDiscoveryRequest},
         recovery::RecoveryDocument,
         store::{OperationBatch, SubmissionAttempt, SubmissionOutcome},
-        transfer::SessionTransferRequest,
+        transfer::SessionTransferBatchRequest,
     },
 };
 
@@ -35,8 +35,17 @@ pub enum Effect {
         /// Picker generation used to discard a completion from an earlier owner.
         generation: u64,
     },
-    /// Copy one exact thought to another session before optional source removal.
-    TransferThought(SessionTransferRequest),
+    /// Deliver one thought cohort as one durable destination operation.
+    TransferThoughts(SessionTransferBatchRequest),
+    /// Complete a selected transfer journal, atomically committing source removal when present.
+    FinishTransfer {
+        /// Exact prepared cohort.
+        request: SessionTransferBatchRequest,
+        /// Exact source removal, if the accepted cohort can be removed.
+        removal: Option<BoardOperation>,
+        /// Stable completion classification.
+        reason: &'static str,
+    },
     /// Persist one installation-wide Browser administration operation.
     CommitBrowserOperation(crate::domain::BrowserOperation),
     /// Discover verified adjacent agents without blocking the reducer lane.
@@ -81,6 +90,21 @@ pub enum Effect {
     },
     /// Commit one new structural operation.
     CommitBoardOperation(BoardOperation),
+    /// Reserve one same-value thought rename without adding a history unit.
+    CommitThoughtNoOpRename {
+        /// Durable operation identity.
+        operation_id: OperationId,
+        /// Owning session.
+        session_id: SessionId,
+        /// Affected thought.
+        thought_id: ThoughtId,
+        /// Current and requested name.
+        name: Option<crate::domain::ThoughtName>,
+        /// Monotonic durable sequence.
+        sequence: OperationSequence,
+        /// Operation time.
+        at: Timestamp,
+    },
     /// Commit one new editor revision.
     CommitRevision(ThoughtRevision),
     /// Atomically move one persistent history cursor and current state.
@@ -116,6 +140,22 @@ pub enum Effect {
         /// External request identity.
         request_id: RequestId,
     },
+    /// Atomically write one plain-text thought export, durable before it reports success.
+    WriteExport {
+        /// External request identity.
+        request_id: RequestId,
+        /// Exact destination, bytes, and replacement policy.
+        request: crate::ports::export::ExportWriteRequest,
+    },
+    /// List one directory for export destination completion.
+    ListExportDirectory {
+        /// Completion generation used to discard a stale listing.
+        generation: u64,
+        /// Absolute directory to list.
+        directory: std::path::PathBuf,
+        /// Typed start of the entry name; only matching entries are listed.
+        prefix: String,
+    },
     /// Atomically export the current in-memory board for recovery.
     ExportRecovery {
         /// External request identity.
@@ -140,8 +180,30 @@ impl Effect {
     #[must_use]
     pub fn persistence_batch(&self) -> Option<OperationBatch> {
         match self {
-            Self::CommitBoardOperation(operation) => Some(OperationBatch::Board(operation.clone())),
-            Self::CommitRevision(revision) => Some(OperationBatch::Revision(revision.clone())),
+            Self::CommitBoardOperation(operation) => Some(OperationBatch::Board {
+                operation: operation.clone(),
+                semantic_fingerprint: None,
+            }),
+            Self::CommitThoughtNoOpRename {
+                operation_id,
+                session_id,
+                thought_id,
+                name,
+                sequence,
+                at,
+            } => Some(OperationBatch::ThoughtNoOpRename {
+                operation_id: *operation_id,
+                session_id: *session_id,
+                thought_id: *thought_id,
+                name: name.clone(),
+                sequence: *sequence,
+                at: *at,
+                semantic_fingerprint: None,
+            }),
+            Self::CommitRevision(revision) => Some(OperationBatch::Revision {
+                revision: revision.clone(),
+                semantic_fingerprint: None,
+            }),
             Self::CommitHistoryMove {
                 operation_id,
                 session_id,
@@ -156,8 +218,71 @@ impl Effect {
                 undo: *undo,
                 sequence: *sequence,
                 at: *at,
+                semantic_fingerprint: None,
             }),
             _ => None,
         }
     }
+}
+
+/// One sequenced durable mutation and the auxiliary work emitted with it.
+#[derive(Debug)]
+pub(crate) struct SequencedMutationEffects {
+    /// Canonical durable store request.
+    pub(crate) batch: OperationBatch,
+    /// Sequence owned by the durable request.
+    pub(crate) sequence: OperationSequence,
+    /// Auxiliary effects that must follow the durable enqueue.
+    pub(crate) auxiliary: Vec<Effect>,
+}
+
+impl SequencedMutationEffects {
+    /// Split one reducer mutation without accepting unrelated effect kinds.
+    pub(crate) fn new(effects: Vec<Effect>) -> Result<Self, SequencedMutationEffectError> {
+        let mut batch = None;
+        let mut auxiliary = Vec::new();
+        for effect in effects {
+            if let Some(candidate) = effect.persistence_batch() {
+                assign_durable_batch(&mut batch, candidate)?;
+            } else if matches!(effect, Effect::CheckAttachments(_)) {
+                auxiliary.push(effect);
+            } else {
+                return Err(SequencedMutationEffectError::UnsupportedAuxiliary);
+            }
+        }
+        let batch = batch.ok_or(SequencedMutationEffectError::MissingDurable)?;
+        let sequence = batch
+            .sequence()
+            .ok_or(SequencedMutationEffectError::MissingSequence)?;
+        Ok(Self {
+            batch,
+            sequence,
+            auxiliary,
+        })
+    }
+}
+
+fn assign_durable_batch(
+    batch: &mut Option<OperationBatch>,
+    candidate: OperationBatch,
+) -> Result<(), SequencedMutationEffectError> {
+    if batch.replace(candidate).is_some() {
+        return Err(SequencedMutationEffectError::MultipleDurable);
+    }
+    Ok(())
+}
+
+/// Invalid effect shape for an ordinary sequenced reducer mutation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SequencedMutationEffectError {
+    /// No durable mutation was emitted.
+    MissingDurable,
+    /// The durable mutation did not own a session sequence.
+    MissingSequence,
+    /// More than one durable mutation was emitted.
+    MultipleDurable,
+    /// An effect other than attachment reconciliation accompanied the mutation.
+    UnsupportedAuxiliary,
+    /// The durable batch could not be paired with the exact public request.
+    InvalidSemanticFingerprint,
 }

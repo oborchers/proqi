@@ -29,11 +29,12 @@ fn missing_config_uses_the_narrow_pane_default() {
         (Action::ScreenshotInbox, 'i', false),
         (Action::PasteExact, 'p', false),
         (Action::DeleteSentence, 'U', true),
-        (Action::ExtendVisualRowStart, 'H', true),
         (Action::ExtendVisualRowEnd, 'L', true),
     ] {
         assert_binding(&settings, action, key, editor);
     }
+    assert_binding(&settings, Action::ExtendVisualRowStart, 'H', true);
+    assert_binding(&settings, Action::ToggleFooter, 'h', false);
     assert!(settings.screenshot.directory.is_none());
     assert!(settings.screenshot.filename_patterns.is_empty());
     assert!(!settings.screenshot.capture_all_new_images);
@@ -61,6 +62,7 @@ fn missing_config_uses_the_narrow_pane_default() {
     assert!(!settings.ui.show_session_id);
     assert!(settings.ui.smart_lists);
     assert!(settings.ui.mouse_capture);
+    assert!(!settings.ui.footer_hidden);
     assert_eq!(settings.ui.list_indent_width, 2);
     assert_eq!(settings.ui.merge_separator, "\n\n");
     assert_eq!(settings.theme.base, ThemePreference::Auto);
@@ -257,6 +259,29 @@ fn mouse_capture_can_be_disabled() {
     .expect("write config");
     let settings = load_settings(directory.path()).expect("settings");
     assert!(!settings.ui.mouse_capture);
+}
+
+#[test]
+fn optional_footer_chrome_can_be_hidden_only_by_a_boolean_setting() {
+    let directory = tempfile::tempdir().expect("config directory");
+    fs::write(
+        directory.path().join("config.toml"),
+        "footer_hidden = true\n",
+    )
+    .expect("write config");
+    assert!(
+        load_settings(directory.path())
+            .expect("settings")
+            .ui
+            .footer_hidden
+    );
+
+    fs::write(
+        directory.path().join("config.toml"),
+        "footer_hidden = 'yes'\n",
+    )
+    .expect("write invalid config");
+    assert!(load_settings(directory.path()).is_err());
 }
 
 #[test]

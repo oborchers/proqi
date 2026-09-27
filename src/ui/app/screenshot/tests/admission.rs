@@ -149,7 +149,7 @@ fn transfer_remove_and_capture_use_distinct_sequences_in_both_orderings() {
     app.complete_transfer_discovery(1, Ok(vec![session_hit(destination)]));
     let transfer_input = crate::ui::input::RoutedInput::Key(UiKey::Enter);
     let transfer_effects = app.handle_transfer_input(&transfer_input, &mut ids, &clock);
-    let [Effect::TransferThought(request)] = transfer_effects.as_slice() else {
+    let [Effect::TransferThoughts(request)] = transfer_effects.as_slice() else {
         panic!("transfer intent");
     };
     let request = request.clone();
@@ -158,6 +158,7 @@ fn transfer_remove_and_capture_use_distinct_sequences_in_both_orderings() {
     assert!(app.advance_screenshot_capture(&mut ids, &clock).is_empty());
     let transfer_sequence = finish_transfer(&mut app, &mut ids, &clock, &request, destination);
     app.acknowledge_persistence(transfer_sequence, true);
+    app.complete_transfer_journal(request.operation_id);
     let capture = next_commit(&mut app, &mut ids, &clock);
     assert!(capture.operation.sequence > transfer_sequence);
     assert_ne!(thought_id, capture_thought_id(&capture));
@@ -171,9 +172,9 @@ fn transfer_remove_and_capture_use_distinct_sequences_in_both_orderings() {
     let capture = next_commit(&mut app, &mut ids, &clock);
     app.handle(UiInput::Key(UiKey::Enter), &mut ids, &clock);
     let replay = app.complete_screenshot_capture(Ok(created(&capture)), &mut ids, &clock);
-    let Some(Effect::TransferThought(request)) = replay
+    let Some(Effect::TransferThoughts(request)) = replay
         .iter()
-        .find(|effect| matches!(effect, Effect::TransferThought(_)))
+        .find(|effect| matches!(effect, Effect::TransferThoughts(_)))
     else {
         panic!("replayed transfer");
     };
@@ -214,7 +215,7 @@ fn finish_transfer(
     app: &mut crate::ui::BoardApp,
     ids: &mut crate::adapters::memory::FakeIdGenerator,
     clock: &crate::adapters::memory::FakeClock,
-    request: &crate::ports::transfer::SessionTransferRequest,
+    request: &crate::ports::transfer::SessionTransferBatchRequest,
     destination: crate::domain::SessionId,
 ) -> OperationSequence {
     let receipt = CommitReceipt {
@@ -223,16 +224,14 @@ fn finish_transfer(
         identity: DurableIdentity::Operation(request.operation_id),
         idempotent_replay: false,
     };
-    let completion = app.complete_session_transfer(
-        request,
-        Ok(crate::application::ThoughtMutation {
-            thought_id: ids.thought_id(),
-            receipt,
-        }),
-        ids,
-        clock,
-    );
-    let [Effect::CommitBoardOperation(operation)] = completion.as_slice() else {
+    let completion = app.complete_session_transfer_batch(request, Ok(receipt), ids, clock);
+    let [
+        Effect::FinishTransfer {
+            removal: Some(operation),
+            ..
+        },
+    ] = completion.as_slice()
+    else {
         panic!("transfer removal");
     };
     operation.sequence

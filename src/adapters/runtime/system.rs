@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::{
     domain::{
-        InstanceId, OperationId, RequestId, RevisionId, SessionId, SubmissionId, ThoughtId,
-        Timestamp,
+        InstanceId, OperationId, RequestId, RevisionId, SeparatorId, SessionId, SubmissionId,
+        ThoughtId, Timestamp,
     },
     ports::environment::{
         AppPaths, Clock, Environment, IdGenerator, MonotonicClock, PathError, Paths,
@@ -67,6 +67,9 @@ impl IdGenerator for SystemIdGenerator {
     }
     fn thought_id(&mut self) -> ThoughtId {
         system_id!(ThoughtId)
+    }
+    fn separator_id(&mut self) -> SeparatorId {
+        system_id!(SeparatorId)
     }
     fn revision_id(&mut self) -> RevisionId {
         system_id!(RevisionId)
@@ -130,5 +133,11 @@ impl Environment for SystemEnvironment {
 
     fn current_executable(&self) -> Result<PathBuf, PathError> {
         std::env::current_exe().map_err(|_| PathError::Unavailable("current executable"))
+    }
+
+    fn home_directory(&self) -> Option<PathBuf> {
+        directories::BaseDirs::new()
+            .map(|directories| directories.home_dir().to_path_buf())
+            .filter(|home| home.is_absolute())
     }
 }

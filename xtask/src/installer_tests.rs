@@ -189,7 +189,10 @@ fn exact_readme_command_installs_an_updatable_standalone_binary() {
     let fixture = Fixture::new();
     fixture.write_installer_assets();
     let command = readme_install_command();
-    assert!(command.contains("--proto-redir \"=https\""));
+    assert_eq!(
+        command,
+        "curl -LsSf https://github.com/oborchers/proqi/releases/latest/download/proqi-installer.sh | sh"
+    );
     let output = fixture
         .command()
         .arg("-c")
@@ -225,14 +228,10 @@ fn readme_install_command() -> String {
         .parent()
         .expect("workspace root");
     let readme = fs::read_to_string(root.join("README.md")).expect("README");
-    let install = readme
-        .split_once("## Install\n")
-        .expect("install section")
-        .1;
-    let code = install.split_once("```shell\n").expect("shell fence").1;
-    code.split_once("\n```")
-        .expect("closing fence")
-        .0
+    readme
+        .lines()
+        .find(|line| line.starts_with("curl -LsSf ") && line.ends_with("/proqi-installer.sh | sh"))
+        .expect("standalone installer command")
         .to_owned()
 }
 
@@ -469,8 +468,10 @@ if [ "$head" = 1 ]; then
 fi
 name=${url##*/}
 source="$PROQI_TEST_ASSETS/$name"
-[ "$(wc -c < "$source")" -le "$maximum" ] || exit 63
-cp "$source" "$output"
+if [ -n "$maximum" ]; then
+  [ "$(wc -c < "$source")" -le "$maximum" ] || exit 63
+fi
+if [ -n "$output" ]; then cp "$source" "$output"; else cat "$source"; fi
 "#;
 const TAR: &str = r#"#!/bin/sh
 case "${PROQI_TEST_TAR:-}" in

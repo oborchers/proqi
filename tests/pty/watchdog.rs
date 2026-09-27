@@ -2,6 +2,7 @@
 
 use std::{
     fs,
+    panic::resume_unwind,
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
     sync::{Arc, Mutex, TryLockError},
@@ -65,6 +66,47 @@ pub(super) fn status_before(
         thread::sleep(
             POLL_INTERVAL.min(owned.cleanup_at.saturating_duration_since(Instant::now())),
         );
+    }
+}
+
+/// Owns one bounded watchdog thread for a PTY workflow with external checkpoints.
+pub(super) struct Workflow {
+    watcher: Option<JoinHandle<ExitStatus>>,
+}
+
+impl Workflow {
+    pub(super) fn spawn(
+        mut command: Command,
+        timeout: Duration,
+        cleanup_pids: PathBuf,
+        context: &'static str,
+    ) -> Self {
+        let watcher =
+            thread::spawn(move || status_before(&mut command, timeout, &cleanup_pids, context));
+        Self {
+            watcher: Some(watcher),
+        }
+    }
+
+    pub(super) fn finish(&mut self) -> ExitStatus {
+        match self.watcher.take().expect("active PTY watchdog").join() {
+            Ok(status) => status,
+            Err(payload) => resume_unwind(payload),
+        }
+    }
+
+    pub(super) fn is_finished(&self) -> bool {
+        self.watcher.as_ref().is_some_and(JoinHandle::is_finished)
+    }
+}
+
+impl Drop for Workflow {
+    fn drop(&mut self) {
+        // `status_before` owns an absolute deadline and registered descendants,
+        // so this join cannot become an unbounded fixture wait.
+        if let Some(watcher) = self.watcher.take() {
+            let _settled = watcher.join();
+        }
     }
 }
 

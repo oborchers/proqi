@@ -39,7 +39,7 @@ mod keyboard_support;
 use keyboard_support::key_input;
 
 struct DatabaseFixture {
-    _temporary: tempfile::TempDir,
+    temporary: tempfile::TempDir,
     config: StoreConfig,
 }
 
@@ -52,10 +52,7 @@ impl DatabaseFixture {
             MigrationMode::Allow,
             Timestamp::from_millis(100),
         );
-        Self {
-            _temporary: temporary,
-            config,
-        }
+        Self { temporary, config }
     }
 
     fn open(&self) -> SqliteStore {
@@ -85,8 +82,14 @@ fn one_effect(state: &mut AppState, action: Action) -> Effect {
 
 fn persist_effect(store: &mut SqliteStore, effect: &Effect) -> proqi::ports::store::CommitReceipt {
     let batch = match effect {
-        Effect::CommitBoardOperation(operation) => OperationBatch::Board(operation.clone()),
-        Effect::CommitRevision(revision) => OperationBatch::Revision(revision.clone()),
+        Effect::CommitBoardOperation(operation) => OperationBatch::Board {
+            operation: operation.clone(),
+            semantic_fingerprint: None,
+        },
+        Effect::CommitRevision(revision) => OperationBatch::Revision {
+            revision: revision.clone(),
+            semantic_fingerprint: None,
+        },
         Effect::CommitHistoryMove {
             operation_id,
             session_id,
@@ -101,6 +104,23 @@ fn persist_effect(store: &mut SqliteStore, effect: &Effect) -> proqi::ports::sto
             undo: *undo,
             sequence: *sequence,
             at: *at,
+            semantic_fingerprint: None,
+        },
+        Effect::CommitThoughtNoOpRename {
+            operation_id,
+            session_id,
+            thought_id,
+            name,
+            sequence,
+            at,
+        } => OperationBatch::ThoughtNoOpRename {
+            operation_id: *operation_id,
+            session_id: *session_id,
+            thought_id: *thought_id,
+            name: name.clone(),
+            sequence: *sequence,
+            at: *at,
+            semantic_fingerprint: None,
         },
         other => panic!("effect is not durable: {other:?}"),
     };
@@ -160,6 +180,12 @@ mod onboarding_migration;
 mod recovery;
 #[path = "sqlite_store/screenshot.rs"]
 mod screenshot;
+#[path = "sqlite_store/separators.rs"]
+mod separators;
+#[path = "sqlite_store/session_request_hardening.rs"]
+mod session_request_hardening;
+#[path = "sqlite_store/session_requests.rs"]
+mod session_requests;
 #[path = "sqlite_store/submission.rs"]
 mod submission;
 #[path = "sqlite_store/top_boundary.rs"]
@@ -173,5 +199,20 @@ mod reflow_in_place;
 #[path = "sqlite_store/migration_15.rs"]
 mod migration_15;
 
+#[path = "sqlite_store/migration_17.rs"]
+mod migration_17;
+
+#[path = "sqlite_store/migration_19.rs"]
+mod migration_19;
+#[path = "sqlite_store/migration_20.rs"]
+mod migration_20;
+#[path = "sqlite_store/migration_21.rs"]
+mod migration_21;
+#[path = "sqlite_store/migration_22.rs"]
+mod migration_22;
+
 #[path = "sqlite_store/attachment_numbering.rs"]
 mod attachment_numbering;
+
+#[path = "sqlite_store/thought_names.rs"]
+mod thought_names;

@@ -18,7 +18,8 @@ use super::{
     schema::{
         MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4, MIGRATION_5, MIGRATION_6, MIGRATION_7,
         MIGRATION_8, MIGRATION_9, MIGRATION_10, MIGRATION_11, MIGRATION_12, MIGRATION_13,
-        MIGRATION_14, MIGRATION_15, MIGRATION_16,
+        MIGRATION_14, MIGRATION_15, MIGRATION_16, MIGRATION_17, MIGRATION_18, MIGRATION_19,
+        MIGRATION_20, MIGRATION_21, MIGRATION_22,
     },
     support::{
         create_private_dir, map_sql_error, set_private_file_permissions, set_private_open_mode,
@@ -88,8 +89,8 @@ pub(super) fn migrate(
         .map_err(map_sql_error)?;
     transaction
         .execute(
-            "UPDATE migration_history SET applied_at = ?1",
-            [at.as_millis()],
+            "UPDATE migration_history SET applied_at = ?1 WHERE version > ?2",
+            params![at.as_millis(), i64::from(found)],
         )
         .map_err(map_sql_error)?;
     transaction.commit().map_err(map_sql_error)
@@ -115,13 +116,23 @@ fn apply_migrations(connection: &Connection, found: u32) -> Result<(), StoreErro
         MIGRATION_14,
         MIGRATION_15,
         MIGRATION_16,
+        MIGRATION_17,
+        MIGRATION_18,
+        MIGRATION_19,
+        MIGRATION_20,
+        MIGRATION_21,
+        MIGRATION_22,
     ];
     let first = usize::try_from(found - 1)
         .map_err(|_| StoreError::Corrupt("invalid schema version".to_owned()))?;
     for migration in &forward[first..] {
         connection.execute_batch(migration).map_err(map_sql_error)?;
     }
-    super::attachment_migration::migrate(connection)
+    // Only pre-ordinal input needs synthesis, after its counter columns exist.
+    if found < super::schema::ATTACHMENT_ORDINAL_SCHEMA_VERSION {
+        super::attachment_migration::migrate(connection)?;
+    }
+    Ok(())
 }
 
 pub(super) fn create_backup(

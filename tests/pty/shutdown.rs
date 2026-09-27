@@ -7,6 +7,9 @@ use super::{
     watchdog,
 };
 
+#[path = "shutdown/driver.rs"]
+mod driver;
+
 #[test]
 fn termination_signal_restores_and_releases_the_session() {
     let state = tempfile::tempdir().expect("temporary state");
@@ -148,7 +151,7 @@ fn queued_quit_waits_for_the_preceding_paste_to_become_durable() {
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
+        thoughts["data"]["items"][0]["content"],
         "accepted pending work 界"
     );
 }
@@ -188,7 +191,7 @@ fn acknowledged_paste_survives_forced_process_termination() {
         .expect("session ID");
     let thoughts = json_command(binary, state.path(), &["thoughts", "list", session]);
     assert_eq!(
-        thoughts["data"]["thoughts"][0]["content"],
+        thoughts["data"]["items"][0]["content"],
         "committed before crash 界"
     );
 }
@@ -233,7 +236,7 @@ fn delayed_capture_shutdown(
     let input_acceptance = state.path().join("runtime/input-accepted");
     let binary = env!("CARGO_BIN_EXE_proqi");
     let session = seed_editor(binary, state.path());
-    let exit_action = capture_exit_action(terminate);
+    let exit_action = driver::exit_action(terminate);
     let capture_barrier = if persistent_failure {
         r#"
         after 2000
@@ -313,18 +316,6 @@ fn seed_editor(binary: &str, state: &Path) -> String {
         "durable editor",
     );
     session
-}
-
-fn capture_exit_action(terminate: bool) -> &'static str {
-    if terminate {
-        r"
-        system /bin/kill -TERM $child
-        system /bin/kill -TERM $child
-        system /bin/kill -TERM $child
-        "
-    } else {
-        "send -- $env(PROQI_TEST_PRIMARY_Q)"
-    }
 }
 
 fn capture_shutdown_workflow(
@@ -423,10 +414,15 @@ fn assert_capture_shutdown_result(
         assert_eq!(
             status.code(),
             Some(1),
-            "persistent failure must be truthful"
+            "persistent failure must be truthful; driver stage: {}",
+            driver::stage(status.code())
         );
     } else {
-        assert!(status.success(), "delayed capture shutdown exited {status}");
+        assert!(
+            status.success(),
+            "delayed capture shutdown exited {status}; driver stage: {}",
+            driver::stage(status.code())
+        );
     }
     assert_runtime_authority_released(state);
 
@@ -435,7 +431,7 @@ fn assert_capture_shutdown_result(
         .as_str()
         .expect("session ID");
     let thoughts = json_command(binary, state, &["thoughts", "list", session]);
-    let contents = thoughts["data"]["thoughts"]
+    let contents = thoughts["data"]["items"]
         .as_array()
         .expect("thoughts")
         .iter()

@@ -292,29 +292,34 @@ fn capture_receipt_survives_compaction_of_its_operation() {
     for index in 0..510_u64 {
         let collapsed = index % 2 == 0;
         store
-            .commit(&OperationBatch::Board(BoardOperation {
-                id: ids.operation_id(),
-                session_id,
-                sequence: OperationSequence::new(index + 2),
-                kind: BoardOperationKind::Collapse,
-                forward: BoardMutation::SetPresentation {
-                    thought_id,
-                    presentation: if collapsed {
-                        ThoughtPresentation::Collapsed
-                    } else {
-                        ThoughtPresentation::Automatic
+            .commit(&OperationBatch::Board {
+                operation: BoardOperation {
+                    id: ids.operation_id(),
+                    session_id,
+                    sequence: OperationSequence::new(index + 2),
+                    kind: BoardOperationKind::Collapse,
+                    forward: BoardMutation::SetPresentation {
+                        thought_id,
+                        presentation: if collapsed {
+                            ThoughtPresentation::Collapsed
+                        } else {
+                            ThoughtPresentation::Automatic
+                        },
                     },
-                },
-                inverse: BoardMutation::SetPresentation {
-                    thought_id,
-                    presentation: if collapsed {
-                        ThoughtPresentation::Automatic
-                    } else {
-                        ThoughtPresentation::Collapsed
+                    inverse: BoardMutation::SetPresentation {
+                        thought_id,
+                        presentation: if collapsed {
+                            ThoughtPresentation::Automatic
+                        } else {
+                            ThoughtPresentation::Collapsed
+                        },
                     },
+                    created_at: Timestamp::from_millis(
+                        i64::try_from(index + 3).expect("timestamp"),
+                    ),
                 },
-                created_at: Timestamp::from_millis(i64::try_from(index + 3).expect("timestamp")),
-            }))
+                semantic_fingerprint: None,
+            })
             .expect("collapse commit");
     }
 
@@ -382,6 +387,8 @@ fn version_seven_receipts_migrate_without_ownership_foreign_keys() {
              SELECT * FROM screenshot_capture_receipts_current;
              DROP TABLE screenshot_capture_receipts_current;
              DROP TABLE onboarding_state;
+             DROP TABLE IF EXISTS transfer_source_claims;
+             DROP TABLE IF EXISTS transfer_attempts;
              DELETE FROM migration_history WHERE version >= 8;
              UPDATE schema_meta SET schema_version = 7, storage_protocol = 7;",
         )

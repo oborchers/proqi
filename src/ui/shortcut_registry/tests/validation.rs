@@ -140,6 +140,7 @@ fn every_text_owner_rejects_plain_and_shifted_printable_theft() {
         Context::BrowserQuery,
         Context::Rename,
         Context::BrowserRename,
+        Context::ExportPath,
     ];
     for context in text_contexts {
         for (character, modifiers) in [
