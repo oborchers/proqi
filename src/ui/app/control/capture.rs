@@ -57,22 +57,21 @@ impl CaptureAnnouncements {
 
     /// Settle one acknowledgement and report whether a capture became durable.
     ///
-    /// The persistence lane acknowledges sequences in order, so a pending
-    /// sequence below an acknowledged one can never be acknowledged later, for
-    /// example after its request was rejected. Pruning those keeps the set to
-    /// the captures still in flight without a capacity bound that could drop one.
-    /// A failed save stays pending so a successful retry still counts it.
+    /// A failed save stays pending, with every other failed capture, so a
+    /// successful retry still counts it. Successes are accepted strictly in
+    /// sequence order, so a pending sequence below a successful one can never
+    /// succeed later, for example after its request was rejected, and is pruned.
     pub(in crate::ui::app) fn acknowledge(
         &mut self,
         sequence: OperationSequence,
         succeeded: bool,
     ) -> bool {
-        self.pending.retain(|pending| *pending >= sequence);
-        if !succeeded || !self.pending.contains(&sequence) {
+        if !succeeded {
             return false;
         }
-        self.pending.retain(|pending| *pending != sequence);
-        true
+        let announced = self.pending.contains(&sequence);
+        self.pending.retain(|pending| *pending > sequence);
+        announced
     }
 }
 

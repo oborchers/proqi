@@ -232,10 +232,10 @@ created and the notification says why:
 | `Nothing captured: the clipboard could not be read (...)` | The system clipboard was unavailable |
 
 Herdr and plugin-state failures, which happen before anything is stored, use
-the same `Nothing captured:` prefix with the toggle's explanation. A failure
-while storing, such as a name conflict or a Proqi that does not answer in time,
-reads `Capture to Proqi failed:` instead, because a Proqi that timed out may
-still have saved the thought; check the session before capturing again.
+the same `Nothing captured:` prefix with the toggle's explanation. Session
+failures, such as a name conflict or a Proqi that does not answer in time, read
+`Capture to Proqi failed:` instead, because a Proqi that timed out may still
+have saved the thought; check the session before capturing again.
 
 ### Remote Herdr servers
 

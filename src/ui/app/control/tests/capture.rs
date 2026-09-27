@@ -218,3 +218,29 @@ fn a_rolled_back_capture_never_announces_the_mutation_that_reuses_its_sequence()
     assert_eq!(app.status_text(), None);
     assert_eq!(app.screenshot.notice_count, 0);
 }
+
+#[test]
+fn every_failed_capture_of_a_burst_counts_after_its_retry() {
+    let (mut app, mut ids, _) = editing_app();
+    let clock = FakeClock::new(Timestamp::from_millis(2));
+    let sequences = (0..2)
+        .map(|index| {
+            let (mutation, _) = add(
+                &mut ids,
+                &format!("outage {index}"),
+                Some(AddAnnouncement::Capture),
+            );
+            sequence(&app.handle_control(&mutation, &clock).expect("capture"))
+        })
+        .collect::<Vec<_>>();
+    for sequence in &sequences {
+        app.acknowledge_persistence_result(
+            *sequence,
+            Err(crate::application::FailureCode::StorageFailed),
+        );
+    }
+    for sequence in &sequences {
+        app.acknowledge_persistence_result(*sequence, Ok(()));
+    }
+    assert_eq!(app.status_text(), Some("2 new captures"));
+}

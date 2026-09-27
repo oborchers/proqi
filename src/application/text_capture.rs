@@ -151,7 +151,10 @@ impl CapturedText {
 /// preview can neither break the line nor reorder the notification around it.
 fn is_visible(character: char) -> bool {
     !character.is_control()
-        && !matches!(character, '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+        && !matches!(
+            character,
+            '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+        )
 }
 
 /// Why nothing was captured.
@@ -181,7 +184,7 @@ impl fmt::Display for CaptureError {
             Self::Empty { source } => {
                 write!(
                     formatter,
-                    "Nothing captured: the {} is empty",
+                    "{NOTHING_CAPTURED}: the {} is empty",
                     source.noun()
                 )
             }
@@ -197,7 +200,7 @@ impl fmt::Display for CaptureError {
             Self::Clipboard(error) => {
                 write!(
                     formatter,
-                    "Nothing captured: the clipboard could not be read ({error})"
+                    "{NOTHING_CAPTURED}: the clipboard could not be read ({error})"
                 )
             }
         }

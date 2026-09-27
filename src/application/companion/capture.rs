@@ -41,7 +41,7 @@ pub struct CompanionCaptureOutcome {
     pub bytes: usize,
 }
 
-/// Typed capture failure; nothing was stored.
+/// Typed capture failure. Only a `Session` failure can follow an uncertain store.
 #[derive(Debug)]
 pub enum CompanionCaptureError<E> {
     /// No acceptable text was available.
