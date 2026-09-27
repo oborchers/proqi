@@ -192,3 +192,85 @@ impl ProcessRunner for FakeProcessRunner {
             .unwrap_or_else(|| Err(ProcessError::Io("no fake result queued".to_owned())))
     }
 }
+
+/// Clipboard that returns one scripted read and records every read.
+#[derive(Clone, Debug)]
+pub struct ScriptedClipboard {
+    /// Result every read returns.
+    pub content:
+        Result<crate::ports::clipboard::ClipboardContent, crate::ports::clipboard::ClipboardError>,
+    /// Plain-text result, when it differs from the text in `content`.
+    pub plain_text: Option<Result<Option<String>, crate::ports::clipboard::ClipboardError>>,
+    /// Number of reads observed.
+    pub reads: usize,
+}
+
+impl ScriptedClipboard {
+    /// Clipboard holding exact plain text.
+    #[must_use]
+    pub fn text(text: &str) -> Self {
+        Self::with(Ok(crate::ports::clipboard::ClipboardContent::Text(
+            crate::ports::clipboard::ClipboardText::plain(text.to_owned()),
+        )))
+    }
+
+    /// Clipboard returning one fixed result.
+    #[must_use]
+    pub fn with(
+        content: Result<
+            crate::ports::clipboard::ClipboardContent,
+            crate::ports::clipboard::ClipboardError,
+        >,
+    ) -> Self {
+        Self {
+            content,
+            plain_text: None,
+            reads: 0,
+        }
+    }
+
+    /// A rich copy: an image flavor beside exact text.
+    #[must_use]
+    pub fn rich(text: &str) -> Self {
+        let image = crate::ports::attachment::RasterImage::new(1, 1, vec![0; 4]);
+        Self {
+            content: image
+                .map(crate::ports::clipboard::ClipboardContent::Image)
+                .map_err(|_| crate::ports::clipboard::ClipboardError::InvalidImage),
+            plain_text: Some(Ok(Some(text.to_owned()))),
+            reads: 0,
+        }
+    }
+}
+
+impl crate::ports::clipboard::Clipboard for ScriptedClipboard {
+    fn write(
+        &mut self,
+        _request_id: RequestId,
+        _content: &crate::ports::clipboard::ClipboardText,
+    ) -> Result<crate::ports::clipboard::ClipboardWrite, crate::ports::clipboard::ClipboardError>
+    {
+        Err(crate::ports::clipboard::ClipboardError::Unavailable(
+            "scripted clipboard is read-only".to_owned(),
+        ))
+    }
+
+    fn read(
+        &mut self,
+    ) -> Result<crate::ports::clipboard::ClipboardContent, crate::ports::clipboard::ClipboardError>
+    {
+        self.reads += 1;
+        self.content.clone()
+    }
+
+    fn read_text(&mut self) -> Result<Option<String>, crate::ports::clipboard::ClipboardError> {
+        self.reads += 1;
+        if let Some(plain) = &self.plain_text {
+            return plain.clone();
+        }
+        match self.content.clone()? {
+            crate::ports::clipboard::ClipboardContent::Text(text) => Ok(Some(text.into_parts().0)),
+            crate::ports::clipboard::ClipboardContent::Image(_) => Ok(None),
+        }
+    }
+}

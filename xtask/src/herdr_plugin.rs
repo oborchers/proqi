@@ -9,8 +9,9 @@ use std::path::Path;
 
 use proqi::{
     adapters::herdr::{
-        HerdrCompatibilityPolicy, INSTALL_PATH, LAUNCHER_PATH, MIN_HERDR_VERSION,
-        PANE_ENTRYPOINT_ID, PLUGIN_ID, SESSION_ENVIRONMENT, TOGGLE_ACTION_ID, TOGGLE_CAPABILITY,
+        CAPTURE_ACTION_ID, CAPTURE_CAPABILITY, HerdrCompatibilityPolicy, INSTALL_PATH,
+        LAUNCHER_PATH, MIN_HERDR_VERSION, PANE_ENTRYPOINT_ID, PLUGIN_ID, SESSION_ENVIRONMENT,
+        TOGGLE_ACTION_ID, TOGGLE_CAPABILITY,
     },
     application::COMPANION_PANE_LABEL,
 };
@@ -50,6 +51,8 @@ fn launcher_findings(launcher: &str) -> Vec<String> {
     [
         format!("*'\"{TOGGLE_CAPABILITY}\":true'*)"),
         "exec \"$proqi\" herdr toggle".to_owned(),
+        format!("*'\"{CAPTURE_CAPABILITY}\":true'*)"),
+        format!("exec \"$proqi\" herdr {CAPTURE_ACTION_ID}"),
         format!("exec \"$proqi\" --resume \"${SESSION_ENVIRONMENT}\""),
     ]
     .into_iter()
@@ -125,7 +128,10 @@ fn identity_findings(found: &mut Vec<String>, table: &Table, version: &str) {
     );
 }
 
-/// The build step, toggle action, and pane entrypoint the adapter depends on.
+/// Actions in manifest order: each id with the launcher mode it runs.
+const ACTIONS: &[(&str, &str)] = &[(TOGGLE_ACTION_ID, "toggle"), (CAPTURE_ACTION_ID, "capture")];
+
+/// The build step, the actions, and the pane entrypoint the adapter depends on.
 fn entrypoint_findings(found: &mut Vec<String>, table: &Table) {
     if let [build] = entries(found, table, "build", 1).as_slice() {
         expect_strings(
@@ -135,10 +141,13 @@ fn entrypoint_findings(found: &mut Vec<String>, table: &Table) {
             &["sh", INSTALL_PATH],
         );
     }
-    if let [action] = entries(found, table, "actions", 1).as_slice() {
-        expect_string(found, action.get("id"), "action id", TOGGLE_ACTION_ID);
-        let command = ["sh", LAUNCHER_PATH, "toggle"];
-        expect_strings(found, action.get("command"), "action command", &command);
+    let actions = entries(found, table, "actions", ACTIONS.len());
+    if actions.len() == ACTIONS.len() {
+        for (action, (id, mode)) in actions.iter().zip(ACTIONS) {
+            expect_string(found, action.get("id"), "action id", id);
+            let command = ["sh", LAUNCHER_PATH, mode];
+            expect_strings(found, action.get("command"), "action command", &command);
+        }
     }
     if let [pane] = entries(found, table, "panes", 1).as_slice() {
         expect_string(found, pane.get("id"), "pane id", PANE_ENTRYPOINT_ID);
@@ -175,7 +184,8 @@ fn entries<'a>(
         .unwrap_or_default();
     if entries.len() != count {
         found.push(format!(
-            "{MANIFEST} must declare exactly {count} [[{key}]] entry"
+            "{MANIFEST} must declare exactly {count} [[{key}]] {}",
+            if count == 1 { "entry" } else { "entries" }
         ));
     }
     let allowed = ENTRY_KEYS
@@ -245,6 +255,12 @@ mod tests {
             ),
             ("title = \"Proqi\"", "title = \"Notes\"", "pane title"),
             ("\"toggle\"]", "\"open\"]", "action command"),
+            ("\"capture\"]", "\"grab\"]", "action command"),
+            (
+                "id = \"capture\"",
+                "id = \"grab\"",
+                "action id must be `capture`",
+            ),
             (
                 "[\"linux\", \"macos\"]",
                 "[\"linux\", \"macos\", \"windows\"]",
@@ -271,7 +287,44 @@ mod tests {
         let found = launcher_findings(&drifted);
         assert_eq!(found.len(), 1, "{found:?}");
         assert!(found[0].contains("--resume"));
-        assert_eq!(launcher_findings("").len(), 3);
+        assert_eq!(launcher_findings("").len(), 5);
+        let old_gate = LAUNCHER.replace("herdr_capture", "herdr_companion_toggle");
+        assert!(
+            launcher_findings(&old_gate)
+                .iter()
+                .any(|finding| finding.contains("herdr_capture"))
+        );
+    }
+
+    #[test]
+    fn a_missing_or_extra_action_is_rejected() {
+        let start = REPOSITORY_MANIFEST
+            .find("# Stores the selection")
+            .expect("capture action");
+        let end = REPOSITORY_MANIFEST[start..]
+            .find("[[panes]]")
+            .expect("pane after capture")
+            + start;
+        let removed = format!(
+            "{}{}",
+            &REPOSITORY_MANIFEST[..start],
+            &REPOSITORY_MANIFEST[end..]
+        );
+        let found = manifest_findings(&removed, &version(), |_| true);
+        assert!(
+            found
+                .iter()
+                .any(|finding| finding.contains("exactly 2 [[actions]] entries")),
+            "{found:?}"
+        );
+        let extra = format!(
+            "{REPOSITORY_MANIFEST}\n[[actions]]\nid = \"x\"\ntitle = \"X\"\ndescription = \"X\"\ncommand = [\"sh\"]\n"
+        );
+        assert!(
+            manifest_findings(&extra, &version(), |_| true)
+                .iter()
+                .any(|finding| finding.contains("exactly 2 [[actions]] entries"))
+        );
     }
 
     #[test]

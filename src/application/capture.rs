@@ -101,9 +101,29 @@ pub fn apply_capture(
     if capture.thought_id != thought_id {
         return Err(ApplicationError::InvalidState);
     }
+    let previous_insertion = state.insertion_index;
     state.apply_durable_capture(operation)?;
-    state.insertion_index = state.board.live_items().len();
+    keep_insertion_point(state, previous_insertion, thought_id);
     Ok(Some(thought_id))
+}
+
+/// Keep the Board insertion point where the user left it after a background
+/// capture added `added`.
+///
+/// Screenshot Inbox captures and forwarded clipboard or selection captures
+/// append without the user's intention, so the point moves only to stay in
+/// front of the same items: by one when the addition landed at or before it.
+pub fn keep_insertion_point(state: &mut AppState, previous: usize, added: ThoughtId) {
+    let landed = state
+        .board
+        .item_position(crate::domain::BoardItemId::Thought(added));
+    let shifted = match landed {
+        Some(position) if usize::try_from(position.get()).is_ok_and(|at| at <= previous) => {
+            previous.saturating_add(1)
+        }
+        _ => previous,
+    };
+    state.insertion_index = shifted.min(state.board.live_items().len());
 }
 
 /// Build the canonical file-reference thought body: the exact absolute path followed by one
@@ -192,5 +212,80 @@ mod tests {
         let keys = attachment_keys(thought);
         assert_eq!(keys[0].canonical_path, path);
         assert_eq!(keys[0].annotation_end, path.len());
+    }
+
+    fn board_with_two_thoughts(ids: &mut FakeIdGenerator) -> AppState {
+        let session = Session::new(
+            ids.session_id(),
+            std::env::temp_dir(),
+            Timestamp::from_millis(1),
+        )
+        .expect("session");
+        let thoughts = (0..2)
+            .map(|index| {
+                crate::domain::Thought::new(
+                    ids.thought_id(),
+                    session.id,
+                    format!("thought {index}"),
+                    crate::domain::ThoughtPosition::new(index),
+                    Timestamp::from_millis(1),
+                )
+            })
+            .collect();
+        AppState::new(SessionBoard::new(session, thoughts).expect("board"))
+    }
+
+    fn apply_screenshot(state: &mut AppState, ids: &mut FakeIdGenerator) {
+        let candidate = ScreenshotCandidate {
+            fingerprint: ScreenshotFingerprint([9; 32]),
+            path: std::env::temp_dir().join("capture.png"),
+            image_type: ScreenshotImageType::Png,
+        };
+        let commit = prepare_capture(
+            state,
+            &candidate,
+            ids.thought_id(),
+            ids.operation_id(),
+            Timestamp::from_millis(2),
+        )
+        .expect("capture");
+        let BoardMutation::AddThought { thought } = &commit.operation.forward else {
+            panic!("capture thought");
+        };
+        let outcome = crate::ports::store::CaptureCommitOutcome::Created {
+            durable: crate::ports::store::CommitReceipt {
+                session_id: commit.operation.session_id,
+                sequence: commit.operation.sequence,
+                identity: crate::ports::store::DurableIdentity::Operation(commit.operation.id),
+                idempotent_replay: false,
+            },
+            capture: crate::ports::store::CaptureReceipt {
+                source: commit.source,
+                session_id: commit.operation.session_id,
+                thought_id: thought.id,
+                operation_id: commit.operation.id,
+                accepted_at: commit.operation.created_at,
+            },
+        };
+        super::apply_capture(state, &commit, &outcome).expect("apply");
+    }
+
+    #[test]
+    fn a_screenshot_capture_keeps_a_mid_board_insertion_point() {
+        let mut ids = FakeIdGenerator::new(1_725_261_000_000);
+        let mut state = board_with_two_thoughts(&mut ids);
+        state.insertion_index = 1;
+        apply_screenshot(&mut state, &mut ids);
+        assert_eq!(state.board.live_items().len(), 3);
+        assert_eq!(state.insertion_index, 1, "the draft point stays in place");
+    }
+
+    #[test]
+    fn an_insertion_point_at_the_end_stays_after_the_appended_capture() {
+        let mut ids = FakeIdGenerator::new(1_725_262_000_000);
+        let mut state = board_with_two_thoughts(&mut ids);
+        assert_eq!(state.insertion_index, 2);
+        apply_screenshot(&mut state, &mut ids);
+        assert_eq!(state.insertion_index, 3);
     }
 }

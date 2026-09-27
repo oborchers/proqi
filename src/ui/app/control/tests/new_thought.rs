@@ -32,6 +32,7 @@ fn prompt_click_during_an_unacknowledged_owner_add_does_not_create_content() {
             content: "external".to_owned(),
             annotations: Vec::new(),
             position: None,
+            announcement: None,
         },
         &FakeClock::new(Timestamp::from_millis(2)),
     )

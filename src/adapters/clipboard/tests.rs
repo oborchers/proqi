@@ -23,6 +23,7 @@ struct FakeState {
     generation: u64,
     fault: FakeFault,
     replace_written_text: Option<String>,
+    typed_reads: usize,
 }
 
 #[derive(Default, Eq, PartialEq)]
@@ -71,16 +72,19 @@ impl NativeClipboard for FakeNative {
     }
 
     fn read_text(&mut self) -> Result<String, NativeReadError> {
-        self.state
+        let state = self
+            .state
             .lock()
-            .map_err(|error| NativeReadError::Unavailable(error.to_string()))?
-            .content
-            .clone()
-            .ok_or_else(|| NativeReadError::Unavailable("unavailable".to_owned()))
+            .map_err(|error| NativeReadError::Unavailable(error.to_string()))?;
+        if state.fault == FakeFault::Unavailable {
+            return Err(NativeReadError::Unavailable("unavailable".to_owned()));
+        }
+        state.content.clone().ok_or(NativeReadError::Missing)
     }
 
     fn read_typed(&mut self) -> Result<TypedSnapshot, String> {
         let mut state = self.state.lock().map_err(|error| error.to_string())?;
+        state.typed_reads += 1;
         if matches!(
             state.fault,
             FakeFault::Unavailable | FakeFault::TypedReadsUnavailable
@@ -413,4 +417,38 @@ fn native_image_is_preferred_and_remains_exact_rgba() {
         clipboard.read().expect("clipboard"),
         ClipboardContent::Image(image)
     );
+}
+
+#[test]
+fn plain_text_read_prefers_text_beside_an_image_without_typed_reads() {
+    let temporary = tempfile::tempdir().expect("cache");
+    let native = FakeNative::default();
+    {
+        let mut state = native.state.lock().expect("state");
+        state.content = Some("rich document text".to_owned());
+        state.image = Some(RasterImage::new(1, 1, vec![0; 4]).expect("image"));
+    }
+    let mut clipboard = clipboard(native.clone(), temporary.path());
+    assert!(matches!(clipboard.read(), Ok(ClipboardContent::Image(_))));
+    let typed_reads = native.state.lock().expect("state").typed_reads;
+    assert_eq!(
+        clipboard.read_text(),
+        Ok(Some("rich document text".to_owned()))
+    );
+    assert_eq!(native.state.lock().expect("state").typed_reads, typed_reads);
+}
+
+#[test]
+fn plain_text_read_distinguishes_no_text_from_an_unavailable_clipboard() {
+    let temporary = tempfile::tempdir().expect("cache");
+    let native = FakeNative::default();
+    native.state.lock().expect("state").image =
+        Some(RasterImage::new(1, 1, vec![0; 4]).expect("image"));
+    let mut clipboard = clipboard(native.clone(), temporary.path());
+    assert_eq!(clipboard.read_text(), Ok(None));
+    native.state.lock().expect("state").fault = FakeFault::Unavailable;
+    assert!(matches!(
+        clipboard.read_text(),
+        Err(ClipboardError::Unavailable(_))
+    ));
 }

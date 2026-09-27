@@ -25,6 +25,7 @@ fn first_active_owner_add_hands_empty_compose_to_board_focus() {
                 content: "first API thought".to_owned(),
                 annotations: Vec::new(),
                 position: None,
+                announcement: None,
             },
             &FakeClock::new(Timestamp::from_millis(2)),
         )
@@ -92,6 +93,7 @@ fn failed_first_add_waits_for_retry_and_later_add_keeps_focus() {
                 content: "first".to_owned(),
                 annotations: Vec::new(),
                 position: None,
+                announcement: None,
             },
             &FakeClock::new(Timestamp::from_millis(2)),
         )
@@ -114,6 +116,7 @@ fn failed_first_add_waits_for_retry_and_later_add_keeps_focus() {
                 content: "second".to_owned(),
                 annotations: Vec::new(),
                 position: None,
+                announcement: None,
             },
             &FakeClock::new(Timestamp::from_millis(3)),
         )
@@ -214,6 +217,7 @@ fn accepted_compose_clipboard_result_materializes_after_external_save() {
                 content: "external".to_owned(),
                 annotations: Vec::new(),
                 position: None,
+                announcement: None,
             },
             &FakeClock::new(Timestamp::from_millis(3)),
         )
@@ -275,6 +279,7 @@ fn pending_compose_clipboard_does_not_lose_first_focus_after_api_prepend() {
                     content: content.to_owned(),
                     annotations: Vec::new(),
                     position,
+                    announcement: None,
                 },
                 &FakeClock::new(Timestamp::from_millis(at)),
             )
@@ -324,6 +329,7 @@ fn rolled_back_first_control_effect_cannot_trigger_a_late_handoff() {
                 content: "rolled back".to_owned(),
                 annotations: Vec::new(),
                 position: None,
+                announcement: None,
             },
             &FakeClock::new(Timestamp::from_millis(2)),
         )
@@ -364,6 +370,7 @@ fn active_add_preserves_compose_editor_and_queued_typeahead() {
                 content: "external".to_owned(),
                 annotations: Vec::new(),
                 position: None,
+                announcement: None,
             },
             &FakeClock::new(Timestamp::from_millis(2)),
         )

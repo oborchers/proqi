@@ -11,7 +11,8 @@ use crate::{
 };
 
 use super::{
-    SessionChoice, TogglePlan, companion_session_cwd, companion_session_name, plan_toggle,
+    SessionChoice, TogglePlan, plan_toggle,
+    session::{SessionResolutionError, TabSession, resolve_tab_session},
 };
 
 /// Completed toggle effect.
@@ -99,6 +100,15 @@ impl<E: fmt::Display> fmt::Display for CompanionToggleError<E> {
 impl<E> From<CompanionError> for CompanionToggleError<E> {
     fn from(error: CompanionError) -> Self {
         Self::Host(error)
+    }
+}
+
+impl<E> From<SessionResolutionError<E>> for CompanionToggleError<E> {
+    fn from(error: SessionResolutionError<E>) -> Self {
+        match error {
+            SessionResolutionError::Host(error) => Self::Host(error),
+            SessionResolutionError::Session(error) => Self::Session(error),
+        }
     }
 }
 
@@ -227,42 +237,24 @@ where
     R: CompanionRecords,
     S: CompanionSessions,
 {
-    let recorded = match choice {
-        SessionChoice::Recorded(session_id) => {
-            match sessions
-                .state(session_id)
-                .map_err(CompanionToggleError::Session)?
-            {
-                CompanionSessionState::Unavailable => None,
-                CompanionSessionState::Resumable | CompanionSessionState::Active => {
-                    Some(session_id)
-                }
-            }
-        }
-        SessionChoice::Named => None,
+    let TabSession { session_id, name } = resolve_tab_session(host, sessions, context, choice)?;
+    // A recorded session, for example one a capture recorded, is named from
+    // its own metadata so the message never falls back to a bare identity.
+    let active = |sessions: &mut S| CompanionToggleError::SessionActive {
+        session_id,
+        name: name
+            .clone()
+            .or_else(|| sessions.name(session_id).ok().flatten()),
     };
-    let (session_id, name) = if let Some(session_id) = recorded {
-        (session_id, None)
-    } else {
-        // A failed query stops here: the first choice is recorded, so falling
-        // back to the label would pin a different session for good.
-        let agent_names = host.tab_agent_names(&context.tab_id)?;
-        let name = companion_session_name(context, &agent_names);
-        let session_id = sessions
-            .ensure(&name, &companion_session_cwd(context))
-            .map_err(CompanionToggleError::Session)?;
-        (session_id, Some(name))
-    };
-    let active = CompanionToggleError::SessionActive { session_id, name };
     if sessions
         .state(session_id)
         .map_err(CompanionToggleError::Session)?
         == CompanionSessionState::Active
     {
-        return Err(active);
+        return Err(active(sessions));
     }
     match other_tab_blocker(host, records, &context.tab_id, session_id)? {
-        Some(Blocker::Opening) => Err(active),
+        Some(Blocker::Opening) => Err(active(sessions)),
         Some(Blocker::Unclassified(pane_id)) => Err(CompanionToggleError::Unclassified { pane_id }),
         None => Ok(session_id),
     }

@@ -117,4 +117,15 @@ pub trait Clipboard {
     ///
     /// Returns a typed non-destructive error when native clipboard reading is unavailable.
     fn read(&mut self) -> Result<ClipboardContent, ClipboardError>;
+
+    /// Read only the plain-text flavor, ignoring images and Proqi metadata.
+    ///
+    /// Rich copies from word processors also carry an image flavor; unlike
+    /// [`Clipboard::read`], their text wins here. `None` means the clipboard
+    /// holds no text at all.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed non-destructive error when the clipboard cannot be read.
+    fn read_text(&mut self) -> Result<Option<String>, ClipboardError>;
 }

@@ -108,6 +108,9 @@ impl BoardApp {
         }
         self.finish_successful_reduce(may_change_attachments);
         self.acknowledge_first_control_focus(sequence, succeeded);
+        if self.screenshot.forwarded.acknowledge(sequence, succeeded) {
+            self.announce_new_capture();
+        }
         if !succeeded {
             self.quit = false;
         } else if self.pending_edit.is_some() {

@@ -1,6 +1,9 @@
 //! Owner-control mutations applied through the same reducer as terminal input.
 
+mod capture;
 mod transformations;
+
+pub(super) use capture::CaptureAnnouncements;
 
 use super::{BoardApp, SessionRenamePersistence};
 use crate::{
@@ -44,6 +47,7 @@ impl BoardApp {
         }
         let previous_mode = self.state.mode;
         let previous_focus = self.state.focused_item;
+        let previous_insertion = self.state.insertion_index;
         let first_item = if matches!(previous_mode, InteractionMode::Compose)
             && self.state.board.live_items().is_empty()
             && self
@@ -51,6 +55,12 @@ impl BoardApp {
                 .is_some_and(|editor| editor.content.is_empty())
         {
             match mutation {
+                // A capture is a quiet background addition, like a Screenshot
+                // Inbox capture, so it never takes the Compose owner's input.
+                ControlMutation::Add {
+                    announcement: Some(_),
+                    ..
+                } => None,
                 ControlMutation::Add { thought_id, .. }
                 | ControlMutation::PreserveAdd { thought_id, .. } => {
                     Some(BoardItemId::Thought(*thought_id))
@@ -87,7 +97,11 @@ impl BoardApp {
         {
             self.session_rename_persistence = SessionRenamePersistence::Saving;
         }
+        self.screenshot
+            .forwarded
+            .track(mutation, effects.iter().find_map(Effect::persistence_batch));
         self.restore_live_interaction(previous_mode, previous_focus);
+        self.keep_capture_insertion(mutation, previous_insertion);
         self.reconcile_thought_rename();
         self.sync_editor_from_state();
         Ok(effects)
@@ -96,6 +110,7 @@ impl BoardApp {
     /// Restore the reducer state when owner-control effect validation rejects a mutation.
     pub(crate) fn restore_control_state(&mut self, state: crate::application::AppState) {
         self.state = state;
+        self.screenshot.forwarded.roll_back_latest();
         if self
             .pending_first_control_focus
             .as_ref()
@@ -326,6 +341,7 @@ impl BoardApp {
                 content,
                 annotations,
                 position,
+                announcement,
             } => {
                 if annotations
                     .iter()
@@ -338,7 +354,7 @@ impl BoardApp {
                     *thought_id,
                     content,
                     annotations,
-                    *position,
+                    self.announced_position(*announcement, *position),
                     at,
                 ))
             }

@@ -12,6 +12,10 @@ mod support;
 mod active_control;
 
 #[cfg(target_os = "macos")]
+#[path = "pty/capture_status.rs"]
+mod capture_status;
+
+#[cfg(target_os = "macos")]
 #[path = "pty/compose_api_focus.rs"]
 mod compose_api_focus;
 

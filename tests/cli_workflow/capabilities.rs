@@ -94,10 +94,23 @@ fn assert_capability_manifest(root: &std::path::Path) {
     assert_eq!(capabilities["max_thought_stdin_bytes"], 131_072);
     assert_eq!(capabilities["herdr_submission"], true);
     assert_eq!(capabilities["herdr_managed_pane_required"], true);
+    assert_herdr_and_capture_capabilities(&capabilities);
+    assert_eq!(capabilities["explicit_update_check"], true);
+}
+
+fn assert_herdr_and_capture_capabilities(capabilities: &serde_json::Value) {
     assert_eq!(capabilities["herdr_companion_toggle"], true);
+    assert_eq!(capabilities["herdr_capture"], true);
+    assert_eq!(
+        capabilities["capture_sources"],
+        serde_json::json!(["clipboard"])
+    );
     assert_eq!(
         capabilities["operations"]["herdr"],
-        serde_json::json!(["toggle"])
+        serde_json::json!(["toggle", "capture"])
     );
-    assert_eq!(capabilities["explicit_update_check"], true);
+    assert_eq!(
+        capabilities["options"]["thoughts"]["capture"],
+        serde_json::json!(["from", "operation-id"])
+    );
 }

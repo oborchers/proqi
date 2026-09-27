@@ -9,7 +9,9 @@ installation channel before using the toggle.
 Proqi is an agent-optimized terminal scratchpad for follow-up prompts next to
 coding-agent sessions. The Herdr plugin adds one action that opens Proqi to the
 right of the focused pane, focuses it when it is already open, and closes it
-when it is focused.
+when it is focused. In the next release, a second action captures the terminal
+selection or the clipboard text into the tab's Proqi session without switching
+to it; see [Capture the selection or clipboard](#capture-the-selection-or-clipboard).
 
 ## Install
 
@@ -143,6 +145,112 @@ stays open and is focused, never closed. Quit it with Proqi's Quit action or
 close the pane with Herdr. An empty shell left over from a Herdr restart also
 stays open in that case until a later toggle replaces it or you close it.
 
+## Capture the selection or clipboard
+
+<span class="version-scope">Next release</span>
+
+A second action, **Capture to Proqi** (`proqi.capture`), stores text as one new
+thought at the end of the tab's Proqi session. It never opens, focuses, or
+switches to Proqi, and the tab does not need a Proqi pane. Herdr does not bind
+it automatically; add a binding next to the toggle's:
+
+```toml
+[[keys.command]]
+key = "f6"
+type = "plugin_action"
+command = "proqi.capture"
+description = "capture to Proqi"
+```
+
+`f6` is only a suggestion; choose any free key. The action needs the Proqi
+release that provides `proqi herdr capture`. An older Proqi reports that it is
+too old and captures nothing.
+
+### What it captures
+
+1. The terminal selection Herdr passes with the key-bound invocation, when it
+   is not empty.
+2. Otherwise the clipboard's text.
+
+It never reads a pane's scrollback instead. The thought holds exactly the
+captured text: nothing is trimmed, quoted, wrapped, or added, and line endings,
+indentation, and Unicode stay as they were. Capturing the same text twice
+stores it twice.
+
+In practice the clipboard is the source. Herdr's default
+`copy_on_select = true` copies a mouse selection to the clipboard and clears it
+when you release the button, so select the text, release, then press the key.
+A pressed key clears a visible selection before Herdr runs the bound action,
+even with `copy_on_select = false`, so a key binding captures the clipboard.
+Herdr tracks this as [herdrdev/herdr#3380](https://github.com/herdrdev/herdr/issues/3380);
+once it is fixed, the selection takes precedence without any change to Proqi.
+Herdr 0.8 also passes a selection that is still visible when the action starts
+without a key press, for example through
+`herdr plugin action invoke proqi.capture` from another terminal. Since Herdr
+0.9, a selection reaches a plugin action only through a key binding, so that
+command always uses the clipboard.
+
+### Which session receives it
+
+The same rule as the toggle picks the session: the tab's recorded session,
+unless it was trashed or deleted, otherwise the tab's named session found or
+created as described in [Which session a tab uses](#which-session-a-tab-uses).
+When the tab had no recorded session, or its recorded session was trashed or
+deleted, it records the one it captured into, so later captures and the next
+toggle use it even if the tab or agent is renamed.
+
+When that session is open in Proqi, the capture reaches the running Proqi,
+which appends it quietly: your editor, caret, selection, and any open overlay
+stay where they are, and the footer counts `1 new capture`, `2 new captures`,
+and so on, as for the Screenshot Inbox. An empty board waiting for your first
+thought stays ready for typing. When no Proqi has the session open, the thought
+is saved directly and appears when you open it.
+
+Like a Screenshot Inbox capture, a capture that reaches an open Proqi first
+saves any edit in progress as its own revision and then becomes the newest
+Board undo step, so undo in Board removes the captured thought.
+
+A Proqi session still running
+an older release than the one that provides the capture action stores the
+capture without the count, at its current insertion point instead of the end;
+restart that session to update it.
+
+### Feedback
+
+A Herdr notification confirms each capture with a single-line preview of up to
+40 characters, followed by an ellipsis when the text is longer, and the
+character count, for example:
+
+```text
+Captured to Proqi: "Review the retry path in the export work…" (184 characters)
+```
+
+The preview drops control and text-direction formatting characters and joins
+lines with spaces. When the input cannot be captured, nothing is stored or
+created and the notification says why:
+
+| Notification | Cause |
+| --- | --- |
+| `Nothing captured: the selection is empty` | The selection held only spaces or line breaks |
+| `Nothing captured: the clipboard is empty` | The clipboard held no text, or only spaces or line breaks |
+| `Nothing captured: the clipboard holds no text (for example an image)` | The clipboard held an image or other non-text content |
+| `Nothing captured: the clipboard has N bytes, more than the 131072-byte thought limit` | The text exceeds the 128 KiB thought limit; nothing is truncated |
+| `Nothing captured: the clipboard could not be read (...)` | The system clipboard was unavailable |
+
+Herdr and plugin-state failures, which happen before anything is stored, use
+the same `Nothing captured:` prefix with the toggle's explanation. Session
+failures, such as a name conflict or a Proqi that does not answer in time, read
+`Capture to Proqi failed:` instead, because a Proqi that timed out may still
+have saved the thought; check the session before capturing again.
+
+### Remote Herdr servers
+
+Plugin actions run on the Herdr server. When your Herdr client is attached to a
+server on another machine, the clipboard fallback reads that server's
+clipboard, not the one on the machine in front of you. Only a selection that
+Herdr passes with the invocation reaches Proqi from your screen. Proqi does not
+request the local clipboard through terminal escape sequences.
+
 ## Limitations
 
 - Herdr does not restore plugin panes after a cold restart of its server. The
@@ -183,3 +291,4 @@ sessions, and any Proqi the build step installed.
 
 - [Deliver prompts to agents](agent-delivery.md)
 - [`proqi herdr toggle`](../reference/cli.md#toggle-proqi-beside-a-herdr-agent)
+- [`proqi herdr capture`](../reference/cli.md#capture-into-a-herdr-tabs-session)

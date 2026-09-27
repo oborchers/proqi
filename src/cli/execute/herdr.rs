@@ -1,4 +1,5 @@
-//! `proqi herdr toggle`: the Herdr plugin action that owns one companion per tab.
+//! `proqi herdr toggle` and `proqi herdr capture`: the Herdr plugin actions that act
+//! on the invoking tab's companion session.
 
 use std::path::Path;
 
@@ -10,9 +11,10 @@ use crate::{
         process::SystemProcessRunner,
     },
     application::{
-        CompanionToggleError, CompanionToggleOutcome, SessionServiceError, toggle_companion,
+        CompanionCaptureError, CompanionCaptureOutcome, CompanionToggleError,
+        CompanionToggleOutcome, SessionServiceError, capture_to_companion, toggle_companion,
     },
-    domain::SessionId,
+    domain::{SessionId, ThoughtId},
     ports::{
         companion::{CompanionError, CompanionHost as _, CompanionSessionState, CompanionSessions},
         runtime::RuntimeCoordinator as _,
@@ -42,6 +44,58 @@ pub(super) fn toggle(cli: &Cli) -> Result<Outcome, CliError> {
     toggle_companion(&mut host, &mut records, &mut sessions)
         .map(outcome)
         .map_err(toggle_error)
+}
+
+/// Capture the selection or clipboard text into the tab's session without opening Proqi.
+pub(super) fn capture(cli: &Cli) -> Result<Outcome, CliError> {
+    let environment = HerdrPluginEnvironment::detect().map_err(|error| companion_error(&error))?;
+    let mut host = HerdrCompanionHost::new(environment.clone(), SystemProcessRunner::default());
+    let prepared = FileCompanionRecords::acquire(environment.state_dir())
+        .map_err(|error| companion_error(&error))
+        .and_then(|records| Ok((records, super::runtime_open::open(cli)?)));
+    let (mut records, mut context) = match prepared {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            host.notify(&format!(
+                "{}: {}",
+                crate::application::NOTHING_CAPTURED,
+                error.message()
+            ));
+            return Err(error);
+        }
+    };
+    let mut clipboard = context.capture_clipboard();
+    let mut sessions = CliCompanionSessions {
+        context: &mut context,
+    };
+    capture_to_companion(&mut host, &mut records, &mut sessions, &mut *clipboard)
+        .map(|outcome| captured(&outcome))
+        .map_err(|error| match error {
+            CompanionCaptureError::Capture(error) => super::capture::capture_error(&error),
+            CompanionCaptureError::Host(error) => companion_error(&error),
+            CompanionCaptureError::Session(error) => error,
+        })
+}
+
+fn captured(outcome: &CompanionCaptureOutcome) -> Outcome {
+    Outcome {
+        human: format!(
+            "Captured {} characters from the {} into {} as {}",
+            outcome.characters,
+            outcome.source.as_str(),
+            outcome.session_id,
+            outcome.thought_id
+        ),
+        data: json!({
+            "action": "captured",
+            "tab_id": outcome.tab_id,
+            "session_id": outcome.session_id,
+            "thought_id": outcome.thought_id,
+            "source": outcome.source.as_str(),
+            "characters": outcome.characters,
+            "bytes": outcome.bytes,
+        }),
+    }
 }
 
 struct CliCompanionSessions<'context> {
@@ -83,8 +137,21 @@ impl CompanionSessions for CliCompanionSessions<'_> {
         )
     }
 
+    fn name(&mut self, session_id: SessionId) -> Result<Option<String>, CliError> {
+        Ok(session_service(self.context)?
+            .inspect_session(session_id)?
+            .board
+            .session
+            .name)
+    }
+
     fn flush(&mut self, session_id: SessionId) -> Result<(), CliError> {
         forwarding::sync_confirmed(self.context, session_id)
+    }
+
+    fn capture(&mut self, session_id: SessionId, text: &str) -> Result<ThoughtId, CliError> {
+        super::capture::store(self.context, session_id, text, None)
+            .map(|mutation| mutation.thought_id)
     }
 }
 

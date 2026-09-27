@@ -11,6 +11,7 @@ use crate::{
 
 use super::BoardApp;
 
+mod capture;
 mod compose;
 mod new_thought;
 mod rename;
@@ -38,6 +39,7 @@ fn generic_control_add_cannot_author_shortcut_emphasis_but_preservation_can_reta
         content: "Press Enter".to_owned(),
         annotations: vec![annotation.clone()],
         position: None,
+        announcement: None,
     };
 
     assert_eq!(
@@ -105,6 +107,7 @@ fn active_add_preserves_the_users_live_editor_and_focus() {
         content: "external".to_owned(),
         annotations: Vec::new(),
         position: None,
+        announcement: None,
     };
 
     let effects = app
@@ -163,6 +166,7 @@ fn ui_paste_and_forwarded_add_share_content_but_retain_owner_specific_history() 
                 content: "same content".to_owned(),
                 annotations: Vec::new(),
                 position: None,
+                announcement: None,
             },
             &clock,
         )
