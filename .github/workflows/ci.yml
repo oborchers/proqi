@@ -127,6 +127,8 @@ jobs:
       - uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff # v2.87.8
         with:
           tool: cargo-nextest@0.9.143
+      - uses: ./.github/actions/fetch-historical-pty-dependencies
+        if: matrix.os == 'macos-15'
       - run: cargo xtask test
       - name: Preserve synthetic migration failure evidence
         if: failure()
@@ -212,17 +214,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: macos-15
-      - name: Fetch pinned historical PTY fixture dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/proqi-historical-fetch.XXXXXX")"
-          trap 'rm -rf -- "$fixture_dir"' EXIT
-          for tag in v0.9.0 v0.10.2; do
-            mkdir "$fixture_dir/$tag"
-            git archive "$tag" | tar -xf - -C "$fixture_dir/$tag"
-            cargo fetch --locked --manifest-path "$fixture_dir/$tag/Cargo.toml"
-          done
+      - uses: ./.github/actions/fetch-historical-pty-dependencies
       - run: cargo xtask test-pty
       - name: Preserve synthetic migration failure evidence
         if: failure()
