@@ -251,6 +251,14 @@ impl CompanionSessions for FakeSessions {
             .unwrap_or(CompanionSessionState::Resumable))
     }
 
+    fn name(&mut self, session_id: SessionId) -> Result<Option<String>, String> {
+        Ok(self
+            .named
+            .iter()
+            .find(|(_, id)| **id == session_id)
+            .map(|(name, _)| name.clone()))
+    }
+
     fn flush(&mut self, session_id: SessionId) -> Result<(), String> {
         if self.fail_flush {
             return Err("owner did not confirm the flush".to_owned());

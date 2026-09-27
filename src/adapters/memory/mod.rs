@@ -199,6 +199,8 @@ pub struct ScriptedClipboard {
     /// Result every read returns.
     pub content:
         Result<crate::ports::clipboard::ClipboardContent, crate::ports::clipboard::ClipboardError>,
+    /// Plain-text result, when it differs from the text in `content`.
+    pub plain_text: Option<Result<Option<String>, crate::ports::clipboard::ClipboardError>>,
     /// Number of reads observed.
     pub reads: usize,
 }
@@ -220,7 +222,24 @@ impl ScriptedClipboard {
             crate::ports::clipboard::ClipboardError,
         >,
     ) -> Self {
-        Self { content, reads: 0 }
+        Self {
+            content,
+            plain_text: None,
+            reads: 0,
+        }
+    }
+
+    /// A rich copy: an image flavor beside exact text.
+    #[must_use]
+    pub fn rich(text: &str) -> Self {
+        let image = crate::ports::attachment::RasterImage::new(1, 1, vec![0; 4]);
+        Self {
+            content: image
+                .map(crate::ports::clipboard::ClipboardContent::Image)
+                .map_err(|_| crate::ports::clipboard::ClipboardError::InvalidImage),
+            plain_text: Some(Ok(Some(text.to_owned()))),
+            reads: 0,
+        }
     }
 }
 
@@ -242,5 +261,16 @@ impl crate::ports::clipboard::Clipboard for ScriptedClipboard {
     {
         self.reads += 1;
         self.content.clone()
+    }
+
+    fn read_text(&mut self) -> Result<Option<String>, crate::ports::clipboard::ClipboardError> {
+        self.reads += 1;
+        if let Some(plain) = &self.plain_text {
+            return plain.clone();
+        }
+        match self.content.clone()? {
+            crate::ports::clipboard::ClipboardContent::Text(text) => Ok(Some(text.into_parts().0)),
+            crate::ports::clipboard::ClipboardContent::Image(_) => Ok(None),
+        }
     }
 }

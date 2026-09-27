@@ -34,13 +34,16 @@ pub const CLIPBOARD_FIXTURE_ENVIRONMENT: &str = "PROQI_TEST_CLIPBOARD_FIXTURE";
 ///
 /// Process and live Herdr qualification must never read the user's shared
 /// native clipboard, so [`CLIPBOARD_FIXTURE_ENVIRONMENT`] may name a read-only
-/// JSON fixture that replaces it. This composition function is the only
+/// JSON fixture that replaces it; an empty value counts as unset. This
+/// composition function is the only
 /// reader of that variable; neither clipboard adapter reads the environment,
 /// and interactive clipboard use never consults it. It lives in the adapter
 /// layer because the architecture policy confines environment access there.
 #[must_use]
 pub fn capture_clipboard(cache_directory: &Path) -> Box<dyn Clipboard> {
-    if let Some(fixture) = std::env::var_os(CLIPBOARD_FIXTURE_ENVIRONMENT) {
+    if let Some(fixture) =
+        std::env::var_os(CLIPBOARD_FIXTURE_ENVIRONMENT).filter(|fixture| !fixture.is_empty())
+    {
         return Box::new(FixtureClipboard::new(fixture.into()));
     }
     Box::new(PlatformClipboard::new(
@@ -114,12 +117,15 @@ impl Clipboard for PlatformClipboard {
         match self.native.read_image() {
             Ok(image) => return Ok(ClipboardContent::Image(image)),
             Err(NativeReadError::InvalidImage) => return Err(ClipboardError::InvalidImage),
-            Err(NativeReadError::Unavailable(_)) => {}
+            Err(NativeReadError::Unavailable(_) | NativeReadError::Missing) => {}
         }
         let lease = self.provenance.acquire().ok();
         let first_typed = lease.as_ref().and_then(|_| self.native.read_typed().ok());
         let text = self.native.read_text().map_err(|error| match error {
             NativeReadError::Unavailable(message) => ClipboardError::Unavailable(message),
+            NativeReadError::Missing => {
+                ClipboardError::Unavailable("the clipboard holds no text".to_owned())
+            }
             NativeReadError::InvalidImage => ClipboardError::InvalidImage,
         })?;
         let second_typed = lease.as_ref().and_then(|_| self.native.read_typed().ok());
@@ -132,9 +138,24 @@ impl Clipboard for PlatformClipboard {
         );
         Ok(ClipboardContent::Text(content))
     }
+
+    fn read_text(&mut self) -> Result<Option<String>, ClipboardError> {
+        self.plain_text()
+    }
 }
 
 impl PlatformClipboard {
+    /// Plain text only: no image read and no typed-provenance reads, whose
+    /// metadata a plain-text consumer would discard anyway.
+    fn plain_text(&mut self) -> Result<Option<String>, ClipboardError> {
+        match self.native.read_text() {
+            Ok(text) => Ok(Some(text)),
+            Err(NativeReadError::Missing) => Ok(None),
+            Err(NativeReadError::Unavailable(message)) => Err(ClipboardError::Unavailable(message)),
+            Err(NativeReadError::InvalidImage) => Err(ClipboardError::InvalidImage),
+        }
+    }
+
     fn typed_write_matches(
         &mut self,
         generation: u64,
@@ -191,6 +212,8 @@ struct TypedVerification {
 
 enum NativeReadError {
     Unavailable(String),
+    /// The requested flavor is absent, for example no text beside an image.
+    Missing,
     InvalidImage,
 }
 
@@ -232,7 +255,10 @@ impl NativeClipboard for ArboardNative {
         self.clipboard()
             .map_err(NativeReadError::Unavailable)?
             .get_text()
-            .map_err(native_unavailable)
+            .map_err(|error| match error {
+                arboard::Error::ContentNotAvailable => NativeReadError::Missing,
+                error => native_unavailable(error),
+            })
     }
 
     fn read_typed(&mut self) -> Result<TypedSnapshot, String> {

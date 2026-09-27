@@ -238,16 +238,23 @@ where
     S: CompanionSessions,
 {
     let TabSession { session_id, name } = resolve_tab_session(host, sessions, context, choice)?;
-    let active = CompanionToggleError::SessionActive { session_id, name };
+    // A recorded session, for example one a capture recorded, is named from
+    // its own metadata so the message never falls back to a bare identity.
+    let active = |sessions: &mut S| CompanionToggleError::SessionActive {
+        session_id,
+        name: name
+            .clone()
+            .or_else(|| sessions.name(session_id).ok().flatten()),
+    };
     if sessions
         .state(session_id)
         .map_err(CompanionToggleError::Session)?
         == CompanionSessionState::Active
     {
-        return Err(active);
+        return Err(active(sessions));
     }
     match other_tab_blocker(host, records, &context.tab_id, session_id)? {
-        Some(Blocker::Opening) => Err(active),
+        Some(Blocker::Opening) => Err(active(sessions)),
         Some(Blocker::Unclassified(pane_id)) => Err(CompanionToggleError::Unclassified { pane_id }),
         None => Ok(session_id),
     }

@@ -5,7 +5,9 @@ use std::time::Duration;
 
 use crate::ports::companion::{CompanionError, CompanionRecord, CompanionRecords};
 
-use super::super::{FileCompanionRecords, TOGGLE_WORST_CASE};
+use super::super::{
+    CAPTURE_WORST_CASE, FileCompanionRecords, PLUGIN_ACTION_WORST_CASE, TOGGLE_WORST_CASE,
+};
 use super::SESSION;
 
 fn record(tab: &str, pane: Option<&str>) -> CompanionRecord {
@@ -87,7 +89,10 @@ fn records_are_bounded_by_forgetting_the_oldest_tabs() {
 }
 
 #[test]
-fn the_lock_wait_outlasts_the_slowest_complete_toggle() {
+fn the_lock_wait_outlasts_the_slowest_complete_plugin_action() {
     assert!(super::super::state::LOCK_TIMEOUT > TOGGLE_WORST_CASE);
+    assert!(super::super::state::LOCK_TIMEOUT > CAPTURE_WORST_CASE);
+    assert!(PLUGIN_ACTION_WORST_CASE >= TOGGLE_WORST_CASE);
+    assert!(PLUGIN_ACTION_WORST_CASE >= CAPTURE_WORST_CASE);
     assert!(TOGGLE_WORST_CASE >= Duration::from_secs(40));
 }

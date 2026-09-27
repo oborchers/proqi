@@ -76,6 +76,19 @@ impl CaptureAnnouncements {
 }
 
 impl BoardApp {
+    /// A capture leaves the user's insertion point where it was, as the
+    /// Screenshot Inbox does; any other add keeps the reducer's placement.
+    pub(super) fn keep_capture_insertion(&mut self, mutation: &ControlMutation, previous: usize) {
+        if let ControlMutation::Add {
+            thought_id,
+            announcement: Some(_),
+            ..
+        } = mutation
+        {
+            crate::application::keep_insertion_point(&mut self.state, previous, *thought_id);
+        }
+    }
+
     /// A capture appends at the Board end; any other add keeps its requested position.
     pub(super) fn announced_position(
         &self,

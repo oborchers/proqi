@@ -22,6 +22,8 @@ const MAX_FIXTURE_BYTES: u64 = 1024 * 1024;
 enum Fixture {
     /// Exact text.
     Text { text: String },
+    /// A rich copy: text beside an image flavor, as word processors produce.
+    Rich { text: String },
     /// A one-pixel image, standing in for any non-text content.
     Image,
     /// A clipboard that cannot be read.
@@ -70,9 +72,20 @@ impl Clipboard for FixtureClipboard {
     fn read(&mut self) -> Result<ClipboardContent, ClipboardError> {
         match self.fixture()? {
             Fixture::Text { text } => Ok(ClipboardContent::Text(ClipboardText::plain(text))),
-            Fixture::Image => RasterImage::new(1, 1, vec![0; 4])
+            // Like the native adapter, the ordinary read prefers the image.
+            Fixture::Rich { .. } | Fixture::Image => RasterImage::new(1, 1, vec![0; 4])
                 .map(ClipboardContent::Image)
                 .map_err(|_| ClipboardError::InvalidImage),
+            Fixture::Unavailable => Err(ClipboardError::Unavailable(
+                "the clipboard fixture is unavailable".to_owned(),
+            )),
+        }
+    }
+
+    fn read_text(&mut self) -> Result<Option<String>, ClipboardError> {
+        match self.fixture()? {
+            Fixture::Text { text } | Fixture::Rich { text } => Ok(Some(text)),
+            Fixture::Image => Ok(None),
             Fixture::Unavailable => Err(ClipboardError::Unavailable(
                 "the clipboard fixture is unavailable".to_owned(),
             )),
@@ -106,6 +119,16 @@ mod tests {
             read(r#"{"kind":"unavailable"}"#),
             Err(ClipboardError::Unavailable(_))
         ));
+    }
+
+    #[test]
+    fn a_rich_fixture_is_image_first_for_read_and_text_first_for_read_text() {
+        let directory = tempfile::tempdir().expect("directory");
+        let path = directory.path().join("clipboard.json");
+        std::fs::write(&path, r#"{"kind":"rich","text":"doc text"}"#).expect("fixture");
+        let mut clipboard = FixtureClipboard::new(path);
+        assert!(matches!(clipboard.read(), Ok(ClipboardContent::Image(_))));
+        assert_eq!(clipboard.read_text(), Ok(Some("doc text".to_owned())));
     }
 
     #[test]

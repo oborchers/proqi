@@ -137,6 +137,14 @@ impl CompanionSessions for CliCompanionSessions<'_> {
         )
     }
 
+    fn name(&mut self, session_id: SessionId) -> Result<Option<String>, CliError> {
+        Ok(session_service(self.context)?
+            .inspect_session(session_id)?
+            .board
+            .session
+            .name)
+    }
+
     fn flush(&mut self, session_id: SessionId) -> Result<(), CliError> {
         forwarding::sync_confirmed(self.context, session_id)
     }

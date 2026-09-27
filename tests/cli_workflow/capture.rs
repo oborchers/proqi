@@ -214,3 +214,21 @@ fn an_unknown_source_or_session_stores_nothing() {
     assert_eq!(error["error"]["code"], "not_found");
     assert!(contents(&root, &session).is_empty());
 }
+
+#[test]
+fn a_rich_copy_with_an_image_flavor_captures_its_text() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    let root = temporary.path().join("state");
+    let session = create_session(&root);
+    let fixture = clipboard(
+        temporary.path(),
+        &serde_json::json!({ "kind": "rich", "text": "Paragraph from Pages\n" }),
+    );
+    let data = captured(&capture(
+        &root,
+        &fixture,
+        &[&session, "--from", "clipboard"],
+    ));
+    assert_eq!(data["source"], "clipboard");
+    assert_eq!(contents(&root, &session), vec!["Paragraph from Pages\n"]);
+}

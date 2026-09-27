@@ -553,7 +553,7 @@ any other failure.
 | `export_directory_missing` | 3 | After change | `{"output", "reason"}` |
 | `ambiguous_session` | 4 | After change | `{"matches": [session_id]}` |
 | `session_busy` | 5 | Yes | `{}`, or `{"session_id", "holder"}` when the active owner is known |
-| `companion_session_active` | 5 | After change | `{"session_id", "name"}`; `name` is null when a recorded session was reopened |
+| `companion_session_active` | 5 | After change | `{"session_id", "name"}`; `name` is null when the session has no name |
 | `schema_busy` | 5 | Yes | `{}` |
 | `storage_busy` | 5 | Yes | `{}` |
 | `unsupported` | 6 | No | `{}` |

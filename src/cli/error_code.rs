@@ -115,7 +115,7 @@ error_codes! {
         "companion_session_active",
         5,
         AfterChange,
-        "`{\"session_id\", \"name\"}`; `name` is null when a recorded session was reopened"
+        "`{\"session_id\", \"name\"}`; `name` is null when the session has no name"
     ),
     SchemaBusy => ("schema_busy", 5, Yes, "`{}`"),
     StorageBusy => ("storage_busy", 5, Yes, "`{}`"),

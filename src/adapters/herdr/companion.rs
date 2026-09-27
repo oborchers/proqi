@@ -78,6 +78,26 @@ pub(crate) const TOGGLE_WORST_CASE: Duration = Duration::from_secs(
         + CONTROL_CALLS * (QUERY_SECONDS + CLEANUP_SECONDS)
         + SESSION_SECONDS,
 );
+/// Allowance for the in-process native plain-text clipboard read, which has no
+/// timeout of its own and reads no image or typed metadata.
+const CLIPBOARD_SECONDS: u64 = 2;
+/// Proqi's own bounded waits for one capture: schema admission (5 s), update
+/// convergence admission (5 s), store transactions with bounded retry (3 s),
+/// and the forwarded add's owner round trip over the same control transport
+/// as the confirmed flush (5 s).
+const CAPTURE_SESSION_SECONDS: u64 = 5 + 5 + 3 + 5;
+/// Bound of one capture: the agent-name query of a tab without an available
+/// session, the clipboard read, the store, and the notification.
+pub(crate) const CAPTURE_WORST_CASE: Duration = Duration::from_secs(
+    2 * (QUERY_SECONDS + CLEANUP_SECONDS) + CLIPBOARD_SECONDS + CAPTURE_SESSION_SECONDS,
+);
+/// The slower of the two actions that serialize on the plugin lock.
+pub(crate) const PLUGIN_ACTION_WORST_CASE: Duration =
+    if TOGGLE_WORST_CASE.as_secs() >= CAPTURE_WORST_CASE.as_secs() {
+        TOGGLE_WORST_CASE
+    } else {
+        CAPTURE_WORST_CASE
+    };
 const NOTIFICATION_TITLE: &str = "Proqi";
 
 /// Herdr plugin action environment, read once at composition.

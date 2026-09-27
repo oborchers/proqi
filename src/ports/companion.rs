@@ -222,6 +222,13 @@ pub trait CompanionSessions {
     /// Returns the service error when runtime state cannot be inspected.
     fn state(&mut self, session_id: SessionId) -> Result<CompanionSessionState, Self::Error>;
 
+    /// Return the session's optional user-facing name.
+    ///
+    /// # Errors
+    ///
+    /// Returns the service error when the session cannot be inspected.
+    fn name(&mut self, session_id: SessionId) -> Result<Option<String>, Self::Error>;
+
     /// Ask an active owner to make pending editor work durable.
     ///
     /// # Errors

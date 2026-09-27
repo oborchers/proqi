@@ -98,6 +98,10 @@ fn a_capture_appends_at_the_end_without_moving_focus_caret_or_overlays() {
     assert_eq!(app.editor_snapshot().expect("editor"), editor_before);
     assert!(app.help, "an open overlay stays open");
     assert_eq!(
+        app.state.insertion_index, 1,
+        "the draft point stays mid-board"
+    );
+    assert_eq!(
         app.status_text(),
         None,
         "nothing is announced before durability"
@@ -243,4 +247,14 @@ fn every_failed_capture_of_a_burst_counts_after_its_retry() {
         app.acknowledge_persistence_result(*sequence, Ok(()));
     }
     assert_eq!(app.status_text(), Some("2 new captures"));
+}
+
+#[test]
+fn an_insertion_point_at_the_end_follows_the_appended_capture() {
+    let (mut app, mut ids, _) = editing_app();
+    app.state.insertion_index = 2;
+    let clock = FakeClock::new(Timestamp::from_millis(2));
+    let (mutation, _) = add(&mut ids, "tail", Some(AddAnnouncement::Capture));
+    app.handle_control(&mutation, &clock).expect("capture");
+    assert_eq!(app.state.insertion_index, 3);
 }

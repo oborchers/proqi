@@ -38,7 +38,7 @@ pub use attachments::{
     AttachmentAccessibilityState, AttachmentPreflightOutcome, AttachmentPresentationState,
     AttachmentRefreshCause, AttachmentRefreshOutcome, attachment_keys,
 };
-pub use capture::{apply_capture, prepare_capture};
+pub use capture::{apply_capture, keep_insertion_point, prepare_capture};
 pub use companion::{
     COMPANION_PANE_LABEL, CompanionCaptureError, CompanionCaptureOutcome, CompanionToggleError,
     CompanionToggleOutcome, capture_to_companion, companion_session_name, toggle_companion,

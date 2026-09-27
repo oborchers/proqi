@@ -9,7 +9,7 @@ use std::fmt;
 
 use unicode_segmentation::UnicodeSegmentation as _;
 
-use crate::ports::clipboard::{Clipboard, ClipboardContent, ClipboardError};
+use crate::ports::clipboard::{Clipboard, ClipboardError};
 
 /// Largest thought body accepted from standard input or an explicit capture.
 pub const MAX_THOUGHT_INPUT_BYTES: usize = 128 * 1024;
@@ -228,7 +228,10 @@ pub fn capture_text(
     }
 }
 
-/// Capture the clipboard's exact text without its Proqi presentation metadata.
+/// Capture the clipboard's exact plain text.
+///
+/// The text flavor wins over an image flavor, so a rich copy from a word
+/// processor captures its text. Proqi presentation metadata is not read.
 ///
 /// # Errors
 ///
@@ -236,15 +239,9 @@ pub fn capture_text(
 pub fn clipboard_text(
     clipboard: &mut (impl Clipboard + ?Sized),
 ) -> Result<CapturedText, CaptureError> {
-    match clipboard.read() {
-        Ok(ClipboardContent::Text(text)) => {
-            let (content, _annotations) = text.into_parts();
-            CapturedText::new(CaptureSource::Clipboard, content)
-        }
-        Ok(ClipboardContent::Image(_))
-        | Err(ClipboardError::InvalidImage | ClipboardError::InvalidText) => {
-            Err(CaptureError::NoText)
-        }
+    match clipboard.read_text() {
+        Ok(Some(text)) => CapturedText::new(CaptureSource::Clipboard, text),
+        Ok(None) | Err(ClipboardError::InvalidText) => Err(CaptureError::NoText),
         Err(error) => Err(CaptureError::Clipboard(error)),
     }
 }

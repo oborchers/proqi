@@ -1,6 +1,6 @@
 //! Companion records in Herdr's private plugin state directory.
 //!
-//! One exclusive lock serializes every toggle, so two rapid invocations cannot
+//! One exclusive lock serializes every toggle and capture, so two rapid invocations cannot
 //! both decide to open a companion. Records are bounded strict JSON written by
 //! atomic rename. Unreadable state is treated as empty: losing a record only
 //! means a dead pane is not replaced automatically, never that a pane is closed.
@@ -26,10 +26,10 @@ const STATE_VERSION: u32 = 1;
 const MAX_STATE_BYTES: u64 = 256 * 1024;
 /// Oldest tabs are forgotten first beyond this many records.
 const MAX_RECORDS: usize = 512;
-/// A waiting toggle outlasts the slowest complete toggle that holds the lock,
+/// A waiting action outlasts the slowest complete toggle or capture that holds the lock,
 /// with margin for the derived bound's store allowances.
 pub(super) const LOCK_TIMEOUT: Duration =
-    super::TOGGLE_WORST_CASE.saturating_add(Duration::from_secs(30));
+    super::PLUGIN_ACTION_WORST_CASE.saturating_add(Duration::from_secs(30));
 
 #[derive(Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -56,7 +56,7 @@ pub struct FileCompanionRecords {
 }
 
 impl FileCompanionRecords {
-    /// Acquire the plugin-wide toggle lock inside `directory`.
+    /// Acquire the plugin-wide action lock inside `directory`.
     ///
     /// # Errors
     ///
@@ -85,7 +85,7 @@ impl FileCompanionRecords {
                 }
                 Err(TryLockError::WouldBlock) => {
                     return Err(CompanionError::State(
-                        "another Proqi toggle is still running".to_owned(),
+                        "another Proqi plugin action is still running".to_owned(),
                     ));
                 }
                 Err(TryLockError::Error(error)) => return Err(state_error(error)),

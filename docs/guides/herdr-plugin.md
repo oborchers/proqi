@@ -204,7 +204,13 @@ which appends it quietly: your editor, caret, selection, and any open overlay
 stay where they are, and the footer counts `1 new capture`, `2 new captures`,
 and so on, as for the Screenshot Inbox. An empty board waiting for your first
 thought stays ready for typing. When no Proqi has the session open, the thought
-is saved directly and appears when you open it. A Proqi session still running
+is saved directly and appears when you open it.
+
+Like a Screenshot Inbox capture, a capture that reaches an open Proqi first
+saves any edit in progress as its own revision and then becomes the newest
+Board undo step, so undo in Board removes the captured thought.
+
+A Proqi session still running
 an older release than the one that provides the capture action stores the
 capture without the count, at its current insertion point instead of the end;
 restart that session to update it.

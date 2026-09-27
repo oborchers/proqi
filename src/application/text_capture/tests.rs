@@ -66,7 +66,6 @@ fn non_text_clipboard_content_reports_that_there_is_no_text() {
     let image = RasterImage::new(1, 1, vec![0; 4]).expect("image");
     for content in [
         Ok(ClipboardContent::Image(image)),
-        Err(ClipboardError::InvalidImage),
         Err(ClipboardError::InvalidText),
     ] {
         let error = clipboard_text(&mut ScriptedClipboard::with(content)).expect_err("no text");
@@ -179,4 +178,11 @@ fn preview_drops_bidirectional_formatting_that_could_reorder_the_notification() 
         "safe \u{202E}txt.exe\u{202C} \u{2066}iso\u{2069}\u{061C}",
         "stored content stays exact"
     );
+}
+
+#[test]
+fn a_rich_copy_captures_its_text_instead_of_its_image_flavor() {
+    let mut clipboard = ScriptedClipboard::rich("Paragraph from a document\n");
+    let captured = clipboard_text(&mut clipboard).expect("text");
+    assert_eq!(captured.text(), "Paragraph from a document\n");
 }

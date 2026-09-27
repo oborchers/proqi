@@ -136,7 +136,9 @@ fn empty_non_text_and_oversized_input_create_and_store_nothing() {
         ),
         (
             None,
-            ScriptedClipboard::with(Err(ClipboardError::InvalidImage)),
+            ScriptedClipboard::with(Ok(ClipboardContent::Image(
+                crate::ports::attachment::RasterImage::new(1, 1, vec![0; 4]).expect("image"),
+            ))),
             "Nothing captured: the clipboard holds no text (for example an image)",
         ),
         (
@@ -238,4 +240,38 @@ fn repeated_captures_of_the_same_text_are_each_stored() {
     }
     assert_eq!(sessions.captured.len(), 3, "no silent deduplication");
     assert_eq!(sessions.ensured.len(), 1, "later captures reuse the record");
+}
+
+#[test]
+fn a_rich_clipboard_copy_captures_its_text() {
+    let mut host = host_with_selection(None);
+    let mut records = FakeRecords::default();
+    let mut sessions = FakeSessions::with_named("agent-tab", OWN);
+    let mut clipboard = ScriptedClipboard::rich("from a document");
+    capture_to_companion(&mut host, &mut records, &mut sessions, &mut clipboard).expect("capture");
+    assert_eq!(
+        sessions.captured,
+        vec![(session(OWN), "from a document".to_owned())]
+    );
+}
+
+#[test]
+fn a_toggle_after_capture_names_the_recorded_session_when_it_is_open_elsewhere() {
+    let mut host = host_with_selection(Some("note"));
+    let mut records = FakeRecords::default();
+    let mut sessions = FakeSessions::with_named("agent-tab", OWN);
+    let mut clipboard = ScriptedClipboard::text("unused");
+    capture_to_companion(&mut host, &mut records, &mut sessions, &mut clipboard).expect("capture");
+    let mut sessions = sessions.with_state(OWN, CompanionSessionState::Active);
+    let mut toggle_host = FakeHost::new("w1:p1", vec![agent("w1:p1", true)]);
+    let error = super::super::toggle_companion(&mut toggle_host, &mut records, &mut sessions)
+        .expect_err("active elsewhere");
+    assert!(matches!(
+        error,
+        super::super::CompanionToggleError::SessionActive { name: Some(ref name), .. } if name == "agent-tab"
+    ));
+    assert_eq!(
+        toggle_host.notifications,
+        vec!["Proqi session agent-tab is already open in another pane".to_owned()]
+    );
 }

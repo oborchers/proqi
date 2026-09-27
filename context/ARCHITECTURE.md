@@ -2163,7 +2163,8 @@ contains no decision logic.
   and reports `Unknown` after the window or on failure, preserves the tab's zoom state when it must focus by zooming, and
   keeps one record per tab in `HERDR_PLUGIN_STATE_DIR`. Records are strict,
   bounded JSON written by atomic rename under an exclusive `fs4` lock that
-  serializes toggles; the lock wait exceeds the slowest complete toggle. A
+  serializes toggles and captures; the lock wait exceeds the slower of the
+  derived toggle and capture worst cases. A
   record keeps the tab's session after its pane closes, so later toggles
   reopen it from any pane. Unreadable state is treated as no record.
 

@@ -47,6 +47,7 @@ impl BoardApp {
         }
         let previous_mode = self.state.mode;
         let previous_focus = self.state.focused_item;
+        let previous_insertion = self.state.insertion_index;
         let first_item = if matches!(previous_mode, InteractionMode::Compose)
             && self.state.board.live_items().is_empty()
             && self
@@ -100,6 +101,7 @@ impl BoardApp {
             .forwarded
             .track(mutation, effects.iter().find_map(Effect::persistence_batch));
         self.restore_live_interaction(previous_mode, previous_focus);
+        self.keep_capture_insertion(mutation, previous_insertion);
         self.reconcile_thought_rename();
         self.sync_editor_from_state();
         Ok(effects)

@@ -1949,7 +1949,9 @@ session follows the toggle's rule; a tab whose record names no available
 session records the one it captured into. A live owner appends the capture as a
 quiet background addition and counts it in the shared `N new captures` status,
 never moving the editor, caret, selection, an open overlay, or an empty
-Compose owner. A Herdr notification
+Compose owner. Like a Screenshot Inbox capture or forwarded addition, it
+first flushes an in-progress edit into its own revision and becomes the newest
+Board undo entry. A Herdr notification
 shows a single-line preview of up to 40 characters without control or
 text-direction formatting characters, an ellipsis when truncated, and the
 character count. Empty, non-text, oversized, and unreadable input stores and
