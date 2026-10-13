@@ -41,7 +41,7 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
 unicode-normalization = "0.1.24"
 unicode-segmentation = "1.12.0"
 unicode-width = "=0.2.2"
-ureq = { version = "=3.4.1", default-features = false, features = ["rustls"] }
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
 uuid = { version = "1.18.1", features = ["serde", "v7"] }
 
 [workspace.dependencies.kqueue]
