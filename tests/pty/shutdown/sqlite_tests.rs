@@ -13,6 +13,7 @@ fn run(database: &Path, transaction: &str, finish: &str) -> std::process::ExitSt
         log_user 0
         set timeout 3
         proc register_watchdog_pid {{pid}} {{
+            global env
             set owned [open "$env(PROQI_TEST_STATE)/watchdog-pids" a]
             puts $owned $pid
             close $owned
