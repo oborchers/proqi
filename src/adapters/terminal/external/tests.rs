@@ -43,6 +43,10 @@ impl Clipboard for FakeClipboard {
     fn read(&mut self) -> Result<ClipboardContent, ClipboardError> {
         self.0.clone()
     }
+
+    fn read_text(&mut self) -> Result<Option<String>, ClipboardError> {
+        Err(ClipboardError::Unavailable("unused".to_owned()))
+    }
 }
 
 #[derive(Default)]

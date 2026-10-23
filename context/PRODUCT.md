@@ -5,7 +5,7 @@ Status: v0.1.0 product contract
 Product name: Proqi
 
 Command: `proqi`
-Last updated: 2026-09-25
+Last updated: 2026-09-27
 
 ## Vision
 
@@ -1938,6 +1938,29 @@ idle. The plugin never installs over, replaces, or shadows an existing Proqi
 installation; without one, its install step runs the checksum-matched
 standalone installer, whose trust model equals the documented installer
 command. This is Proqi packaged for a host, not a Proqi plugin system.
+
+A second, unbound action, `proqi.capture`, stores text as one new thought at
+the end of the tab's session without opening, focusing, or switching to Proqi.
+It takes the selection Herdr passes with a key-bound invocation when that is
+not empty, and otherwise the clipboard's text. It never reads scrollback. The
+thought holds exactly the captured text, with no trimming, quoting, metadata,
+or truncation, and repeated captures of the same text are all stored. The
+session follows the toggle's rule; a tab whose record names no available
+session records the one it captured into. A live owner appends the capture as a
+quiet background addition and counts it in the shared `N new captures` status,
+never moving the editor, caret, selection, an open overlay, or an empty
+Compose owner. Like a Screenshot Inbox capture or forwarded addition, it
+first flushes an in-progress edit into its own revision and becomes the newest
+Board undo entry. A Herdr notification
+shows a single-line preview of up to 40 characters without control or
+text-direction formatting characters, an ellipsis when truncated, and the
+character count. Empty, non-text, oversized, and unreadable input stores and
+creates nothing and says why with one wording per cause. A failure while
+storing does not claim that nothing was stored, because a timed-out owner may
+have committed it. Because plugin actions
+run on the Herdr server, a remote server's clipboard is the server's, and only
+a passed selection comes from the viewer's screen. `thoughts capture --from
+clipboard` exposes the same clipboard capture to scripts.
 
 ### Dedicated Proqi skill
 

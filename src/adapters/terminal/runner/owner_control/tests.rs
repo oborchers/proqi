@@ -98,6 +98,7 @@ fn optimistic_effect(app: &mut BoardApp, ids: &mut FakeIdGenerator) -> (Effect, 
         content: "optimistic".to_owned(),
         annotations: Vec::new(),
         position: None,
+        announcement: None,
     };
     let effects = app
         .handle_control(&mutation, &FakeClock::new(Timestamp::from_millis(2)))

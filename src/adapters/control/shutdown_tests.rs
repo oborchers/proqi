@@ -201,6 +201,7 @@ fn request(ids: &mut FakeIdGenerator, content: &str) -> ControlRequest {
             content: content.to_owned(),
             annotations: Vec::new(),
             position: None,
+            announcement: None,
         },
     }
 }

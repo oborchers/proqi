@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    domain::SessionId,
+    domain::{SessionId, ThoughtId},
     ports::companion::{
         CompanionContext, CompanionError, CompanionHost, CompanionRecord, CompanionRecords,
         CompanionSessionState, CompanionSessions, PaneObservation, PaneProcess, ProqiPresence,
@@ -26,6 +26,7 @@ pub(super) fn context(focused: &str) -> CompanionContext {
         focused_pane_id: focused.to_owned(),
         focused_pane_cwd: PathBuf::from("/work/sub"),
         session_root: Some(PathBuf::from("/work")),
+        selected_text: None,
     }
 }
 
@@ -210,6 +211,10 @@ pub(super) struct FakeSessions {
     named: HashMap<String, SessionId>,
     states: HashMap<SessionId, CompanionSessionState>,
     pub(super) fail_flush: bool,
+    /// Failure every capture returns, as when the owner or store rejects it.
+    pub(super) fail_capture: Option<String>,
+    /// Exact captured text per session, in order.
+    pub(super) captured: Vec<(SessionId, String)>,
     pub(super) ensured: Vec<(String, PathBuf)>,
     pub(super) flushed: Vec<SessionId>,
 }
@@ -246,11 +251,29 @@ impl CompanionSessions for FakeSessions {
             .unwrap_or(CompanionSessionState::Resumable))
     }
 
+    fn name(&mut self, session_id: SessionId) -> Result<Option<String>, String> {
+        Ok(self
+            .named
+            .iter()
+            .find(|(_, id)| **id == session_id)
+            .map(|(name, _)| name.clone()))
+    }
+
     fn flush(&mut self, session_id: SessionId) -> Result<(), String> {
         if self.fail_flush {
             return Err("owner did not confirm the flush".to_owned());
         }
         self.flushed.push(session_id);
         Ok(())
+    }
+
+    fn capture(&mut self, session_id: SessionId, text: &str) -> Result<ThoughtId, String> {
+        if let Some(error) = &self.fail_capture {
+            return Err(error.clone());
+        }
+        self.captured.push((session_id, text.to_owned()));
+        Ok(crate::ports::environment::IdGenerator::thought_id(
+            &mut crate::adapters::memory::FakeIdGenerator::new(1_725_260_000_000),
+        ))
     }
 }

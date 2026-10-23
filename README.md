@@ -194,8 +194,21 @@ focused. A tab's first session is named after the tab's agent when exactly one
 agent there has a Herdr name, else after the tab label, or after the stable tab
 identity when that label is only Herdr's position number. Herdr does not
 restore plugin panes after a cold server restart; the next toggle reopens the
-same session and closes the leftover shell if it is still idle. See the
-[Herdr plugin guide](docs/guides/herdr-plugin.md).
+same session and closes the leftover shell if it is still idle.
+
+In the next release, a second action stores the terminal selection, or else the
+clipboard text, as one new thought in the tab's session without switching to
+Proqi. Bind it the same way:
+
+```toml
+[[keys.command]]
+key = "f6"
+type = "plugin_action"
+command = "proqi.capture"
+description = "capture to Proqi"
+```
+
+See the [Herdr plugin guide](docs/guides/herdr-plugin.md).
 
 ## Start and resume
 

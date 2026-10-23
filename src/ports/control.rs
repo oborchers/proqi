@@ -9,7 +9,7 @@ use super::update::{UpdatePrepareReply, UpdateQuiesceReply, UpdateRestartReply};
 use super::{runtime::InstanceInfo, store::CommitReceipt};
 
 mod mutation;
-pub use mutation::ControlMutation;
+pub use mutation::{AddAnnouncement, ControlMutation};
 
 /// Current local owner-control protocol.
 pub const CONTROL_PROTOCOL_VERSION: u32 = 13;

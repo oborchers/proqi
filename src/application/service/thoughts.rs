@@ -114,6 +114,7 @@ where
                 content: creation.content.clone(),
                 annotations: Vec::new(),
                 position: creation.position,
+                announcement: None,
             }
         };
         if let Some(existing) = self.store.operation_request(operation_id)? {

@@ -8,7 +8,7 @@ id = "proqi"
 name = "Proqi"
 version = "0.14.0"
 min_herdr_version = "0.8.0"
-description = "An agent-optimized terminal scratchpad for follow-up prompts next to coding-agent sessions. One action opens, focuses, or closes one Proqi pane per tab."
+description = "An agent-optimized terminal scratchpad for follow-up prompts next to coding-agent sessions. One action opens, focuses, or closes one Proqi pane per tab; another captures the selection or clipboard text into it."
 platforms = ["linux", "macos"]
 
 # Runs only during `herdr plugin install`, after the preview. It installs Proqi
@@ -21,6 +21,14 @@ id = "toggle"
 title = "Toggle Proqi"
 description = "Open Proqi beside the focused agent, focus it, or close it when focused."
 command = ["sh", "herdr-plugin/proqi.sh", "toggle"]
+
+# Stores the selection passed by a key binding, else the clipboard text, as one
+# thought in the tab's session. It opens no pane and moves no focus.
+[[actions]]
+id = "capture"
+title = "Capture to Proqi"
+description = "Store the terminal selection, or else the clipboard text, as a new thought in this tab's Proqi session."
+command = ["sh", "herdr-plugin/proqi.sh", "capture"]
 
 # Opened only by the toggle, which passes PROQI_HERDR_SESSION. Pane commands
 # run in the agent's directory, so the launcher is addressed from the root.

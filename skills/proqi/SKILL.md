@@ -77,15 +77,20 @@ version may expose only a subset.
   "diagnostics": ["collect", "keypress"],
   "sessions": ["list", "ensure", "create", "rename", "trash", "restore", "undo", "redo", "prune"],
   "items": ["insert-separator", "move", "delete", "duplicate"],
-  "thoughts": ["list", "inspect", "add", "delete", "rename", "replace", "collapse", "move", "split", "extract", "merge", "reflow", "export", "send", "undo", "redo"],
+  "thoughts": ["list", "inspect", "add", "delete", "rename", "replace", "collapse", "move", "split", "extract", "merge", "reflow", "export", "send", "capture", "undo", "redo"],
   "update": ["check"],
-  "herdr": ["toggle"],
+  "herdr": ["toggle", "capture"],
   "history_scopes": ["board", "editor", "browser"]
 }
 ```
 
-`herdr toggle` is the Herdr plugin's own action. It works only inside that
-action's environment; never run it on the user's behalf.
+`herdr toggle` and `herdr capture` are the Herdr plugin's own actions. They
+work only inside that action's environment; never run them on the user's
+behalf.
+
+`thoughts capture <session> --from clipboard` stores the user's clipboard
+text as one thought. Run it only when the user explicitly asks to capture
+their clipboard; otherwise pass text to `thoughts add` on standard input.
 
 ## Examples
 

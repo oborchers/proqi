@@ -3,7 +3,7 @@
 #
 # It only locates an installed proqi and replaces itself with it. It never
 # installs, replaces, or shadows Proqi, and it never interprets Herdr state:
-# `proqi herdr toggle` owns every decision.
+# `proqi herdr toggle` and `proqi herdr capture` own every decision.
 set -eu
 
 notify() {
@@ -45,6 +45,18 @@ case "${1:-}" in
     esac
     exec "$proqi" herdr toggle
     ;;
+  capture)
+    capabilities=$("$proqi" --json capabilities 2>/dev/null) || capabilities=
+    case "$capabilities" in
+      *'"herdr_capture":true'*) ;;
+      *)
+        printf 'proqi herdr plugin: %s does not provide proqi herdr capture\n' "$proqi" >&2
+        notify 'Nothing captured: the installed Proqi is too old for Capture to Proqi. Update Proqi through the channel you installed it with.'
+        exit 1
+        ;;
+    esac
+    exec "$proqi" herdr capture
+    ;;
   board)
     if [ -z "${PROQI_HERDR_SESSION:-}" ]; then
       notify 'This Proqi pane was opened without a session. Use the Toggle Proqi action.'
@@ -53,7 +65,7 @@ case "${1:-}" in
     exec "$proqi" --resume "$PROQI_HERDR_SESSION"
     ;;
   *)
-    printf 'usage: proqi.sh toggle|board\n' >&2
+    printf 'usage: proqi.sh toggle|capture|board\n' >&2
     exit 2
     ;;
 esac

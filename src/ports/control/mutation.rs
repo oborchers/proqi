@@ -12,6 +12,15 @@ use super::super::update::{UpdatePrepareRequest, UpdateQuiesceRequest, UpdateRes
 use super::UPDATE_MUTATION_MINIMUM_PROTOCOL;
 use crate::ports::transfer::TransferItem;
 
+/// How an active owner presents a thought created through [`ControlMutation::Add`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddAnnouncement {
+    /// An explicit capture: append at the Board end and report it with the
+    /// quiet new-capture status after it is durable.
+    Capture,
+}
+
 /// One mutation routed to the process owning a session reducer.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "mutation")]
@@ -58,6 +67,11 @@ pub enum ControlMutation {
         annotations: Vec<ContentAnnotation>,
         /// Optional zero-based insertion position.
         position: Option<usize>,
+        /// Owner-side presentation of the new thought. The field is additive and
+        /// outside the semantic request: owners that predate it ignore it and
+        /// still create the same thought.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        announcement: Option<AddAnnouncement>,
     },
     /// Create one thought whose content, validated metadata, and optional name are exact.
     ///
