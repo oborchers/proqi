@@ -70,22 +70,27 @@ fn steps<'a>(source: &'a Yaml, job: &str) -> &'a [Yaml] {
     source["jobs"][job]["steps"].as_vec().expect("steps")
 }
 
+fn assert_same_run_downloads(job: &Yaml) {
+    for step in job["steps"].as_vec().expect("steps") {
+        let is_download = step["uses"]
+            .as_str()
+            .is_some_and(|action| action.starts_with("actions/download-artifact@"));
+        if !is_download {
+            continue;
+        }
+        for cross_run_input in ["run-id", "github-token", "repository"] {
+            assert!(step["with"][cross_run_input].is_badvalue());
+        }
+    }
+}
+
 #[test]
 fn one_day_transfers_have_only_same_run_consumers_and_bounded_jobs() {
     for source in [CANDIDATE, CI, IMAGE, DOCS] {
         let parsed = workflow(source);
         for job in parsed["jobs"].as_hash().expect("jobs").values() {
             assert!((1..=60).contains(&job["timeout-minutes"].as_i64().expect("timeout")));
-            for step in job["steps"].as_vec().expect("steps") {
-                if step["uses"]
-                    .as_str()
-                    .is_some_and(|action| action.starts_with("actions/download-artifact@"))
-                {
-                    for cross_run_input in ["run-id", "github-token", "repository"] {
-                        assert!(step["with"][cross_run_input].is_badvalue());
-                    }
-                }
-            }
+            assert_same_run_downloads(job);
         }
     }
     let candidate = workflow(CANDIDATE);
