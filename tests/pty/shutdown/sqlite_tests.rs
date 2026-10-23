@@ -53,7 +53,7 @@ fn owned_prompts_and_readiness_prove_an_exclusive_writer_is_held() {
         if {!$denied || [string first "locked" $message] < 0} { exit 97 }
         send -- "SELECT\r"
         expect {
-            -exact "proqi-sql-cont> " {}
+            -exact "proqi-sql-cont>" {}
             timeout { exit 98 }
             eof { exit 98 }
         }
