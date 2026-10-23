@@ -3,6 +3,7 @@
 use std::{fs, path::Path};
 use yaml_rust2::{Yaml, YamlLoader};
 
+mod artifacts;
 mod docs;
 
 const RELEASE_REQUIRED: [&str; 19] = [
@@ -105,6 +106,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<String>, String> {
     found.extend(herdr_sentinel_findings(&sentinel));
     found.extend(dependabot_automerge_findings(&dependabot));
     found.extend(docs::findings(&docs));
+    found.extend(artifacts::check(root)?);
     found.extend(image_repository_findings(root)?);
     found.extend(scheduled_workflow_findings(root)?);
     found.extend(super::release_targets::policy_findings(root)?);
