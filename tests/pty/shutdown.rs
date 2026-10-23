@@ -323,6 +323,7 @@ fn capture_shutdown_workflow(
     exit_action: &str,
     finish_action: &str,
 ) -> String {
+    let sqlite_transaction = driver::sqlite_transaction();
     // This workflow intentionally exposes terminal output to the watchdog. It
     // proves that output-reader settlement shares the absolute shutdown bound.
     format!(
@@ -385,12 +386,7 @@ fn capture_shutdown_workflow(
         send -- "\r"
         wait_for_input_acceptance 86 edit
         clear_input_acceptance
-        spawn /usr/bin/sqlite3 $env(PROQI_TEST_DATABASE)
-        set sqlite $spawn_id
-        register_watchdog_pid [exp_pid]
-        expect -re "sqlite>"
-        send -- "BEGIN IMMEDIATE;\r"
-        expect -re "sqlite>"
+        {sqlite_transaction}
         file rename $env(PROQI_TEST_STAGED) $env(PROQI_TEST_TARGET)
         set spawn_id $proqi
         {capture_barrier}
