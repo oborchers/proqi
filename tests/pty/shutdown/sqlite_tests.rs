@@ -12,6 +12,7 @@ fn run(database: &Path, transaction: &str, finish: &str) -> std::process::ExitSt
         r#"
         log_user 0
         set timeout 3
+        log_file -a -noappend "$env(PROQI_TEST_STATE)/sqlite-transcript"
         proc register_watchdog_pid {{pid}} {{
             global env
             set owned [open "$env(PROQI_TEST_STATE)/watchdog-pids" a]
@@ -27,12 +28,19 @@ fn run(database: &Path, transaction: &str, finish: &str) -> std::process::ExitSt
         .args(["-c", &script])
         .env("PROQI_TEST_STATE", state.path())
         .env("PROQI_TEST_DATABASE", database);
-    watchdog::status_before(
+    let status = watchdog::status_before(
         &mut command,
         Duration::from_secs(12),
         &state.path().join("watchdog-pids"),
         "SQLite readiness protocol",
-    )
+    );
+    if !status.success() {
+        eprintln!(
+            "SQLite protocol transcript: {}",
+            std::fs::read_to_string(state.path().join("sqlite-transcript")).unwrap_or_default()
+        );
+    }
+    status
 }
 
 #[test]

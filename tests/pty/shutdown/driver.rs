@@ -32,11 +32,12 @@ pub(super) fn stage(code: Option<i32>) -> &'static str {
 pub(super) fn sqlite_transaction() -> &'static str {
     r#"
         proc await_sqlite_prompt {} {
+            global spawn_id
             expect {
                 -re {(?i)(error|locked|busy)} { exit 95 }
                 -exact "proqi-sql-primary> " {}
-                timeout { exit 95 }
-                eof { exit 95 }
+                timeout { exit 98 }
+                eof { exit 99 }
             }
         }
         spawn /usr/bin/sqlite3 -list -noheader -init /dev/null -cmd ".prompt 'proqi-sql-primary> ' 'proqi-sql-cont> '" $env(PROQI_TEST_DATABASE)
@@ -49,8 +50,8 @@ pub(super) fn sqlite_transaction() -> &'static str {
         expect {
             -re {(?i)(error|locked|busy)} { exit 95 }
             -exact "\r\nproqi-transaction-held\r\n" {}
-            timeout { exit 95 }
-            eof { exit 95 }
+            timeout { exit 98 }
+            eof { exit 99 }
         }
         await_sqlite_prompt
     "#
