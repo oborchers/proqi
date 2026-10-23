@@ -39,7 +39,7 @@ pub(super) fn sqlite_transaction() -> &'static str {
                 eof { exit 95 }
             }
         }
-        spawn /usr/bin/sqlite3 -init /dev/null -cmd ".prompt 'proqi-sql-primary> ' 'proqi-sql-cont> '" $env(PROQI_TEST_DATABASE)
+        spawn /usr/bin/sqlite3 -list -noheader -init /dev/null -cmd ".prompt 'proqi-sql-primary> ' 'proqi-sql-cont> '" $env(PROQI_TEST_DATABASE)
         set sqlite $spawn_id
         register_watchdog_pid [exp_pid]
         await_sqlite_prompt
