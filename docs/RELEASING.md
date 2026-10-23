@@ -254,6 +254,65 @@ Manual and API-managed settings must also:
    security policy, Code of Conduct, description, topics, Issues state, and
    Discussions state from the public repository view.
 
+## Actions artifact retention and recovery
+
+GitHub automatically expires Actions artifacts using the lifetime chosen when
+an artifact is uploaded. This policy changes future uploads only. Existing
+artifacts retain their original expiry dates. It does not delete the backlog
+or immediately free the current storage quota. No deletion job, scheduled
+sweeper, additional token permission, or repository setting change is involved.
+Public Releases, release assets, crates.io packages, Homebrew packages, GHCR
+images and caches, workflow runs, and logs are outside this artifact policy.
+
+| Artifact | Lifetime | Consumer |
+| --- | --- | --- |
+| Candidate notices, registry evidence, installer, native archives, Debian files and their SBOMs/checksums | 1 day | Same candidate run, then copied into the complete assembled candidate where required |
+| Final `release-candidate-<tag>-<sha>` | 30 days (unchanged) | Exact-source release promotion and publication retries |
+| Ordinary CI Linux package transfer | 1 day (unchanged) | Dependent Debian verification matrix |
+| Linux CI image digest transfer | 1 day (unchanged) | Dependent multi-architecture manifest job |
+| Docker build records | 7 days | Build investigation, separate from published images |
+| CI documentation preview | 7 days (unchanged) | Review |
+| Pages deployment transfer | 1 day (explicit) | Dependent Pages deployment job |
+| Content-redacted migration/PTY failure diagnostics | 7 days (unchanged) | Failure investigation |
+
+The one-day lifetime starts at upload, not at workflow completion. Consumer
+jobs depend on their producers; candidate assembly waits for every native
+build, crate evidence and installer, verifies the complete file set, checksums,
+Debian evidence and attestations, then uploads the complete 30-day candidate.
+Promotion downloads only that assembled artifact. It does not need the expired
+intermediates. A failed or partial publication neither shortens nor deletes its
+candidate. Exact tag, source SHA, run, attempt and digest validation remains in
+force, and expired, failed or ambiguous candidates still fail closed.
+
+Normal jobs have explicit timeouts of at most 45 minutes, but runner queues,
+pauses and delayed retries can exceed the one-day transfer window. After an
+intermediate expires, **rerun all jobs** in its workflow, rather than only a
+failed consumer job. This rebuilds the entire transfer chain. For candidate
+recovery, prefer a fresh manual `Release candidate` run at the exact source
+(main only while it is still the prepared release commit, otherwise the exact
+protected tag). A failed-jobs-only retry cannot restore an expired producer
+artifact. Repeated assembly in the same run can also encounter immutable
+artifact-name conflicts; use a fresh run in that case. Image publication retries
+must continue to respect immutable image tags and use a fresh workflow run.
+For Pages, rerun the build as well as deployment after its transfer expires.
+
+If the final candidate expires after 30 days, follow the exact-source recovery
+procedure below and wait for the new candidate workflow to succeed. Recovery
+must still produce exactly one eligible unexpired candidate for the version and
+SHA. Do not dispatch a duplicate recovery while another eligible candidate is
+available. Never substitute files from a partial publication or another SHA.
+
+The `cargo xtask architecture` policy (also part of `quality` and `check-full`)
+checks explicit upload lifetimes, including Docker build records. Deterministic
+workflow tests cover producer dependencies, same-run downloads and complete
+assembly before the final upload. Native expiry requires no historical scan,
+ID selection or publication-state inference. Nothing in this policy authorizes
+manual deletion of an existing artifact.
+
+Upstream references: [GitHub artifact retention](https://github.com/actions/upload-artifact#retention-period),
+[Docker build record retention](https://github.com/docker/build-push-action#environment-variables),
+and [Pages upload inputs](https://github.com/actions/upload-pages-artifact#inputs).
+
 ## CI rehearsal and release
 
 After the readiness audit:

@@ -406,6 +406,43 @@ mod tests {
     }
 
     #[test]
+    fn promotion_needs_no_intermediates_and_repeated_selection_is_read_only() {
+        let original = index(1, false, "success");
+        let expected = select_value(&original, "v1.2.3", SHA).expect("final candidate only");
+        for _ in 0..3 {
+            assert_eq!(
+                select_value(&original, "v1.2.3", SHA).expect("repeat"),
+                expected
+            );
+        }
+        for conclusion in [
+            json!(null),
+            json!("failure"),
+            json!("cancelled"),
+            json!("in_progress"),
+        ] {
+            let mut changed = original.clone();
+            changed["candidates"][0]["conclusion"] = conclusion;
+            assert!(select_value(&changed, "v1.2.3", SHA).is_err());
+        }
+        for field in ["id", "digest", "expired", "name"] {
+            let mut changed = original.clone();
+            changed["candidates"][0]["artifact"][field] = json!(null);
+            assert!(
+                select_value(&changed, "v1.2.3", SHA).is_err(),
+                "accepted missing {field}"
+            );
+        }
+        let mut recovered = index(1, false, "success");
+        recovered["candidates"][0]["event"] = json!("workflow_dispatch");
+        recovered["candidates"][0]["source_ref"] = json!("refs/tags/v1.2.3");
+        assert!(select_value(&recovered, "v1.2.3", SHA).is_ok());
+        recovered["candidates"][0]["source_ref"] = json!("refs/tags/v1.2.4");
+        assert!(select_value(&recovered, "v1.2.3", SHA).is_err());
+        assert_eq!(original, index(1, false, "success"));
+    }
+
+    #[test]
     fn manifest_binds_identity_and_rejects_tampered_bytes() {
         let root = tempfile::tempdir().expect("temporary candidate");
         let mut names = release_file_names();
