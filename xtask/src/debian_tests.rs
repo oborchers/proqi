@@ -1,4 +1,6 @@
-use super::{enforce_support_floor, parse_dependencies, render_config, validate_evidence};
+use super::{
+    dependency_control, enforce_support_floor, parse_dependencies, render_config, validate_evidence,
+};
 use crate::release_targets::{ALL, Architecture, LibcFamily, OperatingSystem};
 
 use serde_json::json;
@@ -97,4 +99,42 @@ fn ci_debian_commands_pass_the_typed_gnu_target() {
     ]
     .join("\n");
     assert!(ci.contains(&verify_invocation));
+}
+
+#[test]
+fn public_author_metadata_uses_the_approved_noreply_identity() {
+    let identity = "Oliver Borchers <26734737+oborchers@users.noreply.github.com>";
+    let manifest: toml::Value =
+        toml::from_str(include_str!("../../Cargo.toml")).expect("root manifest");
+    assert_eq!(
+        manifest["package"]["authors"].as_array().expect("authors"),
+        &[toml::Value::String(identity.to_owned())]
+    );
+    assert_eq!(
+        manifest["package"]["homepage"].as_str(),
+        Some("https://github.com/oborchers/proqi")
+    );
+    assert_eq!(
+        manifest["package"]["repository"].as_str(),
+        Some("https://github.com/oborchers/proqi")
+    );
+    for architecture in ["amd64", "arm64"] {
+        let config = render_config("0.1.2", &[], architecture).expect("config");
+        assert!(
+            config
+                .lines()
+                .any(|line| line == format!("maintainer: \"{identity}\""))
+        );
+        let control = dependency_control(architecture);
+        assert!(
+            control
+                .lines()
+                .any(|line| line == format!("Maintainer: {identity}"))
+        );
+        assert!(
+            control
+                .lines()
+                .any(|line| line == format!("Architecture: {architecture}"))
+        );
+    }
 }
