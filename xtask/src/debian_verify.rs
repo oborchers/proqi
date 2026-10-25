@@ -10,7 +10,7 @@ use std::{
 
 use tar::Archive;
 
-use super::debian::INSTALLED_PATHS;
+use super::debian::{INSTALLED_PATHS, MAINTAINER};
 use super::release_targets::DebianArtifact;
 
 pub(super) fn package(
@@ -47,7 +47,13 @@ fn verify_control(
     let output = Command::new("dpkg-deb")
         .arg("--field")
         .arg(package)
-        .args(["Package", "Version", "Architecture", "Depends"])
+        .args([
+            "Package",
+            "Version",
+            "Architecture",
+            "Depends",
+            "Maintainer",
+        ])
         .current_dir(root)
         .output()
         .map_err(|error| format!("read Debian control: {error}"))?;
@@ -60,14 +66,24 @@ fn verify_control(
     }
     let fields = String::from_utf8(output.stdout)
         .map_err(|error| format!("Debian control output is not UTF-8: {error}"))?;
+    validate_control(&fields, version, dependencies, metadata.architecture)
+}
+
+fn validate_control(
+    fields: &str,
+    version: &str,
+    dependencies: &[String],
+    architecture: &str,
+) -> Result<(), String> {
     let expected = [
         "Package: proqi".to_owned(),
+        format!("Maintainer: {MAINTAINER}"),
         format!("Version: {version}-1"),
-        format!("Architecture: {}", metadata.architecture),
+        format!("Architecture: {architecture}"),
         format!("Depends: {}", dependencies.join(", ")),
     ];
     for field in expected {
-        if !fields.contains(&field) {
+        if !fields.lines().any(|line| line == field) {
             return Err(format!("Debian control omitted `{field}`: {fields}"));
         }
     }
@@ -184,5 +200,26 @@ where
             output.status,
             String::from_utf8_lossy(&output.stderr)
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAINTAINER, validate_control};
+
+    #[test]
+    fn control_requires_the_exact_approved_maintainer() {
+        let fields = "Package: proqi\nVersion: 0.1.2-1\nArchitecture: amd64\nDepends: libc6\n";
+        let dependencies = ["libc6".to_owned()];
+        let valid = format!("{fields}Maintainer: {MAINTAINER}\n");
+        assert!(validate_control(&valid, "0.1.2", &dependencies, "amd64").is_ok());
+        for maintainer in [
+            "",
+            "Maintainer: Example <person@example.test>\n",
+            &format!("Maintainer: {MAINTAINER} unexpected\n"),
+        ] {
+            let invalid = format!("{fields}{maintainer}");
+            assert!(validate_control(&invalid, "0.1.2", &dependencies, "amd64").is_err());
+        }
     }
 }

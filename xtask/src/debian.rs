@@ -13,7 +13,7 @@ use serde_json::json;
 use tar::Archive;
 
 const NFPM_VERSION: &str = "2.47.0";
-const MAINTAINER: &str = "Oliver Borchers <oliver-borchers@gmx.net>";
+pub(super) const MAINTAINER: &str = "Oliver Borchers <26734737+oborchers@users.noreply.github.com>";
 pub(super) const INSTALLED_PATHS: [(&str, &str, u32); 6] = [
     ("proqi", "/usr/bin/proqi", 0o755),
     (
@@ -308,11 +308,8 @@ fn derive_dependencies(
 ) -> Result<Vec<String>, String> {
     let debian = root.join("debian");
     fs::create_dir_all(&debian).map_err(|error| format!("create Debian metadata root: {error}"))?;
-    fs::write(
-        debian.join("control"),
-        format!("Source: proqi\nSection: utils\nPriority: optional\nMaintainer: Oliver Borchers <oliver-borchers@gmx.net>\nStandards-Version: 4.7.2\n\nPackage: proqi\nArchitecture: {architecture}\nDescription: thoughtpad for humans working with agents\n"),
-    )
-    .map_err(|error| format!("write dependency derivation control file: {error}"))?;
+    fs::write(debian.join("control"), dependency_control(architecture))
+        .map_err(|error| format!("write dependency derivation control file: {error}"))?;
     let output = Command::new("dpkg-shlibdeps")
         .args(["-O", "-e"])
         .arg(binary)
@@ -327,6 +324,12 @@ fn derive_dependencies(
         ));
     }
     parse_dependencies(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn dependency_control(architecture: &str) -> String {
+    format!(
+        "Source: proqi\nSection: utils\nPriority: optional\nMaintainer: {MAINTAINER}\nStandards-Version: 4.7.2\n\nPackage: proqi\nArchitecture: {architecture}\nDescription: thoughtpad for humans working with agents\n"
+    )
 }
 
 fn parse_dependencies(output: &str) -> Result<Vec<String>, String> {
