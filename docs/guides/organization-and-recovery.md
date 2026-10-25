@@ -34,7 +34,7 @@ delivery omit them. A recovery export retains their identity and Board order.
 
 ## Export thoughts to a text file
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.15.0</span>
 
 Focus a thought or select several, open Commands, and choose one of three
 actions:

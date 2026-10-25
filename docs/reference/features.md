@@ -52,7 +52,7 @@ surface.
 | Extract selection | Shipped | Move exact selected text into a neighboring thought atomically. | [Transform and organize](../guides/edit-and-transform.md#extract-selected-text) |
 | Merge thoughts | Shipped | Join a contiguous thought range with the configured exact separator. | [Transform and organize](../guides/edit-and-transform.md#merge-a-contiguous-range) |
 | Existing-thought cleanup | Shipped | Clean prose spacing while preserving protected structures and annotations. | [Transform and organize](../guides/edit-and-transform.md#clean-existing-spacing) |
-| Export to a text file | Next release | Write selected thoughts to a plain-text file exactly as copied, optionally removing them or replacing them with a `[File N]` reference, as one undo step. | [Sessions and recovery](../guides/organization-and-recovery.md#export-thoughts-to-a-text-file) |
+| Export to a text file | Proqi 0.15.0 | Write selected thoughts to a plain-text file exactly as copied, optionally removing them or replacing them with a `[File N]` reference, as one undo step. | [Sessions and recovery](../guides/organization-and-recovery.md#export-thoughts-to-a-text-file) |
 | Scriptable exact transformations | Shipped since 0.12.0 | Split, extract, merge, and reflow with content digests, UTF-8 byte boundaries, and idempotent retry identities. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Persistent contextual undo and redo | Shipped | Separate Board, editor, and Browser histories survive restart and never claim to recall external effects. | [Undo and redo](undo-redo.md) |
 
@@ -100,7 +100,7 @@ surface.
 | Session trash and restore | Shipped | Trash is recoverable and participates in persistent Browser history. | [Sessions and recovery](../guides/organization-and-recovery.md) |
 | Permanent prune | Shipped CLI | Requires an already trashed session and explicit `--yes`; cannot be undone. | [CLI](cli.md#manage-sessions) |
 | Multiple active sessions | Shipped | Different sessions may run together; one lease prevents dual editing of the same session. | [Sessions and recovery](../guides/organization-and-recovery.md) |
-| Active-session CLI forwarding | Shipped on macOS and Linux | Reads synchronize and supported mutations travel through the active owner's reducer. Next-release main makes the unavailable result explicit in `capabilities` on other platforms without bypassing the lease boundary. | [CLI](cli.md#inspect-and-change-thoughts) |
+| Active-session CLI forwarding | Shipped on macOS and Linux | Reads synchronize and supported mutations travel through the active owner's reducer. Proqi 0.15.0 makes the unavailable result explicit in `capabilities` on other platforms without bypassing the lease boundary. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Autosave acknowledgement | Shipped | Footer state follows real persistence acknowledgement, not optimistic UI state. | [Sessions and recovery](../guides/organization-and-recovery.md#recover-from-a-storage-failure) |
 | Storage retry and recovery export | Shipped | Retry failed durability or export optimistic state to a new private file. | [Sessions and recovery](../guides/organization-and-recovery.md#recover-from-a-storage-failure) |
 | Crash recovery | Shipped | Acknowledged work survives; uncommitted transactions roll back; leases release on death. | [Privacy and diagnostics](privacy-and-diagnostics.md#read-durability-truthfully) |
@@ -138,7 +138,7 @@ surface.
 | JSON help and version | Shipped since 0.13.0 | `--json --help` and `--json --version` succeed with structured data and exit 0. | [CLI](cli.md#common-options) |
 | Documented error codes | Shipped since 0.13.0 | Every JSON error code, exit status, retry class, and `details` shape, also published in `capabilities`. | [CLI](cli.md#errors) |
 | Human and JSON Board-item commands | Shipped since 0.12.0 | Insert separators and move, duplicate, or delete typed thoughts and separators. | [CLI](cli.md#change-board-items) |
-| Scriptable thought export | Next release | `thoughts export` writes exact copy text atomically, with `--remove`, `--replace-with-reference`, `--replace-existing`, and retry-safe `--operation-id`. | [CLI](cli.md#export-thoughts-to-a-file) |
+| Scriptable thought export | Proqi 0.15.0 | `thoughts export` writes exact copy text atomically, with `--remove`, `--replace-with-reference`, `--replace-existing`, and retry-safe `--operation-id`. | [CLI](cli.md#export-thoughts-to-a-file) |
 | Human and JSON thought commands | Shipped | List, inspect, add, rename, replace, collapse, move, send, delete, undo, and redo; split, extract, merge, and reflow have been available since 0.12.0. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Typed canonical identifiers | Shipped | Prefixes identify resource kinds and retain complete UUIDv7 values. | [CLI](cli.md) |
 | Idempotent mutations | Shipped | Matching operation identities return the original receipt; divergent semantic reuse is rejected. | [CLI](cli.md#inspect-and-change-thoughts) |

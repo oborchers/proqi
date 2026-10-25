@@ -182,6 +182,16 @@
         "Install the shipped Proqi and Proqi Debug agent skills through the Claude Code plugin marketplace.",
         "See Session is ready during a continuing multi-session update instead of an incorrect cancellation message."
       ]
+    },
+    {
+      "version": "0.15.0",
+      "highlights": [
+        "Export the focused thought or selection to a plain-text file from Commands or the CLI.",
+        "Keep exported thoughts, remove them, or replace them with a file reference after saving.",
+        "Complete destination paths and confirm existing-file replacement without including thought names or separators in the file.",
+        "Use GitHub noreply author and maintainer metadata in newly published crate and Debian packages.",
+        "Receive updated TLS dependencies with security fixes."
+      ]
     }
   ]
 }

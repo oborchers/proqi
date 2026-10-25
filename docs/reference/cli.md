@@ -328,7 +328,7 @@ before any write. The name is part of the operation identity, so the same
 
 ### Export thoughts to a file
 
-<span class="version-scope">Next release</span>
+<span class="version-scope">Proqi 0.15.0</span>
 
 `thoughts export` writes the listed thoughts to one plain-text file. The file
 holds exactly the text that copying the same thoughts produces: their content

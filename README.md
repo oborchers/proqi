@@ -259,7 +259,7 @@ configuration.
 | --- | --- |
 | `n`, `Enter` on `+ New thought`, paste, or click | Create a thought |
 | Commands: `Insert separator` | Insert a persistent visual separator below the focused item |
-| Commands: `Export to file...` and its remove and replace variants | Save the focused thought or selection as a plain-text file (next release) |
+| Commands: `Export to file...` and its remove and replace variants | Save the focused thought or selection as a plain-text file (Proqi 0.15.0) |
 | `Primary+V` / `p` with no selection | Paste exactly as a new thought |
 | `j` / `k` or arrows | Focus next / previous; twice at a blocked bottom / top edge creates there |
 | `Ctrl+↓` / `↑` or `Ctrl+j` / `k` | Focus the last / first live thought without wrapping |
@@ -317,7 +317,7 @@ configuration.
 | Global-delivery disposition | `↑` / `↓` or `k` / `j`; page keys; `Enter`; `Esc` |
 | Session Browser and Browser query | Type to filter; `↑` / `↓`; `Home` / `End`; `Alt+↑` / `↓` or page keys; `Enter`; `Backspace` / `Delete`; `F2` rename and `F8` trash while the query is empty; `Esc` |
 | Thought name, Rename, and Browser rename | Type and use text cursor, `Backspace`, or `Delete`; `Enter` confirms; `Esc` cancels |
-| Export destination (next release) | Type a path; `Tab` / `Shift+Tab` complete and cycle; `Enter` saves; `Esc` cancels. Replace confirmation: `↑` / `↓` or `k` / `j`; `Enter`; `Esc` |
+| Export destination (Proqi 0.15.0) | Type a path; `Tab` / `Shift+Tab` complete and cycle; `Enter` saves; `Esc` cancels. Replace confirmation: `↑` / `↓` or `k` / `j`; `Enter`; `Esc` |
 | Recovery | `r` retry storage; `w` export recovery; `q` or `Primary+Q` exits through durability handling; `Esc` remains the invariant close route |
 | Empty insertion boundary | Board controls remain available; `Enter` or `n` creates; range and reorder actions are thought-only no-ops; `Esc` returns to the final thought |
 
