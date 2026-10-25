@@ -637,6 +637,8 @@ versioned `editor.extend_visual_row_start` and `editor.extend_visual_row_end` al
 
 ## Compatibility and contributing
 
+Built by [Dr. Oliver Borchers](https://www.drborchers.com), Executive AI and Automation Partner and Head of AI Engineering at IU Group.
+
 Proqi supports the macOS and Linux targets listed under Install; only the latest
 `0.x` is supported.
 It is an MIT-licensed binary. Contributors: [CONTRIBUTING.md](CONTRIBUTING.md),
