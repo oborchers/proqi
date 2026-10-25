@@ -2642,7 +2642,7 @@ filenames and titles, the Cargo version, and the requested tag. Quality,
 release planning, standalone packaging, and crate packaging all fail closed on
 missing, corrupt, unreviewed, or mismatched highlights.
 
-The candidate workflow creates a 30-day immutable artifact only after every
+The candidate workflow creates a 7-day immutable artifact only after every
 target, installed smoke, crate dry run, Debian package contract, installer,
 checksum, SBOM, attestation, formula, and manifest step succeeds. Each Debian
 package reuses its verified Linux archive executable byte for byte. The manifest separates public

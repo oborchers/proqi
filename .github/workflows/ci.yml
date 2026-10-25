@@ -84,7 +84,7 @@ jobs:
           if-no-files-found: error
           name: proqi-docs-site
           path: target/docs-site/
-          retention-days: 7
+          retention-days: 1
       - run: cargo xtask clean-worktree
 
   quality:
@@ -137,7 +137,7 @@ jobs:
           name: migration-failure-test-${{ matrix.os }}-${{ github.run_attempt }}
           path: target/qualification-evidence/migration-*.json
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1
       - run: cargo xtask clean-worktree
 
   msrv:
@@ -164,7 +164,7 @@ jobs:
           name: migration-failure-msrv-${{ github.run_attempt }}
           path: target/qualification-evidence/migration-*.json
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1
       - run: cargo xtask clean-worktree
 
   crate:
@@ -223,7 +223,7 @@ jobs:
           name: migration-failure-pty-${{ github.run_attempt }}
           path: target/qualification-evidence/migration-*.json
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1
       - run: cargo xtask clean-worktree
 
   coverage:
@@ -250,7 +250,7 @@ jobs:
           name: migration-failure-coverage-${{ github.run_attempt }}
           path: target/qualification-evidence/migration-*.json
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1
       - run: cargo xtask clean-worktree
 
   package_linux:

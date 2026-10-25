@@ -36,7 +36,7 @@ const CANDIDATE_REQUIRED: [&str; 11] = [
     "cargo xtask candidate-manifest create",
     "cargo xtask crate-evidence",
     "release-candidate-${{ needs.plan.outputs.tag }}-${{ needs.plan.outputs.source-sha }}",
-    "retention-days: 30",
+    "retention-days: 7",
     "artifact-metadata: write",
     "attestations: write",
     "id-token: write",

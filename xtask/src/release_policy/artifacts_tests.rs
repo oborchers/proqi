@@ -41,18 +41,71 @@ fn artifact_retention_is_explicit_and_matches_each_lifecycle() {
                 .is_empty()
         );
     }
-    let shortened = CANDIDATE.replace("retention-days: 30", "retention-days: 1");
+    let shortened = CANDIDATE.replace("retention-days: 7", "retention-days: 1");
     assert!(
         !findings("release-candidate.yml", &shortened)
             .expect("policy")
             .is_empty()
     );
-    let shortened = CI.replace("retention-days: 7", "retention-days: 1");
-    assert!(!findings("ci.yml", &shortened).expect("policy").is_empty());
+    let extended = CI.replace("retention-days: 1", "retention-days: 7");
+    assert!(!findings("ci.yml", &extended).expect("policy").is_empty());
     assert!(findings("ci.yml", "jobs: [broken]").is_err());
     assert!(findings("ci.yml", "jobs: {}\n---\njobs: {}").is_err());
     let unknown = CI.replace("name: ci-linux-packages", "name: unclassified-output");
     assert!(!findings("ci.yml", &unknown).expect("policy").is_empty());
+}
+
+#[test]
+fn every_upload_individually_rejects_missing_default_or_extended_retention() {
+    for (path, source) in [
+        ("release-candidate.yml", CANDIDATE),
+        ("ci.yml", CI),
+        ("ci-linux-image.yml", IMAGE),
+        ("docs.yml", DOCS),
+    ] {
+        let lines = source.lines().collect::<Vec<_>>();
+        for (index, line) in lines.iter().enumerate() {
+            let key = if line.contains("retention-days:") {
+                "retention-days"
+            } else if line.contains("DOCKER_BUILD_RECORD_RETENTION_DAYS:") {
+                "DOCKER_BUILD_RECORD_RETENTION_DAYS"
+            } else {
+                continue;
+            };
+            let indent = &line[..line.len() - line.trim_start().len()];
+            for value in [None, Some("0"), Some("90"), Some("${{ inputs.days }}")] {
+                let mut changed = lines.iter().map(ToString::to_string).collect::<Vec<_>>();
+                changed[index] =
+                    value.map_or_else(String::new, |value| format!("{indent}{key}: {value}"));
+                assert!(
+                    !findings(path, &changed.join("\n"))
+                        .expect("policy")
+                        .is_empty(),
+                    "{path}:{} accepted {value:?}",
+                    index + 1
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn sbom_generation_does_not_upload_implicit_default_lifetime_artifacts() {
+    let candidate = workflow(CANDIDATE);
+    let mut generators = 0;
+    for job in candidate["jobs"].as_hash().expect("jobs").values() {
+        for step in job["steps"].as_vec().expect("steps") {
+            if step["uses"]
+                .as_str()
+                .is_some_and(|action| action.starts_with("anchore/sbom-action@"))
+            {
+                generators += 1;
+                assert_eq!(step["with"]["upload-artifact"].as_bool(), Some(false));
+                assert_eq!(step["with"]["upload-release-assets"].as_bool(), Some(false));
+            }
+        }
+    }
+    assert_eq!(generators, 3);
 }
 
 fn needs(source: &Yaml, job: &str) -> Vec<String> {
@@ -159,10 +212,7 @@ fn assembly_keeps_all_promotion_bytes_and_checks_before_final_upload() {
         assemble[upload]["with"]["path"].as_str(),
         Some("target/release-assets")
     );
-    assert_eq!(
-        assemble[upload]["with"]["retention-days"].as_i64(),
-        Some(30)
-    );
+    assert_eq!(assemble[upload]["with"]["retention-days"].as_i64(), Some(7));
     assert!(assemble[upload]["if"].is_badvalue());
     let release = workflow(RELEASE);
     let promote = steps(&release, "promote")

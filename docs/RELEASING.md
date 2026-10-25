@@ -267,18 +267,35 @@ images and caches, workflow runs, and logs are outside this artifact policy.
 | Artifact | Lifetime | Consumer |
 | --- | --- | --- |
 | Candidate notices, registry evidence, installer, native archives, Debian files and their SBOMs/checksums | 1 day | Same candidate run, then copied into the complete assembled candidate where required |
-| Final `release-candidate-<tag>-<sha>` | 30 days (unchanged) | Exact-source release promotion and publication retries |
+| Final `release-candidate-<tag>-<sha>` | 7 days | Exact-source release promotion and publication retries |
 | Ordinary CI Linux package transfer | 1 day (unchanged) | Dependent Debian verification matrix |
 | Linux CI image digest transfer | 1 day (unchanged) | Dependent multi-architecture manifest job |
-| Docker build records | 7 days | Build investigation, separate from published images |
-| CI documentation preview | 7 days (unchanged) | Review |
+| Docker build records | 1 day | Build investigation, separate from published images |
+| CI documentation preview | 1 day | Review |
 | Pages deployment transfer | 1 day (explicit) | Dependent Pages deployment job |
-| Content-redacted migration/PTY failure diagnostics | 7 days (unchanged) | Failure investigation |
+| Content-redacted migration/PTY failure diagnostics | 1 day | Failure investigation |
+
+One day is the minimum explicit upload lifetime. Previews, failure diagnostics
+and Docker build records are available for immediate review or investigation;
+download them within that day when longer local investigation is needed. They
+have no downstream workflow consumers. After expiry, reproduce a preview or
+failure in a fresh CI run. Docker records remain separate from published images,
+registry caches and attestations. SBOM generation disables its automatic
+artifact upload; its files travel in the explicitly retained candidate uploads.
+
+The final candidate keeps a seven-day publication and retry window, including
+a weekend, instead of retaining a month of assembled release bytes. Beyond
+that window the existing exact-source recovery procedure is required. This is
+a retry allowance, not a guarantee that a rebuild reproduces historical bytes;
+a partially published release still requires byte identity and fails closed on
+any rebuilt mismatch. Retain downloaded evidence locally when investigating
+a publication failure. The existing v0.15.0 candidate keeps its upload-time
+expiry; this policy does not change its release workflow or prepared source.
 
 The one-day lifetime starts at upload, not at workflow completion. Consumer
 jobs depend on their producers; candidate assembly waits for every native
 build, crate evidence and installer, verifies the complete file set, checksums,
-Debian evidence and attestations, then uploads the complete 30-day candidate.
+Debian evidence and attestations, then uploads the complete 7-day candidate.
 Promotion downloads only that assembled artifact. It does not need the expired
 intermediates. A failed or partial publication neither shortens nor deletes its
 candidate. Exact tag, source SHA, run, attempt and digest validation remains in
@@ -296,7 +313,7 @@ artifact-name conflicts; use a fresh run in that case. Image publication retries
 must continue to respect immutable image tags and use a fresh workflow run.
 For Pages, rerun the build as well as deployment after its transfer expires.
 
-If the final candidate expires after 30 days, follow the exact-source recovery
+If the final candidate expires after 7 days, follow the exact-source recovery
 procedure below and wait for the new candidate workflow to succeed. Recovery
 must still produce exactly one eligible unexpired candidate for the version and
 SHA. Do not dispatch a duplicate recovery while another eligible candidate is
@@ -323,7 +340,7 @@ After the readiness audit:
    `.claude-plugin/marketplace.json`, then push `main`.
 2. The `Release candidate` workflow classifies that exact main SHA from the
    checked-in inputs. If release-ready, it builds the native candidates in
-   parallel with ordinary CI and records one 30-day immutable candidate. It has
+   parallel with ordinary CI and records one 7-day immutable candidate. It has
    no publication credentials.
 3. Wait for `Required CI result` and the candidate workflow to pass on the exact
    release commit.
