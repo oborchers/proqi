@@ -3,6 +3,7 @@
 use crate::cli::error_code::ErrorCode;
 mod board_items;
 mod capabilities;
+mod capture;
 mod diagnostics;
 mod doctor;
 mod export;
@@ -79,6 +80,7 @@ fn execute_inner(cli: Cli) -> Result<Outcome, CliError> {
     if let Some(Command::Herdr(arguments)) = &cli.command {
         return match arguments.command {
             super::args::HerdrCommand::Toggle => herdr::toggle(&cli),
+            super::args::HerdrCommand::Capture => herdr::capture(&cli),
         };
     }
     if let Some(outcome) = diagnostics::early_outcome(&cli)? {

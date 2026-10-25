@@ -1,6 +1,8 @@
 //! Companion session resolution and open/focus/close policy over fake host,
-//! state, and sessions. Naming lives in `naming`, close safety in `safety`.
+//! state, and sessions. Naming lives in `naming`, close safety in `safety`, and
+//! the capture action in `capture`.
 
+mod capture;
 mod fakes;
 mod naming;
 mod safety;

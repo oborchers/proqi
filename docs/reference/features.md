@@ -89,6 +89,7 @@ surface.
 | Cross-session transfer | Shipped | Copy selected thoughts as one durable destination cohort, optionally removing all sources after acceptance. | [Commands](commands.md#delivery-and-transfer) |
 | Pane presentation identity | Conditional on Herdr | Advertise bounded display-only Proqi identity without impersonating an agent. | [Agent delivery](../guides/agent-delivery.md) |
 | Herdr plugin toggle | Shipped since 0.14.0, conditional on Herdr 0.8.0 or newer | Install with `herdr plugin install oborchers/proqi`; one action opens, focuses, or closes one Proqi pane per tab and replaces a pane left over from a Herdr restart. | [Herdr plugin](../guides/herdr-plugin.md) |
+| Herdr capture action | Next release, conditional on Herdr 0.8.0 or newer | `proqi.capture` stores the key-bound selection, else the clipboard text, exactly as one thought in the tab's session without switching to Proqi; a live Proqi appends it quietly and counts new captures. | [Herdr plugin](../guides/herdr-plugin.md#capture-the-selection-or-clipboard) |
 | Conversation reading or response waiting | Not shipped | Proqi deliberately does neither and never falls back to raw key injection. | [Agent delivery](../guides/agent-delivery.md#choose-copy-or-direct-delivery) |
 
 ## Sessions, persistence, and recovery
@@ -139,6 +140,7 @@ surface.
 | Documented error codes | Shipped since 0.13.0 | Every JSON error code, exit status, retry class, and `details` shape, also published in `capabilities`. | [CLI](cli.md#errors) |
 | Human and JSON Board-item commands | Shipped since 0.12.0 | Insert separators and move, duplicate, or delete typed thoughts and separators. | [CLI](cli.md#change-board-items) |
 | Scriptable thought export | Next release | `thoughts export` writes exact copy text atomically, with `--remove`, `--replace-with-reference`, `--replace-existing`, and retry-safe `--operation-id`. | [CLI](cli.md#export-thoughts-to-a-file) |
+| Scriptable clipboard capture | Next release | `thoughts capture --from clipboard` stores the clipboard's exact text as one thought, with retry-safe `--operation-id` and typed empty, non-text, and oversized failures. | [CLI](cli.md#capture-the-clipboard) |
 | Human and JSON thought commands | Shipped | List, inspect, add, rename, replace, collapse, move, send, delete, undo, and redo; split, extract, merge, and reflow have been available since 0.12.0. | [CLI](cli.md#inspect-and-change-thoughts) |
 | Typed canonical identifiers | Shipped | Prefixes identify resource kinds and retain complete UUIDv7 values. | [CLI](cli.md) |
 | Idempotent mutations | Shipped | Matching operation identities return the original receipt; divergent semantic reuse is rejected. | [CLI](cli.md#inspect-and-change-thoughts) |

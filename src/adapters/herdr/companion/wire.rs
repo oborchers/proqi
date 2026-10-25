@@ -29,6 +29,11 @@ pub(super) struct PluginContext {
     focused_pane_id: String,
     focused_pane_cwd: Option<PathBuf>,
     worktree: Option<WorktreeContext>,
+    /// Filled by Herdr 0.8 for any invocation with a visible selection in the
+    /// focused pane, and since 0.9 only for key-bound invocations from a client.
+    /// Herdr 0.9.1 clears the selection on that key press first
+    /// (herdrdev/herdr#3380), so capture then falls back to the clipboard.
+    selected_text: Option<String>,
 }
 
 /// Herdr reports this only for workspaces it created as Git worktrees.
@@ -54,6 +59,7 @@ impl PluginContext {
             focused_pane_id: self.focused_pane_id,
             focused_pane_cwd: cwd,
             session_root,
+            selected_text: self.selected_text,
         })
     }
 }

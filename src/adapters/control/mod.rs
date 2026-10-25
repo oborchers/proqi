@@ -437,6 +437,7 @@ mod tests {
                 content: content.to_owned(),
                 annotations: Vec::new(),
                 position: None,
+                announcement: None,
             },
         }
     }

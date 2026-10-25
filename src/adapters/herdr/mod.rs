@@ -26,9 +26,9 @@ use crate::ports::{
 use contract::ErrorEnvelope;
 
 pub use companion::{
-    FileCompanionRecords, HerdrCompanionHost, HerdrPluginEnvironment, INSTALL_PATH, LAUNCHER_PATH,
-    MIN_HERDR_VERSION, PANE_ENTRYPOINT_ID, PLUGIN_ID, SESSION_ENVIRONMENT, TOGGLE_ACTION_ID,
-    TOGGLE_CAPABILITY,
+    CAPTURE_ACTION_ID, CAPTURE_CAPABILITY, FileCompanionRecords, HerdrCompanionHost,
+    HerdrPluginEnvironment, INSTALL_PATH, LAUNCHER_PATH, MIN_HERDR_VERSION, PANE_ENTRYPOINT_ID,
+    PLUGIN_ID, SESSION_ENVIRONMENT, TOGGLE_ACTION_ID, TOGGLE_CAPABILITY,
 };
 pub use compatibility::HerdrCompatibilityPolicy;
 pub(crate) use notification::{HerdrEnvironment, HerdrPauseNotifier};

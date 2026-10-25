@@ -3,9 +3,9 @@
 use clap::CommandFactory as _;
 use serde_json::{Map, Value, json};
 
-use super::{Outcome, helpers::MAX_THOUGHT_STDIN_BYTES};
+use super::Outcome;
 use crate::{
-    adapters::herdr::TOGGLE_CAPABILITY,
+    adapters::herdr::{CAPTURE_CAPABILITY, TOGGLE_CAPABILITY},
     cli::{args::Cli, error_code::ErrorCode},
 };
 
@@ -37,10 +37,11 @@ pub(super) fn outcome() -> Outcome {
             "items": ["insert-separator", "move", "delete", "duplicate"],
             "thoughts": [
                 "list", "inspect", "add", "delete", "rename", "replace", "collapse",
-                "move", "split", "extract", "merge", "reflow", "export", "send", "undo", "redo"
+                "move", "split", "extract", "merge", "reflow", "export", "send", "capture", "undo",
+                "redo"
             ],
             "update": ["check"],
-            "herdr": ["toggle"],
+            "herdr": ["toggle", "capture"],
             "history_scopes": ["board", "editor", "browser"]
         },
         "options": option_inventory(),
@@ -65,11 +66,13 @@ pub(super) fn outcome() -> Outcome {
         "bounded_lists": true,
         "json_help_and_version": true,
         "plain_text_thought_export": true,
-        "max_thought_stdin_bytes": MAX_THOUGHT_STDIN_BYTES,
+        "capture_sources": ["clipboard"],
+        "max_thought_stdin_bytes": crate::application::MAX_THOUGHT_INPUT_BYTES,
         "herdr_submission": true,
         "herdr_managed_pane_required": true,
     });
     data[TOGGLE_CAPABILITY] = json!(true);
+    data[CAPTURE_CAPABILITY] = json!(true);
     Outcome {
         data,
         human: format!(

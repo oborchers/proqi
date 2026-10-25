@@ -53,6 +53,7 @@ fn plain_text_keeps_legacy_protocol_while_attachments_require_session_numbering(
             content: "plain".to_owned(),
             annotations: Vec::new(),
             position: None,
+            announcement: None,
         },
     };
     let encoded = serde_json::to_string(&plain).expect("serialize v1 request");
@@ -75,6 +76,7 @@ fn plain_text_keeps_legacy_protocol_while_attachments_require_session_numbering(
             },
         }],
         position: None,
+        announcement: None,
     };
     assert!(annotated.requires_protocol_two());
     assert_eq!(annotated.minimum_protocol(), 8);
@@ -95,6 +97,7 @@ fn invocation_reference_annotations_require_protocol_six() {
             },
         }],
         position: None,
+        announcement: None,
     };
 
     assert!(mutation.requires_protocol_two());

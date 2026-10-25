@@ -1,5 +1,5 @@
 //! The shared launcher: installation precedence, capability gating, and exact
-//! replacement by `proqi herdr toggle` or `proqi --resume`.
+//! replacement by `proqi herdr toggle`, `proqi herdr capture`, or `proqi --resume`.
 
 use super::support::{Sandbox, stderr, write_tool};
 
@@ -72,6 +72,32 @@ fn a_missing_or_too_old_proqi_is_reported_through_herdr_and_not_run() {
     assert!(
         !calls[0].contains(&old.bin().display().to_string()),
         "no paths in notifications"
+    );
+}
+
+#[test]
+fn capture_is_gated_on_its_own_capability() {
+    let sandbox = Sandbox::new();
+    sandbox.herdr();
+    let both = "{\"data\":{\"herdr_companion_toggle\":true,\"herdr_capture\":true},\"ok\":true}";
+    fake_proqi(&sandbox, &sandbox.bin(), "path", both);
+    let output = sandbox.run_script(SCRIPT, &["capture"], &[]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(sandbox.calls(), vec!["path herdr capture"]);
+
+    // A Proqi that supports only the toggle, such as 0.14.0, is not run.
+    let toggle_only = Sandbox::new();
+    toggle_only.herdr();
+    fake_proqi(&toggle_only, &toggle_only.bin(), "old", CAPABLE);
+    let output = toggle_only.run_script(SCRIPT, &["capture"], &[]);
+    assert_eq!(output.status.code(), Some(1));
+    let calls = toggle_only.calls();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert!(
+        calls[0].starts_with(
+            "herdr notification show Proqi --body Nothing captured: the installed Proqi is too old"
+        ),
+        "{calls:?}"
     );
 }
 

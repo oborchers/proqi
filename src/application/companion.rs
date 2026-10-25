@@ -6,6 +6,8 @@
 //! plugin recorded, still running its own session, may be closed, and only an
 //! idle shell left in that exact pane after a host restart may be replaced.
 
+mod capture;
+mod session;
 mod toggle;
 
 use std::path::PathBuf;
@@ -17,6 +19,7 @@ use crate::{
     },
 };
 
+pub use capture::{CompanionCaptureError, CompanionCaptureOutcome, capture_to_companion};
 pub use toggle::{CompanionToggleError, CompanionToggleOutcome, toggle_companion};
 
 /// Persisted pane label the plugin manifest gives every companion pane.

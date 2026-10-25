@@ -24,6 +24,7 @@ mod reorder;
 mod service;
 #[cfg(test)]
 mod test_support;
+mod text_capture;
 pub(crate) mod text_reflow;
 mod update;
 mod update_coordination;
@@ -37,10 +38,10 @@ pub use attachments::{
     AttachmentAccessibilityState, AttachmentPreflightOutcome, AttachmentPresentationState,
     AttachmentRefreshCause, AttachmentRefreshOutcome, attachment_keys,
 };
-pub use capture::{apply_capture, prepare_capture};
+pub use capture::{apply_capture, keep_insertion_point, prepare_capture};
 pub use companion::{
-    COMPANION_PANE_LABEL, CompanionToggleError, CompanionToggleOutcome, companion_session_name,
-    toggle_companion,
+    COMPANION_PANE_LABEL, CompanionCaptureError, CompanionCaptureOutcome, CompanionToggleError,
+    CompanionToggleOutcome, capture_to_companion, companion_session_name, toggle_companion,
 };
 pub(crate) use control::{ControlReplay, attach_control_fingerprint, match_control_replay};
 pub use error::{ApplicationError, ApplicationResult, FailureCode};
@@ -67,6 +68,10 @@ pub use service::{
     BoardItemMutation, BrowserHistoryMovement, LeasedSession, NamedSession,
     NamedSessionDisposition, RenameAdmission, SessionAdministrationReceipt, SessionService,
     SessionServiceError, ThoughtMutation,
+};
+pub use text_capture::{
+    CaptureError, CaptureSource, CapturedText, MAX_THOUGHT_INPUT_BYTES, NOTHING_CAPTURED,
+    capture_text, clipboard_text,
 };
 pub use update::{
     UpdateAvailability, UpdateCheckMode, UpdateCheckResult, UpdateRefresh, UpdateService,

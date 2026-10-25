@@ -13,6 +13,8 @@ use serde_json::Value;
 mod bounded_lists;
 #[path = "cli_workflow/capabilities.rs"]
 mod capabilities;
+#[path = "cli_workflow/capture.rs"]
+mod capture;
 #[path = "cli_workflow/diagnostics.rs"]
 mod diagnostics;
 #[path = "cli_workflow/doctor.rs"]

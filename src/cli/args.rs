@@ -70,6 +70,16 @@ pub(super) struct HerdrArgs {
 pub(super) enum HerdrCommand {
     /// Open, focus, or close this tab's Proqi pane. Runs as the Herdr plugin action.
     Toggle,
+    /// Store the selection, or else the clipboard text, in this tab's session. Runs as
+    /// the Herdr plugin action.
+    Capture,
+}
+
+/// Where `thoughts capture` reads its text. More sources may be added later.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(super) enum CaptureFrom {
+    /// The native clipboard's text.
+    Clipboard,
 }
 
 #[derive(Debug, Args)]
@@ -303,6 +313,16 @@ pub(super) enum ThoughtCommand {
         /// Zero-based insertion position. Defaults to the end.
         #[arg(long)]
         position: Option<usize>,
+        /// Durable idempotency identity.
+        #[arg(long, value_name = "OP_ID")]
+        operation_id: Option<String>,
+    },
+    /// Store text from another source as one new thought at the end.
+    Capture {
+        session: String,
+        /// Text source.
+        #[arg(long, value_enum)]
+        from: CaptureFrom,
         /// Durable idempotency identity.
         #[arg(long, value_name = "OP_ID")]
         operation_id: Option<String>,

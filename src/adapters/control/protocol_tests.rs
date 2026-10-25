@@ -92,6 +92,7 @@ fn server_negotiates_protocol_and_bounds_encoded_messages() {
         content: "x".repeat(MAX_CONTROL_MESSAGE_BYTES),
         annotations: Vec::new(),
         position: None,
+        announcement: None,
     };
     assert!(matches!(
         LocalControlClient.send(&owner, &request),
@@ -111,6 +112,7 @@ fn request(ids: &mut FakeIdGenerator, content: &str) -> ControlRequest {
             content: content.to_owned(),
             annotations: Vec::new(),
             position: None,
+            announcement: None,
         },
     }
 }

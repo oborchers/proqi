@@ -4,11 +4,11 @@ use std::{io::Read as _, str::FromStr as _};
 
 use sha2::Digest as _;
 
+use crate::application::MAX_THOUGHT_INPUT_BYTES as MAX_THOUGHT_STDIN_BYTES;
 use crate::domain::{BoardItemId, OperationId, RevisionId, SeparatorId, ThoughtId};
 
 use super::CliError;
 
-pub(super) const MAX_THOUGHT_STDIN_BYTES: usize = 128 * 1024;
 const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
 
 pub(super) fn parse_thought_id(value: &str) -> Result<ThoughtId, CliError> {

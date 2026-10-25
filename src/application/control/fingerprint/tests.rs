@@ -57,6 +57,7 @@ fn ordinary_and_provenance_preserving_adds_have_distinct_identities() {
         content: "same".to_owned(),
         annotations: Vec::new(),
         position: None,
+        announcement: None,
     };
     let preserved = ControlMutation::PreserveAdd {
         operation_id: operation(),
@@ -67,6 +68,22 @@ fn ordinary_and_provenance_preserving_adds_have_distinct_identities() {
         position: None,
     };
     assert_ne!(fingerprint(&ordinary), fingerprint(&preserved));
+}
+
+#[test]
+fn a_capture_announcement_is_presentation_and_keeps_the_add_identity() {
+    let add = |announcement| ControlMutation::Add {
+        operation_id: operation(),
+        thought_id: thought(),
+        content: "captured".to_owned(),
+        annotations: Vec::new(),
+        position: None,
+        announcement,
+    };
+    assert_eq!(
+        fingerprint(&add(None)),
+        fingerprint(&add(Some(crate::ports::control::AddAnnouncement::Capture)))
+    );
 }
 
 #[test]

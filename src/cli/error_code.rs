@@ -115,7 +115,7 @@ error_codes! {
         "companion_session_active",
         5,
         AfterChange,
-        "`{\"session_id\", \"name\"}`; `name` is null when a recorded session was reopened"
+        "`{\"session_id\", \"name\"}`; `name` is null when the session has no name"
     ),
     SchemaBusy => ("schema_busy", 5, Yes, "`{}`"),
     StorageBusy => ("storage_busy", 5, Yes, "`{}`"),
@@ -145,6 +145,14 @@ error_codes! {
     Conflict => ("conflict", 7, AfterChange, "`{}`"),
     MutationRejected => ("mutation_rejected", 7, AfterChange, "`{}`"),
     ExportTargetExists => ("export_target_exists", 7, AfterChange, "`{\"output\"}`"),
+    CaptureEmpty => ("capture_empty", 7, AfterChange, "`{\"source\"}`"),
+    CaptureNoText => ("capture_no_text", 7, AfterChange, "`{\"source\"}`"),
+    CaptureTooLarge => (
+        "capture_too_large",
+        7,
+        AfterChange,
+        "`{\"source\", \"bytes\", \"limit\"}`"
+    ),
     OperationIndeterminate => (
         "operation_indeterminate",
         8,
