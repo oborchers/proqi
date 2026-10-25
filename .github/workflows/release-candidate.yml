@@ -406,7 +406,7 @@ jobs:
           if-no-files-found: error
           name: release-candidate-${{ needs.plan.outputs.tag }}-${{ needs.plan.outputs.source-sha }}
           path: target/release-assets
-          retention-days: 30
+          retention-days: 7
       - name: Summarize promotion identity
         env:
           ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}

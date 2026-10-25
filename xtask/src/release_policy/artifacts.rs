@@ -44,10 +44,10 @@ fn visit(path: &str, node: &Yaml, found: &mut Vec<String>) {
             }
         }
         if action.starts_with("docker/build-push-action@")
-            && node["env"]["DOCKER_BUILD_RECORD_RETENTION_DAYS"].as_i64() != Some(7)
+            && node["env"]["DOCKER_BUILD_RECORD_RETENTION_DAYS"].as_i64() != Some(1)
         {
             found.push(format!(
-                "{path}: Docker build records require explicit 7-day retention"
+                "{path}: Docker build records require explicit 1-day retention"
             ));
         }
     }
@@ -68,14 +68,14 @@ fn visit(path: &str, node: &Yaml, found: &mut Vec<String>) {
 
 fn expected_days(path: &str, name: &str) -> Option<i64> {
     match Path::new(path).file_name()?.to_str()? {
-        "release-candidate.yml" if name.starts_with("release-candidate-") => Some(30),
+        "release-candidate.yml" if name.starts_with("release-candidate-") => Some(7),
         "release-candidate.yml"
             if name.starts_with("candidate-")
                 || matches!(name, "registry-evidence" | "release-notices") =>
         {
             Some(1)
         }
-        "ci.yml" if name.starts_with("migration-failure-") || name == "proqi-docs-site" => Some(7),
+        "ci.yml" if name.starts_with("migration-failure-") || name == "proqi-docs-site" => Some(1),
         "ci.yml" if name == "ci-linux-packages" => Some(1),
         "ci-linux-image.yml" if name.starts_with("ci-linux-digest-") => Some(1),
         "docs.yml" if name == "github-pages" => Some(1),
