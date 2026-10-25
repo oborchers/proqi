@@ -3,7 +3,9 @@
 site_name: Proqi
 site_description: User documentation for the terminal-native prompt composer
 site_url: https://oborchers.github.io/proqi/
-copyright: Proqi is available under the MIT License.
+copyright: >-
+  Built by <a href="https://www.drborchers.com">Dr. Oliver Borchers</a>, Executive AI and Automation Partner and Head of AI Engineering at IU Group.
+  Proqi is available under the MIT License.
 
 docs_dir: docs
 site_dir: target/docs-site
